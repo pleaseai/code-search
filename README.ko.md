@@ -1,0 +1,479 @@
+<h2 align="center">
+  csp — Code Search Please<br/>
+  에이전트를 위한 빠르고 정확한 코드 검색<br/>
+  <sub>grep+read 대비 약 98% 적은 토큰 사용</sub>
+</h2>
+
+<div align="center">
+  <h2>
+    <a href="https://www.npmjs.com/package/@pleaseai/csp"><img src="https://img.shields.io/npm/v/@pleaseai/csp?color=%23007ec6&label=npm%20package" alt="Package version"></a>
+    <a href="https://github.com/pleaseai/code-search/blob/main/LICENSE">
+      <img src="https://img.shields.io/badge/license-MIT-green" alt="License - MIT">
+    </a>
+  </h2>
+
+[English](./README.md) | 한국어
+
+[퀵스타트](#퀵스타트) •
+[MCP 서버](#mcp-서버) •
+[AGENTS.md](#agentsmd) •
+[CLI](#cli) •
+[동작 원리](#동작-원리)
+
+</div>
+
+> **TypeScript 포트.** `csp`는 Python으로 작성된 [MinishLab/semble](https://github.com/MinishLab/semble)의 TypeScript/Bun 포트입니다. 알고리즘과 설계의 모든 공로는 원저자에게 있으며, 본 프로젝트는 동일한 기능을 JavaScript/TypeScript 생태계로 이식하는 데 목적이 있습니다.
+
+`csp`는 에이전트를 위해 설계된 코드 검색 라이브러리입니다. 필요한 코드 스니펫을 즉시 반환하며, `grep` + `read` 조합 대비 약 **98% 적은 토큰**만 사용합니다. 전체 코드베이스의 인덱싱과 검색이 1초 이내에 끝나며, API 키, GPU, 외부 서비스 없이 CPU 위에서만 동작합니다. [MCP 서버](#mcp-서버)로 실행하거나 [AGENTS.md](#agentsmd) 안내로 셸에서 호출하면 Claude Code, Cursor, Codex, OpenCode 등 어떤 에이전트라도 임의의 리포지토리에 즉시 접근할 수 있습니다.
+
+## 퀵스타트
+
+에이전트는 `"인증은 어떻게 처리되나요?"` 같은 자연어로 `csp`에 질의하고, 관련 코드 스니펫만 받아봅니다. grep 하거나 전체 파일을 읽을 필요가 없습니다.
+
+`csp`는 세 가지 보완적인 사용 방법을 제공합니다. 셋 다 함께 쓰는 것을 권장하지만, 필요에 따라 골라 쓰셔도 됩니다.
+
+- **[MCP 서버](#mcp-서버)**: 에이전트가 호출할 수 있는 MCP 서버.
+- **[AGENTS.md](#agentsmd)**: CLI 호출 지침을 담은 `AGENTS.md` 스니펫.
+- **[서브 에이전트](#서브-에이전트-설정)**: 지원 하니스를 위한 전용 `csp-search` 서브 에이전트.
+
+### MCP
+
+`csp`를 MCP 네이티브 도구로 노출시켜 에이전트가 직접 호출하게 합니다. Claude Code에 다음과 같이 추가합니다.
+
+```bash
+claude mcp add csp -s user -- bunx @pleaseai/csp mcp
+```
+
+다른 하니스(Cursor, Codex, OpenCode 등)는 아래 [MCP 서버](#mcp-서버) 섹션을 참고하세요.
+
+### AGENTS.md
+
+에이전트의 컨텍스트에 `csp` 사용법을 추가해 언제 어떻게 CLI를 호출할지 알 수 있도록 합니다. 먼저 `csp` CLI를 설치한 뒤, 아래 스니펫을 `AGENTS.md` 또는 `CLAUDE.md`에 추가하세요.
+
+```bash
+bun add -g @pleaseai/csp     # bun으로 설치 (권장)
+npm install -g @pleaseai/csp # 또는 npm
+pnpm add -g @pleaseai/csp    # 또는 pnpm
+```
+
+<details>
+<summary>AGENTS.md / CLAUDE.md 스니펫</summary>
+
+````markdown
+## Code Search
+
+코드를 grep 으로 찾기 전에 `csp search`를 사용하세요. 동작을 자연어로 설명하거나 심볼/식별자명을 입력하면 됩니다.
+
+```bash
+csp search "authentication flow" ./my-project
+csp search "saveCheckpoint" ./my-project
+csp search "save model to disk" ./my-project --top-k 10
+```
+
+여러 번 검색할 예정이라면 `csp index`로 인덱스를 만들어 두세요.
+
+```bash
+csp index ./my-project -o my_index
+```
+
+이후 인덱스를 재사용할 수 있습니다.
+
+```bash
+csp search "saveCheckpoint" --index my_index
+```
+
+인덱스는 자동으로 갱신되지 않습니다. 코드가 크게 바뀌었거나 검색 결과가 오래된 것 같다면 다시 인덱싱하세요.
+
+`--content docs`로 문서와 산문을, `--content config`로 yaml/toml 등 설정 파일을, `--content all`로 모두 검색할 수 있습니다.
+
+```bash
+csp search "deployment guide" ./my-project --content docs
+csp search "database host port" ./my-project --content config
+csp search "authentication" ./my-project --content all
+```
+
+`csp find-related`로 기존 위치와 비슷한 코드를 찾을 수 있습니다 (이전 검색 결과의 `file_path`와 `line`을 사용).
+
+```bash
+csp find-related src/auth.ts 42 ./my-project
+```
+
+`search`와 마찬가지로 `find-related`도 `--index` 인자를 받습니다.
+
+`path`를 생략하면 현재 디렉터리를 사용합니다. git URL도 받습니다.
+
+`csp`가 `$PATH`에 없다면 `bunx @pleaseai/csp`로 대체하세요.
+
+### Workflow
+
+1. `csp index -o cached_index`로 리포지토리를 인덱싱.
+2. `csp search`로 관련 청크를 찾기. 인덱스를 넘기면 더 빠릅니다.
+3. 문서는 `--content docs`, 설정 파일은 `--content config`, 전부는 `--content all`.
+4. 반환된 청크로 컨텍스트가 부족할 때만 파일을 전체 읽기.
+5. 유망한 결과에서 `csp find-related`로 비슷한 구현을 추가 탐색.
+6. 정확한 리터럴 매칭이나 문자열 확인이 필요할 때만 grep 사용.
+````
+
+</details>
+
+### 서브 에이전트
+
+서브 에이전트를 지원하는 하니스에서는 `csp-search` 전용 서브 에이전트를 설치해 검색이 별도 컨텍스트에서 동작하도록 할 수 있습니다 (CLI 필요).
+
+```bash
+csp init   # Claude Code → .claude/agents/csp-search.md
+```
+
+다른 하니스(Cursor, Codex, OpenCode 등)는 아래 [서브 에이전트 설정](#서브-에이전트-설정) 섹션을 참고하세요.
+
+<details>
+<summary>csp 업데이트</summary>
+
+```bash
+bun update -g @pleaseai/csp     # bun
+npm update -g @pleaseai/csp     # npm
+pnpm update -g @pleaseai/csp    # pnpm
+```
+
+</details>
+
+## 주요 기능
+
+- **빠름**: 평균적인 리포지토리를 1초 이내에 인덱싱하고, 쿼리는 밀리초 단위로 응답합니다. 전부 CPU에서 동작합니다.
+- **정확함**: 하이브리드 검색(밀집 임베딩 + BM25)과 코드 인지형 리랭킹을 결합합니다.
+- **토큰 효율적**: 관련 청크만 반환하므로 grep+read 대비 약 98% 적은 토큰을 사용합니다.
+- **제로 셋업**: API 키, GPU, 외부 서비스 없이 CPU에서 동작합니다.
+- **MCP 서버**: Claude Code, Cursor, Codex, OpenCode, VS Code 등 MCP 호환 에이전트와 함께 사용 가능합니다.
+- **로컬 / 원격**: 로컬 경로 또는 git URL을 모두 받습니다.
+- **Bun 친화**: [Bun](https://bun.com)으로 빌드되고 테스트되며, Node.js 22+에서도 동작합니다.
+
+## MCP 서버
+
+`csp`는 MCP 서버로 동작할 수 있어 에이전트가 어떤 코드베이스든 직접 검색할 수 있습니다. 리포지토리는 필요할 때 클론되어 인덱싱되며, 인덱스는 세션 동안 캐시됩니다. 로컬 경로는 파일 변경을 감시해 자동으로 재인덱싱합니다.
+
+### 설정
+
+<details>
+<summary>Claude Code</summary>
+
+```bash
+claude mcp add csp -s user -- bunx @pleaseai/csp mcp
+```
+
+</details>
+
+<details>
+<summary>Cursor</summary>
+
+`~/.cursor/mcp.json` (또는 프로젝트 내 `.cursor/mcp.json`)에 추가:
+
+```json
+{
+  "mcpServers": {
+    "csp": {
+      "command": "bunx",
+      "args": ["@pleaseai/csp", "mcp"]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary>Codex</summary>
+
+`~/.codex/config.toml`에 추가:
+
+```toml
+[mcp_servers.csp]
+command = "bunx"
+args = ["@pleaseai/csp", "mcp"]
+```
+
+</details>
+
+<details>
+<summary>OpenCode</summary>
+
+`~/.opencode/config.json`에 추가:
+
+```json
+{
+  "mcp": {
+    "csp": {
+      "type": "local",
+      "command": ["bunx", "@pleaseai/csp", "mcp"]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary>VS Code</summary>
+
+프로젝트의 `.vscode/mcp.json` (또는 사용자 프로필의 `mcp.json`)에 추가:
+
+```json
+{
+  "servers": {
+    "csp": {
+      "command": "bunx",
+      "args": ["@pleaseai/csp", "mcp"]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary>GitHub Copilot CLI</summary>
+
+`~/.copilot/mcp-config.json`에 추가:
+
+```json
+{
+  "mcpServers": {
+    "csp": {
+      "command": "bunx",
+      "args": ["@pleaseai/csp", "mcp"]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary>Windsurf</summary>
+
+`~/.codeium/windsurf/mcp_config.json`에 추가:
+
+```json
+{
+  "mcpServers": {
+    "csp": {
+      "command": "bunx",
+      "args": ["@pleaseai/csp", "mcp"]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary>Gemini CLI</summary>
+
+`~/.gemini/settings.json`에 추가:
+
+```json
+{
+  "mcpServers": {
+    "csp": {
+      "command": "bunx",
+      "args": ["@pleaseai/csp", "mcp"]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary>Zed</summary>
+
+`~/.config/zed/settings.json` (또는 프로젝트 내 `.zed/settings.json`)에 추가:
+
+```json
+{
+  "context_servers": {
+    "csp": {
+      "command": "bunx",
+      "args": ["@pleaseai/csp", "mcp"]
+    }
+  }
+}
+```
+
+</details>
+
+### 도구
+
+| 도구 | 설명 |
+|------|------|
+| `search` | 자연어 또는 코드 쿼리로 코드베이스를 검색. `repo`는 로컬 디렉터리 경로 또는 https:// git URL. |
+| `find_related` | 파일 경로와 라인 번호를 받아, 해당 위치의 코드와 의미적으로 유사한 청크를 반환. |
+
+기본적으로 MCP 서버는 코드 파일만 인덱싱합니다. 문서/설정/전체를 함께 인덱싱하려면 명령에 `--content docs`, `--content config`, `--content all` 또는 조합(예: `--content code docs`)을 추가하세요. 예를 들어 Claude Code에서는 `claude mcp add csp -s user -- bunx @pleaseai/csp mcp --content all`.
+
+## 서브 에이전트 설정
+
+Claude Code, Gemini CLI, Cursor, OpenCode, GitHub Copilot CLI, Kiro는 모두 전용 `csp` 검색 서브 에이전트를 지원합니다. 프로젝트 루트에서 `csp init`을 한 번 실행하세요.
+
+```bash
+csp init                      # Claude Code  → .claude/agents/csp-search.md
+csp init --agent gemini       # Gemini CLI   → .gemini/agents/csp-search.md
+csp init --agent cursor       # Cursor       → .cursor/agents/csp-search.md
+csp init --agent opencode     # OpenCode     → .opencode/agents/csp-search.md
+csp init --agent copilot      # Copilot CLI  → .github/agents/csp-search.md
+csp init --agent kiro         # Kiro         → .kiro/agents/csp-search.md
+```
+
+`csp`가 `$PATH`에 없다면 명령 앞에 `bunx @pleaseai/csp`를 붙이세요.
+
+## CLI
+
+`csp`는 독립 실행형 CLI로도 제공됩니다. 스크립트나 MCP 세션 없이 검색 결과를 받고 싶을 때 유용합니다.
+
+```bash
+# 로컬 리포지토리 검색
+csp search "authentication flow" ./my-project
+
+# 반복 검색을 빠르게 하려면 먼저 인덱싱 (--index는 아래 모든 명령과 호환)
+csp index ./my-project -o my-index
+csp search "authentication flow" --index my-index
+
+# 원격 리포지토리 검색 (필요할 때 클론)
+csp search "save model to disk" https://github.com/MinishLab/model2vec
+
+# 결과 개수 제한
+csp search "save model to disk" ./my-project --top-k 10
+
+# 코드 대신 docs/config/전체 검색
+csp search "deployment guide" ./my-project --content docs   # 또는 config, all
+
+# 특정 위치와 비슷한 코드 찾기
+csp find-related src/auth.ts 42 ./my-project
+```
+
+`--content`는 `code` (기본), `docs`, `config`, `all`을 받습니다. `path`를 생략하면 현재 디렉터리를 사용합니다. git URL도 받습니다. `csp`가 `$PATH`에 없다면 `bunx @pleaseai/csp`로 대체하세요.
+
+<details>
+<summary>토큰 절약량 보기</summary>
+
+`csp savings`는 모든 검색에서 `csp`가 절약한 토큰량을 보여줍니다.
+
+```bash
+csp savings           # 기간별 요약
+csp savings --verbose # 호출 유형별 분해 포함
+```
+
+```
+  csp Token Savings
+  ════════════════════════════════════════════════════════════════
+  Period        Calls   Savings
+  ────────────────────────────────────────────────────────────────
+  Today         42      [███████████████░]  ~58.4k tokens (95%)
+  Last 7 days   287     [██████████████░░]  ~312.4k tokens (90%)
+  All time      1.4k    [██████████████░░]  ~1.2M tokens (89%)
+```
+
+절약량 계산: 각 호출마다 반환된 청크가 속한 파일들의 총 문자 수와 반환된 스니펫의 문자 수를 기록합니다. 절약된 토큰 추정치는 `(파일 문자 수 − 스니펫 문자 수) / 4` (1토큰 ≈ 4문자). 이는 보수적인 추정으로, 기준선은 "에이전트가 매칭된 파일을 통째로 읽는다"는 일반적인 코딩 에이전트 동작입니다.
+
+통계는 `~/.csp/savings.jsonl`에 저장됩니다.
+
+</details>
+
+<details>
+<summary>라이브러리 사용</summary>
+
+`csp`는 TypeScript/JavaScript 라이브러리로도 사용할 수 있습니다. 자체 도구를 만들거나 검색을 코드에 직접 통합할 때 유용합니다.
+
+```ts
+import { ContentType, CspIndex } from '@pleaseai/csp'
+
+// 로컬 디렉터리 인덱싱 (기본: 코드만)
+const index = await CspIndex.fromPath('./my-project')
+
+// 문서와 산문 인덱싱 (markdown, rst 등)
+const docsIndex = await CspIndex.fromPath('./my-project', {
+  content: ContentType.DOCS,
+})
+
+// 전체 인덱싱 (코드 + 문서 + 설정)
+const allIndex = await CspIndex.fromPath('./my-project', {
+  content: [ContentType.CODE, ContentType.DOCS, ContentType.CONFIG],
+})
+
+// 코드와 문서만 함께
+const codeDocsIndex = await CspIndex.fromPath('./my-project', {
+  content: [ContentType.CODE, ContentType.DOCS],
+})
+
+// 원격 git 리포지토리 인덱싱
+const remoteIndex = await CspIndex.fromGit(
+  'https://github.com/MinishLab/model2vec',
+)
+
+// 자연어 또는 코드 쿼리로 검색
+const results = await index.search('save model to disk', { topK: 3 })
+
+// 특정 결과와 비슷한 코드 찾기
+const related = await index.findRelated(results[0], { topK: 3 })
+
+// 각 결과는 매칭된 청크를 노출합니다
+const result = results[0]
+result.chunk.filePath   // "src/model.ts"
+result.chunk.startLine  // 127
+result.chunk.endLine    // 150
+result.chunk.content    // "export function saveCheckpoint(path: string, ..."
+```
+
+</details>
+
+## 동작 원리
+
+`csp`는 [tree-sitter](https://tree-sitter.github.io/)로 각 파일을 코드 인지형 청크로 분할한 뒤, 두 개의 상호 보완적인 검색기로 쿼리를 모든 청크와 점수화합니다. 의미 유사도를 위한 정적 [Model2Vec](https://github.com/MinishLab/model2vec) 임베딩(코드 특화 `potion-code-16M` 모델 사용)과, 식별자/API명 등 어휘 매칭을 위한 BM25입니다. 두 점수 리스트는 Reciprocal Rank Fusion(RRF)으로 결합됩니다.
+
+결합 후에는 코드 인지형 신호들로 결과를 재정렬합니다.
+
+<details>
+<summary><b>랭킹 신호</b></summary>
+
+- **적응형 가중치.** `Foo::bar`, `_private`, `getUserById` 같은 심볼형 쿼리는 어휘 가중치를 더 받고, 자연어 쿼리는 의미/어휘 검색기 사이에서 균형을 유지합니다.
+- **정의 부스트.** 쿼리된 심볼을 *정의*하는 청크(`class`, `function`, `interface` 등)는 단순 *참조*하는 청크보다 상위에 위치합니다.
+- **식별자 스템.** 쿼리 토큰을 스템 처리해 청크 내 식별자 스템과 매칭하고, 매칭된 청크에 추가 가중치를 부여합니다. 예: `parse config` 쿼리는 `parseConfig`, `ConfigParser`, `config_parser`가 포함된 청크를 부스트합니다.
+- **파일 일관성.** 같은 파일의 여러 청크가 쿼리에 매칭되면 해당 파일을 부스트해, 단일 청크가 아닌 파일 수준의 관련성이 상위에 반영되도록 합니다.
+- **노이즈 페널티.** 테스트 파일, `compat/`/`legacy/` 셰임, 예제 코드, `.d.ts` 선언 스텁은 순위가 낮아져 정규 구현이 먼저 노출됩니다.
+
+</details>
+
+임베딩 모델이 정적이라 쿼리 시점에 트랜스포머 forward pass가 없으므로, 위 모든 과정이 CPU에서 밀리초 단위로 동작합니다.
+
+## 개발
+
+```bash
+bun install        # 의존성 설치
+bun run build      # tsdown으로 빌드
+bun run typecheck  # 타입 체크
+bun run lint       # @pleaseai/eslint-config로 린트
+bun test           # 테스트 실행
+```
+
+## 크레딧
+
+`csp`는 [MinishLab](https://github.com/MinishLab)의 [Thomas van Dongen](https://github.com/Pringled)과 [Stéphan Tulkens](https://github.com/stephantul)가 만든 [Semble](https://github.com/MinishLab/semble)의 TypeScript 포트입니다. 알고리즘, 랭킹 신호, 전체 아키텍처의 공로는 모두 원저자에게 있으며, 본 프로젝트는 이를 JavaScript/TypeScript 생태계로 이식한 것입니다.
+
+연구에서 핵심 아이디어를 인용하시려면 원본 Semble 논문을 인용해 주세요.
+
+```bibtex
+@software{minishlab2026semble,
+  author       = {{van Dongen}, Thomas and Stephan Tulkens},
+  title        = {Semble: Fast and Accurate Code Search for Agents},
+  year         = {2026},
+  publisher    = {Zenodo},
+  doi          = {10.5281/zenodo.19785932},
+  url          = {https://github.com/MinishLab/semble},
+  license      = {MIT}
+}
+```
+
+## 라이선스
+
+[MIT](./LICENSE) © [이민수](https://github.com/amondnet)
+
+`csp`는 동일하게 MIT 라이선스인 [MinishLab/semble](https://github.com/MinishLab/semble)의 파생 저작물입니다.

@@ -1,0 +1,10 @@
+{
+  "enabledPlugins": {
+    "typescript-lsp@code-intelligence": true,
+    "eslint-lsp@code-intelligence": true,
+    "bun@pleaseai": true,
+    "claude-md-management@claude-plugins-official": true,
+    "code-review@pleaseai": true,
+    "please@passionfactory": true
+  }
+}
