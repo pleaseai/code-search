@@ -280,11 +280,24 @@ export async function chunk(
   const asBytes = new TextEncoder().encode(text)
   const decoder = new TextDecoder('utf-8')
 
+  // Convert byte offsets to character offsets in a single pass. Boundaries are
+  // sorted by their start offset, so we maintain running byte/char cursors and
+  // decode each byte exactly once — avoids O(M×N) re-decoding the prefix per
+  // chunk.
   const chunks: ChunkBoundary[] = []
+  let cursorByte = 0
+  let cursorChar = 0
+  const byteToChar = (byteOffset: number): number => {
+    if (byteOffset > cursorByte) {
+      cursorChar += decoder.decode(asBytes.subarray(cursorByte, byteOffset)).length
+      cursorByte = byteOffset
+    }
+    return cursorChar
+  }
+
   for (const boundary of _mergeNode(root, desiredLength)) {
-    // Convert byte offsets to character offsets.
-    const startChar = decoder.decode(asBytes.subarray(0, boundary.start)).length
-    const endChar = decoder.decode(asBytes.subarray(0, boundary.end)).length
+    const startChar = byteToChar(boundary.start)
+    const endChar = byteToChar(boundary.end)
     chunks.push({ start: startChar, end: endChar })
   }
 

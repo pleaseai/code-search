@@ -21,17 +21,6 @@ export interface Chunk {
 /** The desired length of chunks in chars. */
 export const DESIRED_CHUNK_LENGTH_CHARS = 1500
 
-/** Count newline characters in `s` up to (but not including) `endExclusive`. */
-function _countNewlines(s: string, endExclusive: number): number {
-  let n = 0
-  const limit = Math.min(endExclusive, s.length)
-  for (let i = 0; i < limit; i++) {
-    if (s[i] === '\n')
-      n += 1
-  }
-  return n
-}
-
 /** Chunk pre-read source text. */
 export async function chunkSource(
   source: string,
@@ -50,16 +39,34 @@ export async function chunkSource(
   if (chunkBoundaries === null)
     chunkBoundaries = chunkLines(source, DESIRED_CHUNK_LENGTH_CHARS)
 
+  // Resolve 1-indexed line numbers in a single pass. Boundaries are sorted by
+  // their start offset, so we can advance a cursor through `source` once
+  // instead of rescanning from index 0 per chunk (avoids O(N²) on large files).
+  // Matches semble parity: only `\n` counts as a newline (see chunking.py).
   const chunks: Chunk[] = []
+  let cursor = 0
+  let line = 1
+  const advanceTo = (target: number): number => {
+    const limit = Math.min(target, source.length)
+    while (cursor < limit) {
+      if (source[cursor] === '\n')
+        line += 1
+      cursor += 1
+    }
+    return line
+  }
+
   for (const boundary of chunkBoundaries) {
     // Clamp to start_index so zero-length chunks don't produce an off-by-one.
     const endIndex = Math.max(boundary.end - 1, boundary.start)
     const text = source.slice(boundary.start, endIndex + 1)
+    const startLine = advanceTo(boundary.start)
+    const endLine = advanceTo(endIndex)
     chunks.push({
       content: text,
       filePath,
-      startLine: _countNewlines(source, boundary.start) + 1,
-      endLine: _countNewlines(source, endIndex) + 1,
+      startLine,
+      endLine,
       language,
     })
   }
