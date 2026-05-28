@@ -18,6 +18,14 @@ const CAMEL_RE = /[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[0-9]+/g
  */
 export function splitIdentifier(token: string): string[] {
   const lower = token.toLowerCase()
+
+  // Fast-path: pure-lowercase tokens with no underscores/digits cannot split
+  // further. TOKEN_RE only matches [a-zA-Z0-9_], so the absence of `_`,
+  // uppercase, and digits means the token is already a single sub-token.
+  if (!token.includes('_') && !/[A-Z0-9]/.test(token)) {
+    return [lower]
+  }
+
   let parts: string[]
 
   if (token.includes('_')) {
