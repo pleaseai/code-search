@@ -82,6 +82,25 @@ describe('CspIndex.search', () => {
     const idx = buildIndex([])
     expect(idx.search('anything')).toEqual([])
   })
+
+  it('returns [] when topK <= 0', () => {
+    const chunks = [makeChunk('a.ts', 1, 1)]
+    const idx = buildIndex(chunks)
+    expect(idx.search('anything', { topK: 0 })).toEqual([])
+    expect(idx.search('anything', { topK: -1 })).toEqual([])
+  })
+
+  it('returns [] when filters are set but match nothing (no fallback to unfiltered)', () => {
+    // Regression: previously an empty selector was treated as "no filter"
+    // which fell back to an unfiltered search — silently ignoring user intent.
+    const chunks: Chunk[] = [
+      makeChunk('a.ts', 1, 10, 'typescript', 'alpha'),
+      makeChunk('b.py', 1, 10, 'python', 'beta'),
+    ]
+    const idx = buildIndex(chunks)
+    expect(idx.search('anything', { filterLanguages: ['nonexistent'] })).toEqual([])
+    expect(idx.search('anything', { filterPaths: ['nope.ts'] })).toEqual([])
+  })
 })
 
 describe('CspIndex.findRelated', () => {

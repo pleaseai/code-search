@@ -1,10 +1,10 @@
 // Port of src/semble/index/index.py
 
 import { spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { statSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, resolve, sep } from 'node:path'
+import { join, parse as parsePath, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Chunk, IndexStats, SearchResult } from '../types.ts'
 import { CallType, ContentType, chunkFromDict, chunkToDict } from '../types.ts'
@@ -153,7 +153,10 @@ export class CspIndex {
       })
     }
     finally {
-      await rm(tmpDir, { recursive: true, force: true })
+      // Best-effort cleanup. Swallow rm errors so they never mask the original
+      // exception (Node 22 `rm` can race against AV scanners on Windows). The
+      // tmp dir lives under the OS tmpdir which is purged by the OS anyway.
+      await rm(tmpDir, { recursive: true, force: true, maxRetries: 3 }).catch(() => {})
     }
   }
 
@@ -201,10 +204,18 @@ export class CspIndex {
     if (this.chunks.length === 0 || query.trim().length === 0) return []
 
     const topK = options.topK ?? 10
+    if (topK <= 0) return []
+
     const filterLanguages = options.filterLanguages
     const filterPaths = options.filterPaths
     const resolvedRerank = options.rerank ?? this._content.includes(ContentType.Code)
     const selector = this._getSelectorVector(filterLanguages, filterPaths)
+    // Honor the user's filter when it matches zero chunks — bypass the
+    // ranking pipeline rather than falling back to an unfiltered search.
+    if (selector !== null && selector.length === 0) {
+      saveSearchStats([], CallType.Search, this._fileSizes)
+      return []
+    }
 
     const results = search(
       query,
@@ -293,8 +304,11 @@ export class CspIndex {
         // Mirror Python's `root / chunk.file_path`: absolute paths win,
         // relative paths resolve against `root`.
         const abs = resolve(root, chunk.filePath)
-        const buf = readFileSyncSafe(abs)
-        if (buf !== null) sizes[chunk.filePath] = buf.length
+        // `statSync` returns the on-disk byte size — avoids reading the file
+        // (cheaper, especially for files up to MAX_FILE_BYTES = 1 MB) and
+        // matches Python's `len(read_text(...))` closely enough for the
+        // savings-tracking use case while reporting actual UTF-8 byte counts.
+        sizes[chunk.filePath] = statSync(abs).size
       }
       catch {
         /* swallow */
@@ -307,16 +321,29 @@ export class CspIndex {
     filterLanguages?: readonly string[],
     filterPaths?: readonly string[],
   ): number[] | null {
+    // Distinguish "no filter requested" (return null → search everything)
+    // from "filter requested but matched nothing" (return [] → search nothing).
+    // Semble's Python parity check is `if selector` which conflates the two
+    // and falls back to unfiltered search on empty results — that is a latent
+    // correctness bug there. We diverge intentionally to honor user intent.
+    const hasLanguageFilter
+      = filterLanguages !== undefined && filterLanguages.length > 0
+    const hasPathFilter = filterPaths !== undefined && filterPaths.length > 0
+    if (!hasLanguageFilter && !hasPathFilter) return null
+
     const out = new Set<number>()
-    for (const language of filterLanguages ?? []) {
-      const ids = this._languageMapping[language]
-      if (ids) for (const i of ids) out.add(i)
+    if (filterLanguages) {
+      for (const language of filterLanguages) {
+        const ids = this._languageMapping[language]
+        if (ids) for (const i of ids) out.add(i)
+      }
     }
-    for (const filename of filterPaths ?? []) {
-      const ids = this._fileMapping[filename]
-      if (ids) for (const i of ids) out.add(i)
+    if (filterPaths) {
+      for (const filename of filterPaths) {
+        const ids = this._fileMapping[filename]
+        if (ids) for (const i of ids) out.add(i)
+      }
     }
-    if (out.size === 0) return null
     return [...out].sort((a, b) => a - b)
   }
 }
@@ -354,21 +381,15 @@ async function resolveDirectory(path: string | URL): Promise<string> {
   if (!info.isDirectory()) {
     throw new Error(`Path is not a directory: ${raw}`)
   }
-  // Drop any trailing separator for consistency with semble's Path.resolve().
+  // Drop any trailing separator for consistency with semble's Path.resolve()
+  // — but preserve filesystem root paths (`/` on POSIX, `C:\` on Windows)
+  // since stripping their trailing sep would mutate the resolved location.
   let resolved = resolve(raw)
-  if (resolved.length > 1 && resolved.endsWith(sep)) {
+  const rootOfResolved = parsePath(resolved).root
+  if (resolved.length > rootOfResolved.length && resolved.endsWith(sep)) {
     resolved = resolved.slice(0, -1)
   }
   return resolved
-}
-
-function readFileSyncSafe(path: string): string | null {
-  try {
-    return readFileSync(path, { encoding: 'utf8' })
-  }
-  catch {
-    return null
-  }
 }
 
 /**
@@ -392,7 +413,12 @@ async function runGitClone(url: string, tmpDir: string, ref: string | null): Pro
   await new Promise<void>((resolvePromise, rejectPromise) => {
     let child
     try {
-      child = spawn('git', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+      // stdin: 'ignore' mirrors Python's `subprocess.DEVNULL` so a stuck remote
+      // can't block on a tty prompt.
+      // stdout: 'ignore' avoids the OS pipe buffer filling and deadlocking
+      // `git clone` when verbose hooks/configs print large amounts of output.
+      // stderr: 'pipe' so we surface the error message on non-zero exit.
+      child = spawn('git', args, { stdio: ['ignore', 'ignore', 'pipe'] })
     }
     catch (err) {
       const e = err as NodeJS.ErrnoException
