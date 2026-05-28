@@ -4,6 +4,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   CallType,
   type Chunk,
+  type ChunkDictInput,
   chunkFromDict,
   chunkLocation,
   chunkToDict,
@@ -112,6 +113,50 @@ describe('chunkToDict / chunkFromDict roundtrip', () => {
       language: null,
     })
     expect(reconstructed.language).toBeUndefined()
+  })
+
+  test('chunkFromDict throws on null or non-object input', () => {
+    // The compile-time `ChunkDictInput` doesn't reach untrusted JSON callers,
+    // so the runtime guard must catch these before they pollute the index.
+    expect(() => chunkFromDict(null as unknown as ChunkDictInput)).toThrow(TypeError)
+    expect(() => chunkFromDict(undefined as unknown as ChunkDictInput)).toThrow(TypeError)
+    expect(() => chunkFromDict('oops' as unknown as ChunkDictInput)).toThrow(TypeError)
+    expect(() => chunkFromDict(42 as unknown as ChunkDictInput)).toThrow(TypeError)
+  })
+
+  test('chunkFromDict throws on missing or wrong-typed required fields', () => {
+    expect(() => chunkFromDict({} as unknown as ChunkDictInput)).toThrow(TypeError)
+    expect(() =>
+      chunkFromDict({ content: 'x', filePath: 'a.ts', startLine: 1 } as unknown as ChunkDictInput),
+    ).toThrow(TypeError)
+    expect(() =>
+      chunkFromDict({
+        content: 'x',
+        filePath: 'a.ts',
+        startLine: '1',
+        endLine: 2,
+      } as unknown as ChunkDictInput),
+    ).toThrow(TypeError)
+    expect(() =>
+      chunkFromDict({
+        content: 'x',
+        filePath: 42,
+        startLine: 1,
+        endLine: 2,
+      } as unknown as ChunkDictInput),
+    ).toThrow(TypeError)
+  })
+
+  test('chunkFromDict throws when language has the wrong type', () => {
+    expect(() =>
+      chunkFromDict({
+        content: 'x',
+        filePath: 'a.ts',
+        startLine: 1,
+        endLine: 2,
+        language: 42,
+      } as unknown as ChunkDictInput),
+    ).toThrow(TypeError)
   })
 })
 

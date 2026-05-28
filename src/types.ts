@@ -157,25 +157,48 @@ export interface ChunkDictInput {
  * Port of `Chunk.from_dict`. The `location` field, if present, is stripped
  * before construction (it's a derived value; trusting it on the way in would
  * let a malformed payload desynchronise it from the line range).
+ *
+ * This is a trust boundary: TypeScript's compile-time `ChunkDictInput` is
+ * bypassed when parsing untrusted JSON (persisted indices, MCP payloads,
+ * external callers). Validate at runtime so malformed input fails loudly
+ * with a `TypeError` instead of producing a `Chunk` with `NaN` line numbers
+ * or `undefined` fields that surface as confusing errors deeper in the
+ * pipeline.
  */
 export function chunkFromDict(data: ChunkDictInput): Chunk {
+  if (data === null || typeof data !== 'object') {
+    throw new TypeError('chunkFromDict: data must be a non-null object')
+  }
+  const d = data as Record<string, unknown>
+  if (typeof d.content !== 'string'
+    || typeof d.filePath !== 'string'
+    || typeof d.startLine !== 'number'
+    || typeof d.endLine !== 'number') {
+    throw new TypeError(
+      'chunkFromDict: missing or invalid required fields '
+      + '(content: string, filePath: string, startLine: number, endLine: number)',
+    )
+  }
+  if (d.language !== undefined && d.language !== null && typeof d.language !== 'string') {
+    throw new TypeError('chunkFromDict: language must be a string, null, or omitted')
+  }
   // `exactOptionalPropertyTypes` distinguishes "language: undefined" from
   // omitted; build the object conditionally so the resulting Chunk matches
   // the `language?: string | undefined` signature exactly.
-  const language = data.language ?? undefined
+  const language = d.language ?? undefined
   return language === undefined
     ? {
-        content: data.content,
-        filePath: data.filePath,
-        startLine: data.startLine,
-        endLine: data.endLine,
+        content: d.content,
+        filePath: d.filePath,
+        startLine: d.startLine,
+        endLine: d.endLine,
       }
     : {
-        content: data.content,
-        filePath: data.filePath,
-        startLine: data.startLine,
-        endLine: data.endLine,
-        language,
+        content: d.content,
+        filePath: d.filePath,
+        startLine: d.startLine,
+        endLine: d.endLine,
+        language: language as string,
       }
 }
 
