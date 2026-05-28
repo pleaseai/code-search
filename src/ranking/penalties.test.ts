@@ -98,6 +98,14 @@ describe('rerankTopK', () => {
     expect(rerankTopK(new Map(), 5)).toEqual([])
   })
 
+  it('returns an empty list for non-positive topK', () => {
+    const a = makeChunk('a.ts', 0)
+    const scores = new Map<Chunk, number>([[a, 1.0]])
+    expect(rerankTopK(scores, 0)).toEqual([])
+    expect(rerankTopK(scores, -1)).toEqual([])
+    expect(rerankTopK(scores, -5)).toEqual([])
+  })
+
   it('applies saturation decay to chunks from the same file', () => {
     // 4 chunks from the same file, all initial score 1.0, no path penalty.
     const a = makeChunk('src/foo.ts', 0)

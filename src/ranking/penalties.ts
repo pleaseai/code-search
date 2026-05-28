@@ -97,7 +97,7 @@ export function rerankTopK(
 ): Array<[Chunk, number]> {
   const penalisePaths = options.penalisePaths ?? true
 
-  if (scores.size === 0) {
+  if (scores.size === 0 || topK <= 0) {
     return []
   }
 
