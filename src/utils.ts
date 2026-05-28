@@ -1,21 +1,7 @@
 // Port of src/semble/utils.py
+// Minimal stub — full implementation lands in Unit 3.
 
-// Stopgap structural types until ./types.ts lands.
-// Mirror semble.types.Chunk / SearchResult with camelCase field names per
-// the @pleaseai/csp public-API conventions.
-export interface Chunk {
-  content: string
-  filePath: string
-  startLine: number
-  endLine: number
-  language?: string | null
-}
-
-export interface SearchResult {
-  chunk: Chunk
-  score: number
-  toDict: () => Record<string, unknown>
-}
+import type { Chunk, SearchResult } from './types.ts'
 
 const GIT_URL_SCHEMES = [
   'https://',
@@ -59,7 +45,6 @@ export function resolveChunk(
     ) {
       if (line < chunk.endLine)
         return chunk
-      // line === endLine: boundary; keep as fallback for end-of-file chunks.
       if (fallback === null)
         fallback = chunk
     }
