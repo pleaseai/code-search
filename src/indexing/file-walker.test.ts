@@ -228,4 +228,42 @@ describeWithIgnore('_isIgnored', () => {
     const check = _isIgnored(path.join(root, 'foo.log'), false, [spec!])
     expect(check.ignored).toBe(true)
   })
+
+  test('hasNegatedExtPattern is true when a negation pattern has an extension suffix', async () => {
+    writeFileSync(path.join(root, '.gitignore'), '*.log\n!special.log\n')
+    const spec = await _loadIgnoreForDir(root)
+    expect(spec).not.toBeNull()
+    expect(spec!.hasNegatedExtPattern).toBe(true)
+  })
+
+  test('hasNegatedExtPattern is false when negation patterns have no extension suffix', async () => {
+    writeFileSync(path.join(root, '.gitignore'), 'vendor/\n!vendor/keep/\n')
+    const spec = await _loadIgnoreForDir(root)
+    expect(spec).not.toBeNull()
+    expect(spec!.hasNegatedExtPattern).toBe(false)
+  })
+
+  test('hasNegatedExtPattern is false when there are no negation patterns', async () => {
+    writeFileSync(path.join(root, '.gitignore'), '*.log\n*.tmp\n')
+    const spec = await _loadIgnoreForDir(root)
+    expect(spec).not.toBeNull()
+    expect(spec!.hasNegatedExtPattern).toBe(false)
+  })
+
+  test('preserves outer ignored state across specs when current spec has no match', async () => {
+    // Outer spec ignores foo.log; inner spec has unrelated rules.
+    writeFileSync(path.join(root, '.gitignore'), '*.log\n')
+    const outerSpec = await _loadIgnoreForDir(root)
+    expect(outerSpec).not.toBeNull()
+
+    const sub = path.join(root, 'sub')
+    mkdirSync(sub)
+    writeFileSync(path.join(sub, '.gitignore'), '*.tmp\n')
+    const innerSpec = await _loadIgnoreForDir(sub)
+    expect(innerSpec).not.toBeNull()
+
+    // foo.log lives under sub/, matches outer's *.log, doesn't match inner.
+    const check = _isIgnored(path.join(sub, 'foo.log'), false, [outerSpec!, innerSpec!])
+    expect(check.ignored).toBe(true)
+  })
 })

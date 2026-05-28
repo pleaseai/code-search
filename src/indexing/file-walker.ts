@@ -30,13 +30,19 @@ export interface IgnoreSpec {
   base: string
   /**
    * Aggregate ignore-package matcher containing every pattern in this spec.
-   * Kept for parity with the Python `GitIgnoreSpec` field and for future
-   * callers that want a fast pre-check; the per-pattern walk is the
-   * authoritative decision path.
+   * Used as a fast pre-check via `.test()` in `_isIgnored`; the per-pattern
+   * walk is only consulted when a negation pattern with an extension suffix
+   * could win, so the bypass-extension-filter (`found`) decision can be made.
    */
   spec: IgnoreInstance
   /** Parsed pattern list (in source order) used for the negation-bypass logic. */
   patterns: readonly ParsedPattern[]
+  /**
+   * Pre-computed flag: true when at least one pattern in this spec is both
+   * negated (`!`) and has a file-extension suffix. When false, `_isIgnored`
+   * can skip the per-pattern walk after consulting the aggregate matcher.
+   */
+  hasNegatedExtPattern: boolean
 }
 
 /**
@@ -110,7 +116,9 @@ async function buildSpec(base: string, lines: readonly string[]): Promise<Ignore
     })
   }
 
-  return { base, spec: aggregate, patterns }
+  const hasNegatedExtPattern = patterns.some(p => p.negated && p.hasExtSuffix)
+
+  return { base, spec: aggregate, patterns, hasNegatedExtPattern }
 }
 
 /**
@@ -156,6 +164,14 @@ export interface IgnoreCheck {
  * When the *winning* match is a negation pattern with a file-extension suffix
  * (e.g. `!special.kjs`, `!*.py`), `found` becomes true so that the caller can
  * include the file even if its extension is not in the allowlist.
+ *
+ * Hot-path optimization: the aggregate `ignore`-package matcher is consulted
+ * first via `.test()`. If no pattern in the spec matches at all, we carry the
+ * outer state forward. If a pattern matches and the spec contains no negated
+ * extension patterns, the answer is fully determined by the aggregate and the
+ * per-pattern walk is skipped. The per-pattern walk runs only when a negation
+ * could win AND the spec carries at least one negated extension pattern —
+ * i.e. when `found` could change to `true`.
  */
 export function _isIgnored(
   filePath: string,
@@ -175,14 +191,47 @@ export function _isIgnored(
     const posixRelative = relative.split(path.sep).join('/')
     const candidate = isDir ? `${posixRelative}/` : posixRelative
 
+    let aggregateResult: { ignored: boolean, unignored: boolean }
+    try {
+      aggregateResult = ignoreSpec.spec.test(candidate)
+    }
+    catch {
+      // The `ignore` package rejects a few edge cases (e.g. paths outside
+      // the cwd when allowRelativePaths is off); treat as non-match.
+      aggregateResult = { ignored: false, unignored: false }
+    }
+
+    const { ignored: isIgnoredBySpec, unignored: isUnignoredBySpec } = aggregateResult
+
+    if (!isIgnoredBySpec && !isUnignoredBySpec) {
+      // No pattern in this spec matched — preserve outer state.
+      continue
+    }
+
+    if (isIgnoredBySpec) {
+      // Winning pattern is a non-negated ignore. The original loop would set
+      // `ignored = true; found = false` here regardless of pattern suffix.
+      ignored = true
+      found = false
+      continue
+    }
+
+    // isUnignoredBySpec: a negation pattern won in this spec.
+    if (!ignoreSpec.hasNegatedExtPattern) {
+      // No negation pattern in this spec has an extension suffix, so `found`
+      // cannot become true here.
+      ignored = false
+      found = false
+      continue
+    }
+
+    // Fall back to the per-pattern walk to determine `found` accurately.
     for (const pattern of ignoreSpec.patterns) {
       let matched = false
       try {
         matched = pattern.matcher.ignores(candidate)
       }
       catch {
-        // The `ignore` package rejects a few edge cases (e.g. paths outside
-        // the cwd when allowRelativePaths is off); treat as non-match.
         matched = false
       }
 
