@@ -34,13 +34,20 @@ export interface Chunk {
  * Assumes `chunk.filePath` is already repo-relative (set during indexing) so
  * machine-specific directory components are never indexed. The stem is
  * repeated twice to up-weight file-path matches in BM25.
+ *
+ * Repo-relative paths are normalized to POSIX (forward slashes) before
+ * parsing so Windows-host indexes produce the same enriched text as POSIX
+ * hosts. Without this, `path.parse` on Windows would split on `\\` while
+ * the indexer stores forward-slash paths, leading to inconsistent BM25
+ * tokenization across platforms.
  */
 export function enrichForBm25(chunk: Chunk): string {
-  const parsed = path.parse(chunk.filePath)
+  const normalized = chunk.filePath.replace(/\\/g, '/')
+  const parsed = path.posix.parse(normalized)
   const stem = parsed.name
   const dirParts = parsed.dir
-    .split(/[/\\]/)
-    .filter(part => part !== '' && part !== '.' && part !== '/')
+    .split('/')
+    .filter(part => part !== '' && part !== '.')
   const dirText = dirParts.slice(-3).join(' ')
   return `${chunk.content} ${stem} ${stem} ${dirText}`
 }
@@ -160,17 +167,15 @@ export class Bm25Index {
       const idf = Math.log(1 + (numDocs - df + 0.5) / (df + 0.5))
 
       for (const [docId, freq] of list) {
+        // Skip masked-out documents inside the posting-list iteration so we
+        // avoid the work entirely; Float32Array entries default to 0 so the
+        // final scores match the post-loop zeroing approach.
+        if (weightMask && !weightMask[docId])
+          continue
         const dl = docLengths[docId] ?? 0
         const denom = freq + K1 * (1 - B + (B * dl) / (avgDocLength || 1))
         const contrib = (idf * (freq * (K1 + 1))) / (denom || 1)
         scores[docId] = (scores[docId] ?? 0) + contrib
-      }
-    }
-
-    if (weightMask) {
-      for (let i = 0; i < numDocs; i++) {
-        if (!(weightMask[i] ?? 0))
-          scores[i] = 0
       }
     }
 

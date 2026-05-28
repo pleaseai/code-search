@@ -37,6 +37,14 @@ describe('enrichForBm25', () => {
     const out = enrichForBm25(makeChunk({ filePath: './a/b/foo.ts', content: 'x' }))
     expect(out).toBe('x foo foo a b')
   })
+
+  test('normalizes backslashes for cross-platform consistency', () => {
+    // Repo-relative paths must produce the same enrichment regardless of
+    // host OS — Windows hosts may surface back-slashes if a caller forgets
+    // to normalize before passing the chunk through.
+    const out = enrichForBm25(makeChunk({ filePath: 'src\\utils\\format.ts', content: 'hello world' }))
+    expect(out).toBe('hello world format format src utils')
+  })
 })
 
 describe('selectorToMask', () => {
