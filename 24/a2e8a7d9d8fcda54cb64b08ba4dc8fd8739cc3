@@ -1,0 +1,35 @@
+.gitignore
+  s_2555e7755a26f8::t_e4b9a96cd4d435 1-48
+tsconfig.json
+  s_2555e7755a26f8::t_a2ddd1862e918b 1-24
+README.ko.md
+  s_2555e7755a26f8::t_69776fa86d4caa 1-479
+README.md
+  s_2555e7755a26f8::t_a156370f501465 1-479
+package.json
+  s_2555e7755a26f8::t_36f3ba86e76473 1-62
+eslint.config.ts
+  s_2555e7755a26f8::t_6266dc01606463 1-12
+src/index.ts
+  s_2555e7755a26f8::t_05865a160c4eed 1
+tsdown.config.ts
+  s_2555e7755a26f8::t_6056c6e175b7e8 1-9
+src/cli.ts
+  s_2555e7755a26f8::t_30dc6137548718 1-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "24a2e8a7d9d8fcda54cb64b08ba4dc8fd8739cc3",
+  "prompts": {},
+  "sessions": {
+    "s_2555e7755a26f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d41b9e6f-01b7-4bc9-9573-32a7fbb647bb",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
