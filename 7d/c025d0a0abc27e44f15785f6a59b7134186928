@@ -1,0 +1,22 @@
+src/types.test.ts
+  s_2615c291e00521::t_f7d04f921e7501 150-176
+src/types.ts
+  s_2615c291e00521::t_013174b039ccd3 176
+  s_2615c291e00521::t_422c9ec4944486 177-178,181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "7dc025d0a0abc27e44f15785f6a59b7134186928",
+  "prompts": {},
+  "sessions": {
+    "s_2615c291e00521": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "372a735d-2134-463b-8b10-377751fb55f8",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
