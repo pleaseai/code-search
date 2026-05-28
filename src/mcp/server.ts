@@ -73,6 +73,10 @@ export class IndexCache {
   constructor(options: IndexCacheOptions = {}) {
     this.content = options.content ?? [ContentType.CODE]
     this.modelReady = createDeferred<string>()
+    // Prevent unhandled promise rejection warnings if the model fails to load
+    // before any caller awaits the promise. Callers of awaitModel() still
+    // observe the rejection because they await the same promise themselves.
+    this.modelReady.promise.catch(() => {})
   }
 
   /**
@@ -352,26 +356,25 @@ export async function createServer(
       'Pass a git URL or local path as `repo` to index it on demand; indexes are cached for the session. '
       + 'Use this to find where something is implemented, understand a library, or locate related code.',
     handler: async (args) => {
-      const query = String(args.query ?? '')
-      const repo = args.repo === undefined ? undefined : String(args.repo)
-      const topK
-        = typeof args.top_k === 'number'
-          ? args.top_k
-          : typeof args.topK === 'number'
-            ? args.topK
-            : 5
-
-      let index: CspIndex
       try {
-        index = await getIndex(repo, defaultSource, cache)
+        const query = String(args.query ?? '')
+        const repo = args.repo === undefined ? undefined : String(args.repo)
+        const topK
+          = typeof args.top_k === 'number'
+            ? args.top_k
+            : typeof args.topK === 'number'
+              ? args.topK
+              : 5
+
+        const index = await getIndex(repo, defaultSource, cache)
+        const results = index.search(query, { topK })
+        if (results.length === 0)
+          return JSON.stringify({ error: 'No results found.' })
+        return JSON.stringify(formatResults(query, results))
       }
       catch (err) {
         return err instanceof Error ? err.message : String(err)
       }
-      const results = index.search(query, { topK })
-      if (results.length === 0)
-        return JSON.stringify({ error: 'No results found.' })
-      return JSON.stringify(formatResults(query, results))
     },
   }
 
@@ -381,39 +384,38 @@ export async function createServer(
       'Use after `search` to explore related implementations or callers. '
       + 'Pass file_path and line from a prior search result.',
     handler: async (args) => {
-      const filePath = String(args.file_path ?? args.filePath ?? '')
-      const line = Number(args.line ?? 0)
-      const repo = args.repo === undefined ? undefined : String(args.repo)
-      const topK
-        = typeof args.top_k === 'number'
-          ? args.top_k
-          : typeof args.topK === 'number'
-            ? args.topK
-            : 5
-
-      let index: CspIndex
       try {
-        index = await getIndex(repo, defaultSource, cache)
+        const filePath = String(args.file_path ?? args.filePath ?? '')
+        const line = Number(args.line ?? 0)
+        const repo = args.repo === undefined ? undefined : String(args.repo)
+        const topK
+          = typeof args.top_k === 'number'
+            ? args.top_k
+            : typeof args.topK === 'number'
+              ? args.topK
+              : 5
+
+        const index = await getIndex(repo, defaultSource, cache)
+        const chunk = resolveChunk(index.chunks, filePath, line)
+        if (chunk === null) {
+          return (
+            `No chunk found at ${filePath}:${line}. `
+            + 'Make sure the file is indexed and the line number is within a known chunk.'
+          )
+        }
+        const results = index.findRelated(chunk, { topK })
+        if (results.length === 0) {
+          return JSON.stringify({
+            error: `No related chunks found for ${filePath}:${line}.`,
+          })
+        }
+        return JSON.stringify(
+          formatResults(`Chunks related to ${filePath}:${line}`, results),
+        )
       }
       catch (err) {
         return err instanceof Error ? err.message : String(err)
       }
-      const chunk = resolveChunk(index.chunks, filePath, line)
-      if (chunk === null) {
-        return (
-          `No chunk found at ${filePath}:${line}. `
-          + 'Make sure the file is indexed and the line number is within a known chunk.'
-        )
-      }
-      const results = index.findRelated(chunk, { topK })
-      if (results.length === 0) {
-        return JSON.stringify({
-          error: `No related chunks found for ${filePath}:${line}.`,
-        })
-      }
-      return JSON.stringify(
-        formatResults(`Chunks related to ${filePath}:${line}`, results),
-      )
     },
   }
 
@@ -606,21 +608,38 @@ export async function serve(path?: string, options: ServeOptions = {}): Promise<
   }
 
   if (StdioTransportCtor === null || server.isPlaceholder) {
-    // No SDK — nothing to serve. Await pre-warm so callers can inspect the cache.
-    await prewarm
+    // No SDK — nothing to serve. Await pre-warm so callers can inspect the
+    // cache, then tear down the watcher so this path doesn't leak file
+    // handles (the prewarm above may have started one).
+    try {
+      await prewarm
+    }
+    finally {
+      await cache.stopWatcher()
+    }
     return
   }
 
   // Hook into stdin EOF so we can return once the client disconnects, mirroring
-  // semble's `run_stdio_async()` blocking semantics.
+  // semble's `run_stdio_async()` blocking semantics. Both listeners share a
+  // single cleanup so whichever event fires first removes the other —
+  // otherwise repeated `serve()` calls (tests, restarts) accumulate listeners
+  // on `process.stdin` and trip MaxListenersExceededWarning.
   const stdinClosed = new Promise<void>((resolve) => {
-    process.stdin.once('end', () => resolve())
-    process.stdin.once('close', () => resolve())
+    const cleanup = (): void => {
+      process.stdin.removeListener('end', cleanup)
+      process.stdin.removeListener('close', cleanup)
+      resolve()
+    }
+    process.stdin.on('end', cleanup)
+    process.stdin.on('close', cleanup)
   })
 
   const transport = new StdioTransportCtor()
-  await server.connect(transport)
   try {
+    // connect() must be inside the try so a failure here still runs the
+    // transport/watcher cleanup below.
+    await server.connect(transport)
     // Block on stdin close — connect() returns immediately after handshake,
     // and we MUST NOT close the transport until the client disconnects.
     await stdinClosed
