@@ -5,6 +5,7 @@
     "bun@pleaseai": true,
     "claude-md-management@claude-plugins-official": true,
     "code-review@pleaseai": true,
-    "please@passionfactory": true
+    "please@passionfactory": true,
+    "standards@passionfactory": true
   }
 }
