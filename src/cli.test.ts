@@ -150,31 +150,13 @@ describe('csp init', () => {
       cwd: tmpDir,
       readAgentFile: async () => 'first\n',
     })
-    // Second call should exit with code 1; we intercept process.exit.
-    let exitCode: number | undefined
-    const origExit = process.exit
-    process.exit = ((code?: number) => {
-      exitCode = code
-      throw new Error('__test_exit__')
-    }) as typeof process.exit
-    const origStderr = process.stderr.write.bind(process.stderr)
-    process.stderr.write = (() => true) as typeof process.stderr.write
-    try {
-      await _runInit({
-        agent: Agent.Claude,
-        cwd: tmpDir,
-        readAgentFile: async () => 'second\n',
-      })
-    }
-    catch (err) {
-      // Expected: we threw inside the fake exit.
-      expect((err as Error).message).toBe('__test_exit__')
-    }
-    finally {
-      process.exit = origExit
-      process.stderr.write = origStderr
-    }
-    expect(exitCode).toBe(1)
+    // Second call should reject with an "already exists" error — callers
+    // (i.e. runCli) translate this into exit code 1 + stderr message.
+    await expect(_runInit({
+      agent: Agent.Claude,
+      cwd: tmpDir,
+      readAgentFile: async () => 'second\n',
+    })).rejects.toThrow('already exists')
     // Original content preserved.
     const content = await readFile(join(tmpDir, '.claude/agents/csp-search.md'), 'utf8')
     expect(content).toBe('first\n')
@@ -351,5 +333,130 @@ describe('_readAgentFile', () => {
     const text = await _readAgentFile(Agent.Claude)
     expect(text.length).toBeGreaterThan(0)
     expect(text).toContain('csp')
+  })
+})
+
+describe('runCli error handling', () => {
+  test('unknown subcommand returns exit 1', async () => {
+    const errs: string[] = []
+    const outs: string[] = []
+    const origErr = process.stderr.write.bind(process.stderr)
+    const origOut = process.stdout.write.bind(process.stdout)
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      errs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stderr.write
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      outs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stdout.write
+    try {
+      const code = await runCli(['bogus-cmd'])
+      expect(code).toBe(1)
+    }
+    finally {
+      process.stderr.write = origErr
+      process.stdout.write = origOut
+    }
+    expect(errs.join('')).toContain('Unknown command: bogus-cmd')
+  })
+
+  test('invalid --agent returns exit 1 with stderr message', async () => {
+    const errs: string[] = []
+    const origErr = process.stderr.write.bind(process.stderr)
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      errs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stderr.write
+    try {
+      const code = await runCli(['init', '--agent', 'bogus'])
+      expect(code).toBe(1)
+    }
+    finally {
+      process.stderr.write = origErr
+    }
+    expect(errs.join('')).toContain('Invalid agent: bogus')
+  })
+
+  test('invalid --content returns exit 1 with stderr message', async () => {
+    const errs: string[] = []
+    const origErr = process.stderr.write.bind(process.stderr)
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      errs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stderr.write
+    try {
+      const code = await runCli(['search', 'foo', '--content', 'bogus'], {
+        fromPath: async () => ({ chunks: [] }) as unknown as CspIndex,
+      })
+      expect(code).toBe(1)
+    }
+    finally {
+      process.stderr.write = origErr
+    }
+    expect(errs.join('')).toContain('Invalid content type: bogus')
+  })
+
+  test('init rejection is translated to exit 1 by runCli', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'csp-cli-runcli-'))
+    const errs: string[] = []
+    const outs: string[] = []
+    const origErr = process.stderr.write.bind(process.stderr)
+    const origOut = process.stdout.write.bind(process.stdout)
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      errs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stderr.write
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      outs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stdout.write
+    try {
+      // First run: succeeds.
+      const code1 = await runCli(['init', '--agent', 'claude'], {
+        cwd: () => tmp,
+        readAgentFile: async () => '# stub\n',
+      })
+      expect(code1).toBe(0)
+      // Second run without --force: should exit 1 with stderr message, not crash.
+      const code2 = await runCli(['init', '--agent', 'claude'], {
+        cwd: () => tmp,
+        readAgentFile: async () => '# stub\n',
+      })
+      expect(code2).toBe(1)
+    }
+    finally {
+      process.stderr.write = origErr
+      process.stdout.write = origOut
+      await rm(tmp, { recursive: true, force: true })
+    }
+    expect(errs.join('')).toContain('already exists')
+  })
+})
+
+describe('csp index --content', () => {
+  test('passes resolved content types to fromPath', async () => {
+    let captured: { path?: string, content?: ContentType[] } = {}
+    const fakeIndex: Partial<CspIndex> = {
+      chunks: [],
+      save: async () => {
+        // no-op
+      },
+    }
+    const tmp = await mkdtemp(join(tmpdir(), 'csp-cli-index-'))
+    try {
+      const code = await runCli(['index', '.', '-o', join(tmp, 'idx'), '--content', 'all'], {
+        fromPath: async (p, o) => {
+          captured = { path: p, content: o.content }
+          return fakeIndex as CspIndex
+        },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      await rm(tmp, { recursive: true, force: true })
+    }
+    expect(captured.path).toBe('.')
+    expect(captured.content).toEqual([ContentType.CODE, ContentType.DOCS, ContentType.CONFIG])
   })
 })

@@ -251,8 +251,7 @@ export async function _runInit(opts: {
     exists = false
   }
   if (exists && !force) {
-    process.stderr.write(`${relDest} already exists. Run with --force to overwrite.\n`)
-    process.exit(1)
+    throw new Error(`${relDest} already exists. Run with --force to overwrite.`)
   }
 
   await mkdir(dirname(dest), { recursive: true })
@@ -266,21 +265,24 @@ export async function _runInit(opts: {
 async function _runIndex(opts: {
   path: string
   out: string
-  includeTextFiles: boolean
+  content: ContentType[]
+  fromPath?: (path: string, opts: { content: ContentType[] }) => Promise<CspIndex>
+  fromGit?: (path: string, opts: { content: ContentType[] }) => Promise<CspIndex>
 }): Promise<void> {
-  const { path, out, includeTextFiles } = opts
+  const { path, out, content } = opts
+  const fromPath = opts.fromPath ?? ((p: string, o: { content: ContentType[] }) => CspIndex.fromPath(p, o))
+  const fromGit = opts.fromGit ?? ((p: string, o: { content: ContentType[] }) => CspIndex.fromGit(p, o))
   const index = isGitUrl(path)
-    ? await CspIndex.fromGit(path, { includeTextFiles })
-    : await CspIndex.fromPath(path, { includeTextFiles })
+    ? await fromGit(path, { content })
+    : await fromPath(path, { content })
   await mkdir(out, { recursive: true })
   await index.save(out)
 }
 
 export async function runCli(argv: string[], options: RunOptions = {}): Promise<number> {
-  // The first arg determines whether this is the MCP entrypoint or a subcommand.
-  if (argv.length === 0 || (argv[0] !== undefined && !CLI_DISPATCH_ARGS.has(argv[0]) && !argv[0].startsWith('-'))) {
-    // No subcommand recognized — treat as MCP (mirrors semble's default).
-    // But for csp the README requires `csp mcp` — so we still treat bare invocation as help.
+  // Bare invocation prints help and exits 0; unknown subcommands are handled
+  // below (after parsing) so they exit 1.
+  if (argv.length === 0) {
     _printHelp()
     return 0
   }
@@ -290,112 +292,132 @@ export async function runCli(argv: string[], options: RunOptions = {}): Promise<
     return 0
   }
 
-  const { command, positional, flags } = parseArgs(argv)
+  try {
+    const { command, positional, flags } = parseArgs(argv)
 
-  if (command === 'init') {
-    const agentRaw = _getStringFlag(flags, 'agent', 'a') ?? DEFAULT_AGENT
-    const agent = _coerceAgent(agentRaw)
-    const force = _getBoolFlag(flags, 'force')
-    await _runInit({
-      agent,
-      force,
-      ...(options.cwd ? { cwd: options.cwd() } : {}),
-      ...(options.readAgentFile ? { readAgentFile: options.readAgentFile } : {}),
-      ...(options.writeFileImpl ? { writeFileImpl: options.writeFileImpl } : {}),
-    })
-    return 0
-  }
-
-  if (command === 'index') {
-    const path = positional[0] ?? '.'
-    const out = _getStringFlag(flags, 'out', 'o')
-    if (out === undefined) {
-      process.stderr.write('--out / -o is required for `index`.\n')
+    if (command === null || !CLI_DISPATCH_ARGS.has(command)) {
+      process.stderr.write(`Unknown command: ${command ?? '<none>'}\n`)
+      _printHelp()
       return 1
     }
-    const includeTextFiles = _getBoolFlag(flags, 'include-text-files')
-    await _runIndex({ path, out, includeTextFiles })
-    return 0
-  }
 
-  if (command === 'savings') {
-    const verbose = _getBoolFlag(flags, 'verbose')
-    const fmt = options.formatSavings ?? formatSavingsReport
-    process.stdout.write(fmt({ verbose }))
-    return 0
-  }
-
-  if (command === 'mcp') {
-    const path = positional[0]
-    const ref = _getStringFlag(flags, 'ref')
-    const content = _resolveContent(_getContentFlag(flags), _getBoolFlag(flags, 'include-text-files'))
-    const serveImpl = options.serveMcp ?? ((p, o) => serve(p, o))
-    await serveImpl(path, { ref, content })
-    return 0
-  }
-
-  // search and find-related share index loading
-  if (command === 'search' || command === 'find-related') {
-    const indexPath = _getStringFlag(flags, 'index')
-    let index: CspIndex
-    if (indexPath !== undefined) {
-      const loadImpl = options.readIndex ?? ((p: string) => CspIndex.loadFromDisk(p))
-      index = await loadImpl(indexPath)
-    }
-    else {
-      const pathArg = command === 'search' ? positional[1] ?? '.' : positional[2] ?? '.'
-      const content = _resolveContent(_getContentFlag(flags), _getBoolFlag(flags, 'include-text-files'))
-      const fromPath = options.fromPath ?? ((p: string, o: { content: ContentType[] }) => CspIndex.fromPath(p, o))
-      const fromGit = options.fromGit ?? ((p: string, o: { content: ContentType[] }) => CspIndex.fromGit(p, o))
-      index = isGitUrl(pathArg)
-        ? await fromGit(pathArg, { content })
-        : await fromPath(pathArg, { content })
+    if (command === 'init') {
+      const agentRaw = _getStringFlag(flags, 'agent', 'a') ?? DEFAULT_AGENT
+      const agent = _coerceAgent(agentRaw)
+      const force = _getBoolFlag(flags, 'force')
+      await _runInit({
+        agent,
+        force,
+        ...(options.cwd ? { cwd: options.cwd() } : {}),
+        ...(options.readAgentFile ? { readAgentFile: options.readAgentFile } : {}),
+        ...(options.writeFileImpl ? { writeFileImpl: options.writeFileImpl } : {}),
+      })
+      return 0
     }
 
-    const topK = _getNumberFlag(flags, 'top-k', 'k') ?? 5
-
-    if (command === 'search') {
-      const query = positional[0]
-      if (query === undefined) {
-        process.stderr.write('search requires a <query>.\n')
+    if (command === 'index') {
+      const path = positional[0] ?? '.'
+      const out = _getStringFlag(flags, 'out', 'o')
+      if (out === undefined) {
+        process.stderr.write('--out / -o is required for `index`.\n')
         return 1
       }
-      const results = await index.search(query, { topK })
-      const out = (!results || results.length === 0)
-        ? { error: 'No results found.' }
-        : formatResults(query, results)
+      const content = _resolveContent(_getContentFlag(flags), _getBoolFlag(flags, 'include-text-files'))
+      await _runIndex({
+        path,
+        out,
+        content,
+        ...(options.fromPath ? { fromPath: options.fromPath } : {}),
+        ...(options.fromGit ? { fromGit: options.fromGit } : {}),
+      })
+      return 0
+    }
+
+    if (command === 'savings') {
+      const verbose = _getBoolFlag(flags, 'verbose')
+      const fmt = options.formatSavings ?? formatSavingsReport
+      process.stdout.write(fmt({ verbose }))
+      return 0
+    }
+
+    if (command === 'mcp') {
+      const path = positional[0]
+      const ref = _getStringFlag(flags, 'ref')
+      const content = _resolveContent(_getContentFlag(flags), _getBoolFlag(flags, 'include-text-files'))
+      const serveImpl = options.serveMcp ?? ((p, o) => serve(p, o))
+      await serveImpl(path, { ref, content })
+      return 0
+    }
+
+    // search and find-related share index loading
+    if (command === 'search' || command === 'find-related') {
+      const indexPath = _getStringFlag(flags, 'index')
+      let index: CspIndex
+      if (indexPath !== undefined) {
+        const loadImpl = options.readIndex ?? ((p: string) => CspIndex.loadFromDisk(p))
+        index = await loadImpl(indexPath)
+      }
+      else {
+        const pathArg = command === 'search' ? positional[1] ?? '.' : positional[2] ?? '.'
+        const content = _resolveContent(_getContentFlag(flags), _getBoolFlag(flags, 'include-text-files'))
+        const fromPath = options.fromPath ?? ((p: string, o: { content: ContentType[] }) => CspIndex.fromPath(p, o))
+        const fromGit = options.fromGit ?? ((p: string, o: { content: ContentType[] }) => CspIndex.fromGit(p, o))
+        index = isGitUrl(pathArg)
+          ? await fromGit(pathArg, { content })
+          : await fromPath(pathArg, { content })
+      }
+
+      const topK = _getNumberFlag(flags, 'top-k', 'k') ?? 5
+
+      if (command === 'search') {
+        const query = positional[0]
+        if (query === undefined) {
+          process.stderr.write('search requires a <query>.\n')
+          return 1
+        }
+        const results = await index.search(query, { topK })
+        const out = (!results || results.length === 0)
+          ? { error: 'No results found.' }
+          : formatResults(query, results)
+        process.stdout.write(`${JSON.stringify(out)}\n`)
+        return 0
+      }
+
+      // find-related
+      const filePath = positional[0]
+      const lineRaw = positional[1]
+      if (filePath === undefined || lineRaw === undefined) {
+        process.stderr.write('find-related requires <file_path> <line>.\n')
+        return 1
+      }
+      if (!/^-?\d+$/.test(lineRaw)) {
+        process.stderr.write(`line must be an integer, got: ${lineRaw}\n`)
+        return 1
+      }
+      const line = Number.parseInt(lineRaw, 10)
+      const chunk = resolveChunk(index.chunks, filePath, line)
+      if (chunk === undefined || chunk === null) {
+        process.stderr.write(`No chunk found at ${filePath}:${line}.\n`)
+        return 1
+      }
+      const related = await index.findRelated(chunk, { topK })
+      const out = (!related || related.length === 0)
+        ? { error: `No related chunks found for ${filePath}:${line}.` }
+        : formatResults(`Chunks related to ${filePath}:${line}`, related)
       process.stdout.write(`${JSON.stringify(out)}\n`)
       return 0
     }
 
-    // find-related
-    const filePath = positional[0]
-    const lineRaw = positional[1]
-    if (filePath === undefined || lineRaw === undefined) {
-      process.stderr.write('find-related requires <file_path> <line>.\n')
-      return 1
-    }
-    if (!/^-?\d+$/.test(lineRaw)) {
-      process.stderr.write(`line must be an integer, got: ${lineRaw}\n`)
-      return 1
-    }
-    const line = Number.parseInt(lineRaw, 10)
-    const chunk = resolveChunk(index.chunks, filePath, line)
-    if (chunk === undefined || chunk === null) {
-      process.stderr.write(`No chunk found at ${filePath}:${line}.\n`)
-      return 1
-    }
-    const related = await index.findRelated(chunk, { topK })
-    const out = (!related || related.length === 0)
-      ? { error: `No related chunks found for ${filePath}:${line}.` }
-      : formatResults(`Chunks related to ${filePath}:${line}`, related)
-    process.stdout.write(`${JSON.stringify(out)}\n`)
-    return 0
+    // Unreachable: CLI_DISPATCH_ARGS gate above filters unknown commands.
+    process.stderr.write(`Unknown command: ${command}\n`)
+    _printHelp()
+    return 1
   }
-
-  process.stderr.write(`Unknown command: ${command ?? '<none>'}\n`)
-  _printHelp()
-  return 1
+  catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    process.stderr.write(`${message}\n`)
+    return 1
+  }
 }
 
 function _coerceAgent(raw: string): Agent {
