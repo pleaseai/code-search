@@ -41,6 +41,8 @@ describe('detectLanguage', () => {
   it('returns undefined for dotfiles like .gitignore', () => {
     // Mirrors Python's Path('.gitignore').suffix === ''
     expect(detectLanguage('.gitignore')).toBeUndefined()
+    expect(detectLanguage('dir/.gitignore')).toBeUndefined()
+    expect(detectLanguage('dir\\.gitignore')).toBeUndefined()
   })
 
   it('matches the final suffix for files with multiple dots', () => {
@@ -49,6 +51,12 @@ describe('detectLanguage', () => {
 
   it('handles paths with directory separators', () => {
     expect(detectLanguage('src/indexing/files.ts')).toBe('typescript')
+  })
+
+  it('handles Windows-style path separators', () => {
+    // Mirrors pathlib.Path on Windows where '\\' is also a separator.
+    expect(detectLanguage('src\\indexing\\files.ts')).toBe('typescript')
+    expect(detectLanguage('C:\\Users\\me\\foo.py')).toBe('python')
   })
 })
 

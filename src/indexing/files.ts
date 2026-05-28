@@ -471,10 +471,12 @@ const CONTENT_TYPE_LANGUAGES: Record<ContentType, ReadonlySet<string>> = {
  */
 export function detectLanguage(fileName: string): string | undefined {
   // Mirror Python's Path(fileName).suffix.lower(): take the substring after
-  // the last '/', then return the part from the final '.' onward — but only
-  // if that '.' is not at the very start of the basename (so '.gitignore'
-  // resolves to '' just like Python).
-  const base = fileName.slice(fileName.lastIndexOf('/') + 1)
+  // the last path separator, then return the part from the final '.' onward —
+  // but only if that '.' is not at the very start of the basename (so
+  // '.gitignore' resolves to '' just like Python). Both POSIX ('/') and
+  // Windows ('\\') separators are handled, matching pathlib.Path on Windows.
+  const lastSep = Math.max(fileName.lastIndexOf('/'), fileName.lastIndexOf('\\'))
+  const base = fileName.slice(lastSep + 1)
   const dot = base.lastIndexOf('.')
   if (dot <= 0) return undefined
   return EXTENSION_TO_LANGUAGE[base.slice(dot).toLowerCase()]
