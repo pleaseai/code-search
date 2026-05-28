@@ -54,6 +54,6 @@ Rationale:
 
 ## References
 
-- Upstream: `src/semble/chunking/core.py`, `src/semble/index/files.py` (in `/Users/lms/.ask/github/github.com/MinishLab/semble/main/`).
+- Upstream: `src/semble/chunking/core.py`, `src/semble/index/files.py` in the upstream [MinishLab/semble](https://github.com/MinishLab/semble) repository.
 - `@kreuzberg/tree-sitter-language-pack` — <https://www.npmjs.com/package/@kreuzberg/tree-sitter-language-pack>
 - Previously stated guideline in `ARCHITECTURE.md` ("No native add-ons") is amended in the same commit that introduces this ADR.

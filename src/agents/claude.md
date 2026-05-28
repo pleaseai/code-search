@@ -34,7 +34,7 @@ csp search "database host port" ./my-project --content config
 csp search "authentication" ./my-project --content all
 ```
 
-Use `csp find-related` to discover code similar to a known location (pass `file_path` and `line` from a prior search result):
+Use `csp find-related` to discover code similar to a known location (pass `filePath` and `line` from a prior search result):
 
 ```bash
 csp find-related src/auth.ts 42 ./my-project
@@ -52,5 +52,5 @@ If `csp` is not on `$PATH`, use `bunx @pleaseai/csp` in its place.
 2. Start with `csp search` to find relevant chunks. Pass the index to achieve results faster.
 3. Use `--content docs` for documentation, `--content config` for config files, or `--content all` for everything.
 4. Inspect full files only when the returned chunk does not give enough context.
-5. Optionally use `csp find-related` with a promising result's `file_path` and `line` to discover related implementations.
+5. Optionally use `csp find-related` with a promising result's `filePath` and `line` to discover related implementations.
 6. Use grep only when you need exhaustive literal matches or quick confirmation of an exact string.
