@@ -1,0 +1,32 @@
+.please/docs/decisions/0001-native-tree-sitter.md
+  s_2615c291e00521::t_28d25acafc5e5e 57
+src/agents/claude.md
+  s_2615c291e00521::t_e85e967a75e55d 37
+  s_2615c291e00521::t_63d2d4f988cd84 55
+src/agents/cursor.md
+  s_2615c291e00521::t_4e648e2b0a39e4 36,54
+src/agents/copilot.md
+  s_2615c291e00521::t_9e4e4746920a5c 37,55
+src/agents/gemini.md
+  s_2615c291e00521::t_378788050e6cfa 39,57
+src/agents/kiro.md
+  s_2615c291e00521::t_4250600b5ec262 39,57
+src/agents/opencode.md
+  s_2615c291e00521::t_63cdbd56db4ff8 40,58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "06358801a406c2a87c5c536c9759151a4f9dd796",
+  "prompts": {},
+  "sessions": {
+    "s_2615c291e00521": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "372a735d-2134-463b-8b10-377751fb55f8",
+        "model": "unknown"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
