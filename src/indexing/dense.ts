@@ -174,13 +174,18 @@ export class SelectableBasicBackend {
 
   constructor(vectors: Float32Array[], options: BasicArgs = {}) {
     this.arguments = { metric: 'cosine', ...options }
+    this.dim = vectors[0]?.length ?? 0
     // Defensive copy + normalise so cosine distance reduces to (1 - dot).
     this.vectors = vectors.map((v) => {
+      if (v.length !== this.dim) {
+        throw new Error(
+          `Inconsistent vector dimensions: expected ${this.dim}, got ${v.length}`,
+        )
+      }
       const copy = new Float32Array(v)
       normalizeInPlace(copy)
       return copy
     })
-    this.dim = this.vectors[0]?.length ?? 0
   }
 
   /**
@@ -203,7 +208,19 @@ export class SelectableBasicBackend {
 
     const numVectors = this.vectors.length
     let effectiveK = Math.min(k, numVectors)
-    if (selector !== undefined) effectiveK = Math.min(effectiveK, selector.length)
+    if (selector !== undefined) {
+      // Bounds-check selector indices up front so we fail fast with a
+      // descriptive error instead of crashing during the dot-product loop.
+      for (let i = 0; i < selector.length; i++) {
+        const idx = selector[i]!
+        if (idx >= numVectors) {
+          throw new Error(
+            `Selector index out of bounds: ${idx} (total vectors: ${numVectors})`,
+          )
+        }
+      }
+      effectiveK = Math.min(effectiveK, selector.length)
+    }
 
     const out: Array<Array<[number, number]>> = []
     if (effectiveK === 0) {
@@ -212,6 +229,11 @@ export class SelectableBasicBackend {
     }
 
     for (const raw of queryVectors) {
+      if (raw.length !== this.dim) {
+        throw new Error(
+          `Query vector dimension mismatch: expected ${this.dim}, got ${raw.length}`,
+        )
+      }
       const q = new Float32Array(raw)
       normalizeInPlace(q)
 
@@ -265,6 +287,12 @@ export class SelectableBasicBackend {
     const metaRaw = await readFile(join(dir, 'args.json'), 'utf8')
     const meta = JSON.parse(metaRaw) as { rows: number, dim: number, arguments: BasicArgs }
     const bytes = await readFile(join(dir, 'vectors.bin'))
+    const expectedBytes = meta.rows * meta.dim * 4
+    if (bytes.byteLength !== expectedBytes) {
+      throw new Error(
+        `Vector file size mismatch: expected ${expectedBytes} bytes, got ${bytes.byteLength}`,
+      )
+    }
     // Copy into a fresh ArrayBuffer so alignment is guaranteed.
     const ab = new ArrayBuffer(bytes.byteLength)
     new Uint8Array(ab).set(bytes)

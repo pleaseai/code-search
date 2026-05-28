@@ -1,6 +1,6 @@
 // Port of src/semble/index/dense.py — unit tests
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
@@ -83,6 +83,33 @@ describe('SelectableBasicBackend.query', () => {
     const vectors = embedChunks(model, [chunk('a'), chunk('b')])
     const backend = new SelectableBasicBackend(vectors)
     expect(() => backend.query([vectors[0]!], 0)).toThrow()
+  })
+
+  it('throws when constructed with inconsistent vector dimensions', async () => {
+    const { model } = await loadModel()
+    const [v0] = embedChunks(model, [chunk('a')])
+    const truncated = new Float32Array(v0!.length - 1)
+    expect(() => new SelectableBasicBackend([v0!, truncated])).toThrow(
+      /Inconsistent vector dimensions/,
+    )
+  })
+
+  it('throws when a query vector dimension differs from the index dim', async () => {
+    const { model } = await loadModel()
+    const vectors = embedChunks(model, [chunk('a'), chunk('b')])
+    const backend = new SelectableBasicBackend(vectors)
+    const bad = new Float32Array(backend.dim - 1)
+    expect(() => backend.query([bad], 1)).toThrow(/Query vector dimension mismatch/)
+  })
+
+  it('throws when a selector index is out of bounds', async () => {
+    const { model } = await loadModel()
+    const vectors = embedChunks(model, [chunk('a'), chunk('b')])
+    const backend = new SelectableBasicBackend(vectors)
+    const selector = new Uint32Array([0, 5])
+    expect(() => backend.query([vectors[0]!], 1, selector)).toThrow(
+      /Selector index out of bounds/,
+    )
   })
 
   it('returns top-k (index, distance) pairs sorted by distance', async () => {
@@ -171,5 +198,23 @@ describe('SelectableBasicBackend save/load', () => {
     const origResults = original.query([vectors[0]!], 2)
     const loadedResults = loaded.query([vectors[0]!], 2)
     expect(loadedResults[0]!.map(h => h[0])).toEqual(origResults[0]!.map(h => h[0]))
+  })
+
+  it('rejects a truncated vectors.bin during load', async () => {
+    const { model } = await loadModel()
+    const vectors = embedChunks(model, [chunk('alpha'), chunk('beta')])
+    const original = new SelectableBasicBackend(vectors)
+    await original.save(dir)
+
+    // Truncate vectors.bin to half its expected size.
+    const truncated = new Float32Array(original.dim) // one row instead of two
+    await writeFile(
+      join(dir, 'vectors.bin'),
+      Buffer.from(truncated.buffer, truncated.byteOffset, truncated.byteLength),
+    )
+
+    await expect(SelectableBasicBackend.load(dir)).rejects.toThrow(
+      /Vector file size mismatch/,
+    )
   })
 })
