@@ -122,7 +122,8 @@ export function applyQueryBoost(
   allChunks: Chunk[],
 ): Map<Chunk, number> {
   if (combinedScores.size === 0) {
-    return combinedScores
+    // Always return a fresh Map to honor the non-mutating contract; do not alias caller state.
+    return new Map()
   }
 
   const maxScore = maxValue(combinedScores.values())
@@ -162,6 +163,11 @@ export function boostMultiChunkFiles(scores: Map<Chunk, number>): void {
   }
 
   const maxFileSum = maxValue(fileSum.values())
+  // Guard against zero/negative maxFileSum to avoid NaN / Infinity from the division below
+  // (e.g. when positive and negative chunk scores cancel out within every file).
+  if (maxFileSum <= 0) {
+    return
+  }
   const boostUnit = maxScore * FILE_COHERENCE_BOOST_FRAC
   for (const [filePath, chunk] of bestChunk) {
     const sum = fileSum.get(filePath) ?? 0.0
@@ -223,21 +229,31 @@ export function _chunkDefinesSymbol(chunk: Chunk, symbolName: string): boolean {
   return general.test(chunk.content) || sql.test(chunk.content)
 }
 
+// Mirror Python's `str.rstrip("s")`: strip all trailing 's' characters.
+function stripTrailingS(s: string): string {
+  return s.endsWith('s') ? s.replace(/s+$/, '') : s
+}
+
 /** Return True if *stem* matches *name* (exact, snake_case-normalised, or plural). */
 export function _stemMatches(stem: string, name: string): boolean {
   const stemNorm = stem.replace(/_/g, '')
-  const stripS = (s: string): string => s.endsWith('s') ? s.replace(/s+$/, '') : s
-  return stem === name || stemNorm === name || stripS(stem) === name || stripS(stemNorm) === name
+  return stem === name
+    || stemNorm === name
+    || stripTrailingS(stem) === name
+    || stripTrailingS(stemNorm) === name
 }
 
-function pathStemLower(filePath: string): string {
+function pathStemOriginal(filePath: string): string {
   // Match Python's pathlib.Path.stem: filename without suffix; handles both / and \.
+  // Path.stem leaves leading-dot files untouched (".gitignore" → ".gitignore").
   const sepIdx = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
   const base = sepIdx === -1 ? filePath : filePath.slice(sepIdx + 1)
   const dotIdx = base.lastIndexOf('.')
-  // Path.stem leaves leading-dot files untouched (".gitignore" → ".gitignore").
-  const stem = dotIdx <= 0 ? base : base.slice(0, dotIdx)
-  return stem.toLowerCase()
+  return dotIdx <= 0 ? base : base.slice(0, dotIdx)
+}
+
+function pathStemLower(filePath: string): string {
+  return pathStemOriginal(filePath).toLowerCase()
 }
 
 function pathParentName(filePath: string): string {
@@ -307,7 +323,8 @@ export function _boostSymbolDefinitions(
 
   const boostUnit = maxScore * DEFINITION_BOOST_MULTIPLIER
 
-  for (const chunk of Array.from(boosted.keys())) {
+  // Iterate keys() directly: we only update existing entries, never add/delete during iteration.
+  for (const chunk of boosted.keys()) {
     const tier = _definitionTier(chunk, names, boostUnit)
     if (tier !== 0.0) {
       boosted.set(chunk, (boosted.get(chunk) ?? 0.0) + tier)
@@ -342,7 +359,8 @@ export function _boostEmbeddedSymbols(
 
   const boostUnit = maxScore * DEFINITION_BOOST_MULTIPLIER * EMBEDDED_SYMBOL_BOOST_SCALE
 
-  for (const chunk of Array.from(boosted.keys())) {
+  // Iterate keys() directly: we only update existing entries, never add/delete during iteration.
+  for (const chunk of boosted.keys()) {
     const tier = _definitionTier(chunk, names, boostUnit)
     if (tier !== 0.0) {
       boosted.set(chunk, (boosted.get(chunk) ?? 0.0) + tier)
@@ -394,7 +412,9 @@ export function _countKeywordMatches(keywords: Set<string>, parts: Set<string>):
     if (exact.has(keyword))
       continue
     for (const part of parts) {
-      const [shorter, longer] = keyword.length <= part.length ? [keyword, part] : [part, keyword]
+      // Avoid array allocation + destructuring on every iteration; pick shorter/longer directly.
+      const shorter = keyword.length <= part.length ? keyword : part
+      const longer = keyword.length <= part.length ? part : keyword
       if (shorter.length >= 3 && longer.startsWith(shorter)) {
         nMatches++
         break
@@ -431,7 +451,8 @@ export function _boostStemMatches(
 
   const boost = maxScore * STEM_BOOST_MULTIPLIER
   const pathCache = new Map<string, Set<string>>()
-  for (const chunk of Array.from(boosted.keys())) {
+  // Iterate keys() directly: we only update existing entries, never add/delete during iteration.
+  for (const chunk of boosted.keys()) {
     let parts = pathCache.get(chunk.filePath)
     if (parts === undefined) {
       // Use original-case stem so splitIdentifier sees camelCase boundaries.
@@ -452,11 +473,4 @@ export function _boostStemMatches(
       }
     }
   }
-}
-
-function pathStemOriginal(filePath: string): string {
-  const sepIdx = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
-  const base = sepIdx === -1 ? filePath : filePath.slice(sepIdx + 1)
-  const dotIdx = base.lastIndexOf('.')
-  return dotIdx <= 0 ? base : base.slice(0, dotIdx)
 }

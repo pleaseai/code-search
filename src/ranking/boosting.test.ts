@@ -184,6 +184,25 @@ describe('boostMultiChunkFiles', () => {
     expect(scores.get(c)).toBe(0)
   })
 
+  test('no NaN/Infinity when fileSums cancel to zero', () => {
+    // Positive and negative scores within each file sum to zero → maxFileSum == 0.
+    // Without the guard, the boost formula would divide by zero and corrupt the scores map.
+    const c1 = mkChunk('x', 'a.ts', 1, 10)
+    const c2 = mkChunk('y', 'a.ts', 11, 20)
+    const scores = new Map<Chunk, number>([
+      [c1, 1.0],
+      [c2, -1.0],
+    ])
+    boostMultiChunkFiles(scores)
+    const v1 = scores.get(c1)
+    const v2 = scores.get(c2)
+    expect(Number.isFinite(v1 ?? Number.NaN)).toBe(true)
+    expect(Number.isFinite(v2 ?? Number.NaN)).toBe(true)
+    // No mutation expected when maxFileSum <= 0.
+    expect(v1).toBe(1.0)
+    expect(v2).toBe(-1.0)
+  })
+
   test('uses FILE_COHERENCE_BOOST_FRAC = 0.2', () => {
     // Single chunk, single file → fileSum == maxFileSum, so boost = boost_unit.
     const c = mkChunk('x', 'a.ts')
@@ -255,10 +274,14 @@ describe('applyQueryBoost', () => {
     expect(boosted.get(c)).toBeGreaterThan(1.0)
   })
 
-  test('empty input is returned as-is', () => {
+  test('empty input returns a fresh map (no aliasing of caller state)', () => {
     const empty = new Map<Chunk, number>()
     const out = applyQueryBoost(empty, 'foo', [])
     expect(out.size).toBe(0)
+    // Result must not alias the caller's map: mutating the result must not affect the input.
+    expect(out).not.toBe(empty)
+    out.set(mkChunk('x', 'a.ts'), 1)
+    expect(empty.size).toBe(0)
   })
 
   test('NL query boosts via stem matches when file path words match', () => {
