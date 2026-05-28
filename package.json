@@ -52,6 +52,14 @@
     "test": "bun test",
     "prepublishOnly": "bun run build"
   },
+  "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
+    "@kreuzberg/tree-sitter-language-pack": "^1.8.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "chokidar": "^5.0.0",
+    "commander": "^14.0.3",
+    "ignore": "^7.0.5"
+  },
   "devDependencies": {
     "@pleaseai/eslint-config": "^0.0.3",
     "@types/bun": "latest",
