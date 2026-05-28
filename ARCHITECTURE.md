@@ -124,7 +124,7 @@ For **understanding ranking decisions** (the heart of why csp beats grep):
 
 **Algorithmic ports must read the original Python source, not memory.** Use `ask src github:MinishLab/semble@main` and read the relevant `src/semble/*.py` before writing TypeScript. When porting a non-trivial function, leave a `// Port of src/semble/<path>::<name>` comment so reviewers can diff against the source of truth.
 
-**No native add-ons.** Tree-sitter must be `web-tree-sitter` (WASM), not `node-tree-sitter`. This keeps installs portable across Linux / macOS / Windows / containers without C toolchains, and works under Bun where many node-gyp packages still misbehave.
+**Native tree-sitter is allowed via `@kreuzberg/tree-sitter-language-pack`.** This NAPI package ships pre-compiled binaries for macOS / Linux / Windows and gives parity with upstream semble's `tree-sitter-language-pack` Python bindings (305 languages out of the box, no WASM loader overhead). The decision is captured in [ADR 0001](.please/docs/decisions/0001-native-tree-sitter.md). Other native add-ons remain discouraged — anything beyond tree-sitter needs its own ADR justifying the loss of portability under Bun and across container images that lack a C toolchain.
 
 **Bilingual README must stay in sync.** Any public-API change (CLI flag, library symbol, MCP tool, config option, stats path) updates **both** `README.md` and `README.ko.md` in the same commit. The CLAUDE.md captures this as load-bearing.
 
