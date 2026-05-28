@@ -1,48 +1,38 @@
-// TODO(unit-1): replace with the real port from `feat/unit-1-types`.
-//
-// This file is a *placeholder stub* so the public barrel (`src/index.ts`)
-// type-checks and `bun test src/index.test.ts` can import the package in
-// isolation. Unit 1 lands the real port of `src/semble/types.py`; when it
-// merges, this file is overwritten wholesale (see PR `feat/unit-1-types`).
-//
-// Keep the exported names and value/type duality of `ContentType` in lockstep
-// with Unit 1 — the barrel re-exports both forms.
+// Port of src/semble/types.py
+// Minimal stub — full implementation lands in Unit 1.
 
-/**
- * Content type for indexing and search pipeline selection.
- *
- * Placeholder mirroring Unit 1's `const`-object enum. Values are the same
- * lowercase strings as the upstream Python `str` enum so CLI flags and
- * persisted indices round-trip.
- */
-export const ContentType = {
-  Code: 'code',
-  Docs: 'docs',
-  Config: 'config',
-} as const
-export type ContentType = (typeof ContentType)[keyof typeof ContentType]
+/** Call type for token-savings tracking. */
+export enum CallType {
+  SEARCH = 'search',
+  FIND_RELATED = 'find_related',
+}
 
-/** Placeholder shape — Unit 1 ships the authoritative definition. */
+/** Content type for indexing and search pipeline selection. */
+export enum ContentType {
+  CODE = 'code',
+  DOCS = 'docs',
+  CONFIG = 'config',
+}
+
+/** A single indexable unit of code. */
 export interface Chunk {
-  readonly content: string
-  readonly filePath: string
-  readonly startLine: number
-  readonly endLine: number
-  readonly language?: string | undefined
+  content: string
+  filePath: string
+  startLine: number
+  endLine: number
+  language?: string | null
 }
 
-/** Placeholder shape — Unit 1 ships the authoritative definition. */
+/** A single search result with score and source. */
 export interface SearchResult {
-  readonly chunk: Chunk
-  readonly score: number
+  chunk: Chunk
+  score: number
+  toDict: () => Record<string, unknown>
 }
 
-/** Placeholder shape — Unit 1 ships the authoritative definition. */
+/** Statistics about the current index state. */
 export interface IndexStats {
-  readonly indexedFiles: number
-  readonly totalChunks: number
-  readonly languages: Readonly<Record<string, number>>
+  indexedFiles: number
+  totalChunks: number
+  languages: Record<string, number>
 }
-
-/** Placeholder alias — Unit 1 ships the authoritative definition. */
-export type EmbeddingMatrix = Float32Array
