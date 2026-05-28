@@ -46,3 +46,6 @@ Thumbs.db
 
 # Bun
 bun.lockb
+
+# please plugin runtime state
+.please/state/

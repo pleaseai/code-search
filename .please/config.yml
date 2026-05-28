@@ -1,0 +1,38 @@
+schema_version: 5          # Config schema version (do not edit manually)
+
+language: en               # Output language (ko | en)
+
+# GitHub integration
+github:
+  project: 2
+  owner: pleaseai
+  issue_required: true
+  project_id: PVT_kwDODf_st84BRosi
+  status_field_id: PVTSSF_lADODf_st84BRosizg_aA44
+  status_options:
+    todo: 7b57aadf
+    in_progress: 538085b7
+    human_review: 3c1bd18c       # mapped to "In Review" in this project
+    done: e190f53f
+    cancelled: 21ef92a0
+  # Note: Work Please #2 uses a 5-state model (Todo/In Progress/In Review/Done/Cancelled).
+  # The "Merging" and "Rework" intermediate states from the default schema are not present;
+  # `human_review` is mapped to "In Review" and merge state is tracked via PR labels.
+
+# Workflow policies
+workflow:
+  stacked_pr:
+    enabled: true
+    tool: graphite          # graphite | git-spice | none
+    split_phases: true      # plan.md ### Phase N: 헤딩 기준 자동 분리
+    branch_prefix: tracks/  # 모든 트랙 branch 접두사
+
+# Document path overrides (defaults shown)
+docs:
+  tracks: .please/docs/tracks
+  product-specs: .please/docs/product-specs
+  decisions: .please/docs/decisions
+  investigations: .please/docs/investigations
+  research: .please/docs/research
+  references: .please/docs/references
+  knowledge: .please/docs/knowledge
