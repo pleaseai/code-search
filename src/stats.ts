@@ -126,11 +126,17 @@ function isStatsRecord(value: unknown): value is StatsRecord {
   if (value === null || typeof value !== 'object')
     return false
   const v = value as Record<string, unknown>
+  // Reject NaN explicitly: `typeof NaN === 'number'` is true, but NaN
+  // values would propagate into date formatting ("NaN-NaN-NaN") and
+  // bucket arithmetic. Treat such lines as malformed.
   return (
     typeof v.ts === 'number'
+    && !Number.isNaN(v.ts)
     && typeof v.call === 'string'
     && typeof v.snippet_chars === 'number'
+    && !Number.isNaN(v.snippet_chars)
     && typeof v.file_chars === 'number'
+    && !Number.isNaN(v.file_chars)
   )
 }
 
@@ -160,7 +166,9 @@ export function buildSavingsSummary(filePath?: string): SavingsSummary {
     'Last 7 days': new BucketStats(),
     'All time': new BucketStats(),
   }
-  const callTypeCounts: Record<string, number> = {}
+  // Use a prototype-less object so JSONL `call` values like "toString" or
+  // "__proto__" can't collide with built-in object properties.
+  const callTypeCounts: Record<string, number> = Object.create(null) as Record<string, number>
 
   if (!existsSync(target))
     return { buckets, callTypeCounts }

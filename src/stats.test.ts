@@ -172,6 +172,41 @@ describe('buildSavingsSummary', () => {
     expect(summary.buckets['All time']!.calls).toBe(0)
     expect(summary.callTypeCounts).toEqual({})
   })
+
+  test('skips records with NaN numeric fields', () => {
+    // `typeof NaN === 'number'` would otherwise let these through and
+    // poison date formatting / bucket math with NaN.
+    const now = Date.now() / 1000
+    const lines = [
+      // NaN serializes as `null` in JSON.stringify, so emit NaN literally.
+      '{"ts": NaN, "call": "search", "results": 1, "snippet_chars": 0, "file_chars": 0}',
+      '{"ts": 0, "call": "search", "results": 1, "snippet_chars": NaN, "file_chars": 0}',
+      '{"ts": 0, "call": "search", "results": 1, "snippet_chars": 0, "file_chars": NaN}',
+      JSON.stringify({ ts: now, call: 'search', results: 1, snippet_chars: 100, file_chars: 400 }),
+    ]
+    writeFileSync(statsFile, `${lines.join('\n')}\n`)
+
+    const summary = buildSavingsSummary()
+    // Only the last valid record is counted.
+    expect(summary.buckets['All time']!.calls).toBe(1)
+    expect(summary.callTypeCounts).toEqual({ search: 1 })
+  })
+
+  test('call types matching built-in object properties do not collide', () => {
+    // Without Object.create(null), `callTypeCounts["toString"]` would
+    // resolve to Function.prototype.toString and arithmetic would coerce
+    // it to a string instead of incrementing.
+    const now = Date.now() / 1000
+    const lines = [
+      JSON.stringify({ ts: now, call: 'toString', results: 1, snippet_chars: 1, file_chars: 1 }),
+      JSON.stringify({ ts: now, call: 'toString', results: 1, snippet_chars: 1, file_chars: 1 }),
+      JSON.stringify({ ts: now, call: 'hasOwnProperty', results: 1, snippet_chars: 1, file_chars: 1 }),
+    ]
+    writeFileSync(statsFile, `${lines.join('\n')}\n`)
+
+    const summary = buildSavingsSummary()
+    expect(summary.callTypeCounts).toEqual({ toString: 2, hasOwnProperty: 1 })
+  })
 })
 
 describe('formatSavingsReport', () => {
