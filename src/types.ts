@@ -173,10 +173,12 @@ export function chunkFromDict(data: ChunkDictInput): Chunk {
   if (typeof d.content !== 'string'
     || typeof d.filePath !== 'string'
     || typeof d.startLine !== 'number'
-    || typeof d.endLine !== 'number') {
+    || typeof d.endLine !== 'number'
+    || !Number.isFinite(d.startLine)
+    || !Number.isFinite(d.endLine)) {
     throw new TypeError(
       'chunkFromDict: missing or invalid required fields '
-      + '(content: string, filePath: string, startLine: number, endLine: number)',
+      + '(content: string, filePath: string, startLine: finite number, endLine: finite number)',
     )
   }
   if (d.language !== undefined && d.language !== null && typeof d.language !== 'string') {

@@ -147,6 +147,33 @@ describe('chunkToDict / chunkFromDict roundtrip', () => {
     ).toThrow(TypeError)
   })
 
+  test('chunkFromDict throws on NaN or non-finite startLine/endLine', () => {
+    expect(() =>
+      chunkFromDict({
+        content: 'x',
+        filePath: 'a.ts',
+        startLine: Number.NaN,
+        endLine: 2,
+      } as unknown as ChunkDictInput),
+    ).toThrow(TypeError)
+    expect(() =>
+      chunkFromDict({
+        content: 'x',
+        filePath: 'a.ts',
+        startLine: 1,
+        endLine: Number.POSITIVE_INFINITY,
+      } as unknown as ChunkDictInput),
+    ).toThrow(TypeError)
+    expect(() =>
+      chunkFromDict({
+        content: 'x',
+        filePath: 'a.ts',
+        startLine: Number.NEGATIVE_INFINITY,
+        endLine: 2,
+      } as unknown as ChunkDictInput),
+    ).toThrow(TypeError)
+  })
+
   test('chunkFromDict throws when language has the wrong type', () => {
     expect(() =>
       chunkFromDict({
