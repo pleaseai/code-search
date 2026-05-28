@@ -1,9 +1,432 @@
 #!/usr/bin/env node
-import { version } from './index'
+// Port of src/semble/cli.py
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
+import process from 'node:process'
+import { fileURLToPath } from 'node:url'
 
-function main(): void {
-  // eslint-disable-next-line no-console
-  console.log(`csp ${version}`)
+// TODO(integration): replace stub when sibling modules land
+import { CspIndex } from './indexing/index.ts'
+import { serve } from './mcp/server.ts'
+import { formatSavingsReport } from './stats.ts'
+import { ContentType } from './types.ts'
+import { formatResults, isGitUrl, resolveChunk } from './utils.ts'
+
+export enum Agent {
+  Claude = 'claude',
+  Copilot = 'copilot',
+  Cursor = 'cursor',
+  Gemini = 'gemini',
+  Kiro = 'kiro',
+  Opencode = 'opencode',
 }
 
-main()
+const DEFAULT_AGENT = Agent.Claude
+const CLI_DISPATCH_ARGS = new Set([
+  'search',
+  'find-related',
+  'init',
+  'savings',
+  'index',
+  'mcp',
+  '-h',
+  '--help',
+])
+
+const CONTENT_CHOICES = ['code', 'docs', 'config', 'all'] as const
+
+export function _agentPath(agent: Agent): string {
+  const baseDir = agent === Agent.Copilot ? '.github' : `.${agent}`
+  return `${baseDir}/agents/csp-search.md`
+}
+
+export interface ParsedArgs {
+  command: string | null
+  positional: string[]
+  flags: Record<string, string | boolean | string[]>
+}
+
+export function parseArgs(argv: string[]): ParsedArgs {
+  const positional: string[] = []
+  const flags: Record<string, string | boolean | string[]> = {}
+  let command: string | null = null
+  let i = 0
+
+  if (argv.length > 0 && !argv[0]!.startsWith('-')) {
+    command = argv[0]!
+    i = 1
+  }
+
+  while (i < argv.length) {
+    const token = argv[i]!
+    if (token === '--') {
+      for (let j = i + 1; j < argv.length; j++) positional.push(argv[j]!)
+      break
+    }
+    if (token.startsWith('--')) {
+      const eqIdx = token.indexOf('=')
+      let name: string
+      let value: string | undefined
+      if (eqIdx !== -1) {
+        name = token.slice(2, eqIdx)
+        value = token.slice(eqIdx + 1)
+      }
+      else {
+        name = token.slice(2)
+      }
+      // collect multi-value flag (e.g. --content code docs)
+      if (name === 'content' && value === undefined) {
+        const values: string[] = []
+        let j = i + 1
+        while (j < argv.length && !argv[j]!.startsWith('-')) {
+          values.push(argv[j]!)
+          j++
+        }
+        if (values.length > 0) {
+          flags[name] = values
+          i = j
+          continue
+        }
+      }
+      if (value === undefined) {
+        // boolean or value-from-next
+        const next = argv[i + 1]
+        if (next !== undefined && !next.startsWith('-')) {
+          flags[name] = next
+          i += 2
+          continue
+        }
+        flags[name] = true
+        i += 1
+        continue
+      }
+      flags[name] = value
+      i += 1
+      continue
+    }
+    if (token.startsWith('-') && token.length > 1) {
+      // short flag
+      const name = token.slice(1)
+      const next = argv[i + 1]
+      if (next !== undefined && !next.startsWith('-')) {
+        flags[name] = next
+        i += 2
+        continue
+      }
+      flags[name] = true
+      i += 1
+      continue
+    }
+    positional.push(token)
+    i += 1
+  }
+
+  return { command, positional, flags }
+}
+
+function _getFlag(flags: Record<string, string | boolean | string[]>, ...names: string[]): string | boolean | string[] | undefined {
+  for (const name of names) {
+    if (name in flags) return flags[name]
+  }
+  return undefined
+}
+
+function _getStringFlag(flags: Record<string, string | boolean | string[]>, ...names: string[]): string | undefined {
+  const v = _getFlag(flags, ...names)
+  if (typeof v === 'string') return v
+  return undefined
+}
+
+function _getNumberFlag(flags: Record<string, string | boolean | string[]>, ...names: string[]): number | undefined {
+  const s = _getStringFlag(flags, ...names)
+  if (s === undefined) return undefined
+  const n = Number(s)
+  if (Number.isNaN(n)) return undefined
+  return n
+}
+
+function _getBoolFlag(flags: Record<string, string | boolean | string[]>, ...names: string[]): boolean {
+  const v = _getFlag(flags, ...names)
+  return v === true
+}
+
+function _getContentFlag(flags: Record<string, string | boolean | string[]>): string[] {
+  const v = flags['content']
+  if (Array.isArray(v)) return v
+  if (typeof v === 'string') return [v]
+  return ['code']
+}
+
+export function _resolveContent(content: string[], includeTextFiles: boolean): ContentType[] {
+  if (includeTextFiles) {
+    process.emitWarning(
+      '--include-text-files is deprecated and will be removed in a future version. Use --content all instead.',
+      'DeprecationWarning',
+    )
+  }
+  if (includeTextFiles || content.includes('all')) {
+    return [ContentType.CODE, ContentType.DOCS, ContentType.CONFIG]
+  }
+  const result: ContentType[] = []
+  for (const c of content) {
+    if (c === 'code') result.push(ContentType.CODE)
+    else if (c === 'docs') result.push(ContentType.DOCS)
+    else if (c === 'config') result.push(ContentType.CONFIG)
+    else throw new Error(`Invalid content type: ${c}. Choices: ${CONTENT_CHOICES.join(', ')}`)
+  }
+  return result
+}
+
+function _printHelp(): void {
+  const help = `csp — Instant local code search for agents.
+
+Usage:
+  csp <command> [options]
+
+Commands:
+  search <query> [path]         Search a codebase.
+  index <path>                  Index and store a codebase.
+  find-related <file> <line> [path]  Find code similar to a specific location.
+  init                          Write a csp sub-agent file for your coding agent.
+  savings                       Show token savings and usage stats.
+  mcp [path]                    Start the MCP server (optionally pre-index path).
+
+Common options:
+  --top-k <n>, -k <n>           Number of results (default: 5).
+  --content <types...>          Content types: code, docs, config, all (default: code).
+  --index <path>                Path to a pre-built index.
+  --agent <name>, -a <name>     One of: claude, copilot, cursor, gemini, kiro, opencode.
+  --force                       Overwrite if file already exists (init).
+  -o, --out <path>              Write the pre-built index to this path (index).
+  --ref <ref>                   Branch or tag for git URLs (mcp).
+  --verbose                     Verbose output (savings).
+  --include-text-files          Deprecated. Use --content all instead.
+
+Examples:
+  csp search "authentication flow" ./my-project
+  csp index ./my-project -o my_index
+  csp find-related src/auth.ts 42 ./my-project
+  csp init --agent claude
+  csp savings --verbose
+  csp mcp ./my-project
+`
+  process.stdout.write(help)
+}
+
+interface RunOptions {
+  readIndex?: (path: string) => Promise<CspIndex>
+  fromPath?: (path: string, opts: { content: ContentType[] }) => Promise<CspIndex>
+  fromGit?: (path: string, opts: { content: ContentType[] }) => Promise<CspIndex>
+  serveMcp?: (path: string | undefined, opts: { ref?: string | undefined, content: ContentType[] }) => Promise<void>
+  writeFileImpl?: (path: string, content: string) => Promise<void>
+  readAgentFile?: (agent: Agent) => Promise<string>
+  formatSavings?: (opts: { verbose: boolean }) => string
+  cwd?: () => string
+}
+
+export async function _readAgentFile(agent: Agent): Promise<string> {
+  const url = new URL(`./agents/${agent}.md`, import.meta.url)
+  return await readFile(fileURLToPath(url), 'utf8')
+}
+
+export async function _runInit(opts: {
+  agent?: Agent
+  force?: boolean
+  cwd?: string
+  readAgentFile?: (agent: Agent) => Promise<string>
+  writeFileImpl?: (path: string, content: string) => Promise<void>
+}): Promise<void> {
+  const agent = opts.agent ?? DEFAULT_AGENT
+  const force = opts.force ?? false
+  const cwd = opts.cwd ?? process.cwd()
+  const relDest = _agentPath(agent)
+  const dest = resolve(cwd, relDest)
+
+  let exists = false
+  try {
+    await stat(dest)
+    exists = true
+  }
+  catch {
+    exists = false
+  }
+  if (exists && !force) {
+    process.stderr.write(`${relDest} already exists. Run with --force to overwrite.\n`)
+    process.exit(1)
+  }
+
+  await mkdir(dirname(dest), { recursive: true })
+  const readAgent = opts.readAgentFile ?? _readAgentFile
+  const content = await readAgent(agent)
+  const write = opts.writeFileImpl ?? ((p: string, c: string) => writeFile(p, c, 'utf8'))
+  await write(dest, content)
+  process.stdout.write(`Created ${relDest}\n`)
+}
+
+async function _runIndex(opts: {
+  path: string
+  out: string
+  includeTextFiles: boolean
+}): Promise<void> {
+  const { path, out, includeTextFiles } = opts
+  const index = isGitUrl(path)
+    ? await CspIndex.fromGit(path, { includeTextFiles })
+    : await CspIndex.fromPath(path, { includeTextFiles })
+  await mkdir(out, { recursive: true })
+  await index.save(out)
+}
+
+export async function runCli(argv: string[], options: RunOptions = {}): Promise<number> {
+  // The first arg determines whether this is the MCP entrypoint or a subcommand.
+  if (argv.length === 0 || (argv[0] !== undefined && !CLI_DISPATCH_ARGS.has(argv[0]) && !argv[0].startsWith('-'))) {
+    // No subcommand recognized — treat as MCP (mirrors semble's default).
+    // But for csp the README requires `csp mcp` — so we still treat bare invocation as help.
+    _printHelp()
+    return 0
+  }
+
+  if (argv[0] === '-h' || argv[0] === '--help') {
+    _printHelp()
+    return 0
+  }
+
+  const { command, positional, flags } = parseArgs(argv)
+
+  if (command === 'init') {
+    const agentRaw = _getStringFlag(flags, 'agent', 'a') ?? DEFAULT_AGENT
+    const agent = _coerceAgent(agentRaw)
+    const force = _getBoolFlag(flags, 'force')
+    await _runInit({
+      agent,
+      force,
+      ...(options.cwd ? { cwd: options.cwd() } : {}),
+      ...(options.readAgentFile ? { readAgentFile: options.readAgentFile } : {}),
+      ...(options.writeFileImpl ? { writeFileImpl: options.writeFileImpl } : {}),
+    })
+    return 0
+  }
+
+  if (command === 'index') {
+    const path = positional[0] ?? '.'
+    const out = _getStringFlag(flags, 'out', 'o')
+    if (out === undefined) {
+      process.stderr.write('--out / -o is required for `index`.\n')
+      return 1
+    }
+    const includeTextFiles = _getBoolFlag(flags, 'include-text-files')
+    await _runIndex({ path, out, includeTextFiles })
+    return 0
+  }
+
+  if (command === 'savings') {
+    const verbose = _getBoolFlag(flags, 'verbose')
+    const fmt = options.formatSavings ?? formatSavingsReport
+    process.stdout.write(fmt({ verbose }))
+    return 0
+  }
+
+  if (command === 'mcp') {
+    const path = positional[0]
+    const ref = _getStringFlag(flags, 'ref')
+    const content = _resolveContent(_getContentFlag(flags), _getBoolFlag(flags, 'include-text-files'))
+    const serveImpl = options.serveMcp ?? ((p, o) => serve(p, o))
+    await serveImpl(path, { ref, content })
+    return 0
+  }
+
+  // search and find-related share index loading
+  if (command === 'search' || command === 'find-related') {
+    const indexPath = _getStringFlag(flags, 'index')
+    let index: CspIndex
+    if (indexPath !== undefined) {
+      const loadImpl = options.readIndex ?? ((p: string) => CspIndex.loadFromDisk(p))
+      index = await loadImpl(indexPath)
+    }
+    else {
+      const pathArg = command === 'search' ? positional[1] ?? '.' : positional[2] ?? '.'
+      const content = _resolveContent(_getContentFlag(flags), _getBoolFlag(flags, 'include-text-files'))
+      const fromPath = options.fromPath ?? ((p: string, o: { content: ContentType[] }) => CspIndex.fromPath(p, o))
+      const fromGit = options.fromGit ?? ((p: string, o: { content: ContentType[] }) => CspIndex.fromGit(p, o))
+      index = isGitUrl(pathArg)
+        ? await fromGit(pathArg, { content })
+        : await fromPath(pathArg, { content })
+    }
+
+    const topK = _getNumberFlag(flags, 'top-k', 'k') ?? 5
+
+    if (command === 'search') {
+      const query = positional[0]
+      if (query === undefined) {
+        process.stderr.write('search requires a <query>.\n')
+        return 1
+      }
+      const results = await index.search(query, { topK })
+      const out = (!results || results.length === 0)
+        ? { error: 'No results found.' }
+        : formatResults(query, results)
+      process.stdout.write(`${JSON.stringify(out)}\n`)
+      return 0
+    }
+
+    // find-related
+    const filePath = positional[0]
+    const lineRaw = positional[1]
+    if (filePath === undefined || lineRaw === undefined) {
+      process.stderr.write('find-related requires <file_path> <line>.\n')
+      return 1
+    }
+    if (!/^-?\d+$/.test(lineRaw)) {
+      process.stderr.write(`line must be an integer, got: ${lineRaw}\n`)
+      return 1
+    }
+    const line = Number.parseInt(lineRaw, 10)
+    const chunk = resolveChunk(index.chunks, filePath, line)
+    if (chunk === undefined || chunk === null) {
+      process.stderr.write(`No chunk found at ${filePath}:${line}.\n`)
+      return 1
+    }
+    const related = await index.findRelated(chunk, { topK })
+    const out = (!related || related.length === 0)
+      ? { error: `No related chunks found for ${filePath}:${line}.` }
+      : formatResults(`Chunks related to ${filePath}:${line}`, related)
+    process.stdout.write(`${JSON.stringify(out)}\n`)
+    return 0
+  }
+
+  process.stderr.write(`Unknown command: ${command ?? '<none>'}\n`)
+  _printHelp()
+  return 1
+}
+
+function _coerceAgent(raw: string): Agent {
+  const candidates: Agent[] = [Agent.Claude, Agent.Copilot, Agent.Cursor, Agent.Gemini, Agent.Kiro, Agent.Opencode]
+  for (const a of candidates) {
+    if (a === raw) return a
+  }
+  throw new Error(`Invalid agent: ${raw}. Choices: ${candidates.join(', ')}`)
+}
+
+async function main(): Promise<void> {
+  const argv = process.argv.slice(2)
+  const code = await runCli(argv)
+  if (code !== 0) process.exit(code)
+}
+
+// Run main only when invoked directly (not when imported as a module / under bun:test)
+const invokedDirectly = (() => {
+  if (typeof process === 'undefined') return false
+  // process.argv[1] points at the entrypoint script — match against this module's URL
+  const entry = process.argv[1]
+  if (entry === undefined) return false
+  try {
+    const here = fileURLToPath(import.meta.url)
+    return entry === here || entry.endsWith('/cli.ts') || entry.endsWith('/cli.mjs') || entry.endsWith('/cli.js')
+  }
+  catch {
+    return false
+  }
+})()
+
+if (invokedDirectly) {
+  void main()
+}
