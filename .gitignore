@@ -49,3 +49,6 @@ bun.lockb
 
 # please plugin runtime state
 .please/state/
+
+# Orca agent worktrees (local only)
+.claude/worktrees/
