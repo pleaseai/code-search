@@ -1,0 +1,31 @@
+plugins/csp/.mcp.codex.json
+  s_25d619856c6d86::t_8ece9132318733 1-8
+README.ko.md
+  s_25d619856c6d86::t_7ab67a85e30232 49,51-53,60-67
+README.md
+  s_25d619856c6d86::t_6da34fa3dd5fc6 49,51-53,60-67
+plugins/csp/.codex-plugin/plugin.json
+  s_25d619856c6d86::t_15fec9e41fc85a 1-29
+plugins/csp/skills/csp-search/SKILL.md
+  s_25d619856c6d86::t_1575aaf62dd237 1-57
+.agents/plugins/marketplace.json
+  s_25d619856c6d86::t_6eefe38a0a045b 1-16
+plugins/csp/README.md
+  s_25d619856c6d86::t_4603cf517995e9 1,3,8,12-13,21-27,30,34-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "6e5ca8208a20b2cc709bbe7eecf4f536ca6266db",
+  "prompts": {},
+  "sessions": {
+    "s_25d619856c6d86": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f29bc4ed-2ef7-40f0-8eda-65fe6b792a41",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
