@@ -1,68 +1,54 @@
-import { beforeEach, describe, expect, it, mock } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, it } from 'bun:test'
+import { _internal, createServer, IndexCache } from './server.ts'
+import { ContentType } from '../types.ts'
+import * as indexing from '../indexing/index.ts'
+import { CspIndex } from '../indexing/index.ts'
+import { makeStubModel, SelectableBasicBackend } from '../indexing/dense.ts'
+import { Bm25Index } from '../indexing/sparse.ts'
 
-// Mock the indexing module so we can control CspIndex.fromPath/fromGit and
-// loadModel without spinning up real embeddings.
+// We intercept CspIndex.fromPath/fromGit by reassigning the static methods on
+// the *real* class object (the same reference server.ts imports) rather than
+// `mock.module`. Bun's `mock.module` mutates the process-wide module registry
+// irreversibly — it would leak the stub into sibling test files (notably
+// ../indexing/index.test.ts) that exercise the genuine CspIndex. Static-method
+// reassignment is plain property mutation, so `afterAll` can restore it.
 let fromPathCalls = 0
 let fromGitCalls = 0
-let fromPathImpl: () => Promise<unknown> = async () => makeIndex()
-let fromGitImpl: () => Promise<unknown> = async () => makeIndex()
+let fromPathImpl: () => Promise<CspIndex> = async () => makeIndex()
+let fromGitImpl: () => Promise<CspIndex> = async () => makeIndex()
 
-let makeIndex: () => FakeIndex = () => new FakeIndex([])
-
-class FakeIndex {
-  readonly chunks: Array<{
-    content: string
-    filePath: string
-    startLine: number
-    endLine: number
-  }>
-
-  constructor(chunks: FakeIndex['chunks'] = []) {
-    this.chunks = chunks
-  }
-
-  search(_q: string, _opts?: { topK?: number }): Array<{
-    chunk: FakeIndex['chunks'][number]
-    score: number
-    toDict: () => Record<string, unknown>
-  }> {
-    return []
-  }
-
-  findRelated(_c: FakeIndex['chunks'][number], _opts?: { topK?: number }): Array<{
-    chunk: FakeIndex['chunks'][number]
-    score: number
-    toDict: () => Record<string, unknown>
-  }> {
-    return []
-  }
+// A real, empty CspIndex instance: `instanceof CspIndex` holds and `search`
+// returns [] for an empty index, matching what these tests assert.
+function makeIndex(chunks: CspIndex['chunks'] = []): CspIndex {
+  const vectors = chunks.map(() => new Float32Array(4))
+  return new CspIndex({
+    model: makeStubModel(4),
+    bm25Index: Bm25Index.build(chunks.map(() => ['x'])),
+    semanticIndex: new SelectableBasicBackend(vectors),
+    chunks,
+    modelPath: '/tmp/fake-model',
+    root: null,
+    content: [ContentType.CODE],
+  })
 }
 
-class MockedCspIndex extends FakeIndex {
-  static async fromPath(..._args: unknown[]): Promise<FakeIndex> {
-    fromPathCalls++
-    return fromPathImpl() as Promise<FakeIndex>
-  }
+const realFromPath = CspIndex.fromPath
+const realFromGit = CspIndex.fromGit
 
-  static async fromGit(..._args: unknown[]): Promise<FakeIndex> {
-    fromGitCalls++
-    return fromGitImpl() as Promise<FakeIndex>
-  }
+CspIndex.fromPath = async (..._args: Parameters<typeof realFromPath>): Promise<CspIndex> => {
+  fromPathCalls++
+  return fromPathImpl()
+}
+CspIndex.fromGit = async (..._args: Parameters<typeof realFromGit>): Promise<CspIndex> => {
+  fromGitCalls++
+  return fromGitImpl()
 }
 
-// Wire makeIndex to return instances of the mocked class so instanceof checks
-// in the tests pass.
-makeIndex = () => new MockedCspIndex([])
-
-await mock.module('../indexing/index.ts', () => ({
-  CspIndex: MockedCspIndex,
-  loadModel: async (): Promise<[unknown, string]> => [null, '/tmp/fake-model'],
-}))
-
-// Import AFTER mocking so server.ts picks up the mocked module.
-const { _internal, createServer, IndexCache } = await import('./server.ts')
-const { ContentType } = await import('../types.ts')
-const indexing = await import('../indexing/index.ts')
+afterAll(() => {
+  // Restore the genuine static methods so later test files see real behavior.
+  CspIndex.fromPath = realFromPath
+  CspIndex.fromGit = realFromGit
+})
 
 beforeEach(() => {
   fromPathCalls = 0
