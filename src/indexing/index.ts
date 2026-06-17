@@ -368,12 +368,16 @@ export class CspIndex {
         throw new Error(`Missing: ${join(dir, name)}`)
     }
 
-    const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as IndexManifest
-    if (manifest.schemaVersion !== INDEX_SCHEMA_VERSION) {
+    const rawManifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as unknown
+    // Version check first so a stale index gets the precise mismatch error even
+    // if its (older) shape would fail full validation below.
+    const rawVersion = (rawManifest as { schemaVersion?: unknown } | null)?.schemaVersion
+    if (rawVersion !== INDEX_SCHEMA_VERSION) {
       throw new Error(
-        `Index schema version mismatch: expected ${INDEX_SCHEMA_VERSION}, got ${manifest.schemaVersion}`,
+        `Index schema version mismatch: expected ${INDEX_SCHEMA_VERSION}, got ${String(rawVersion)}`,
       )
     }
+    const manifest = parseManifest(rawManifest)
 
     const serializedChunks = JSON.parse(readFileSync(join(dir, 'chunks.json'), 'utf8')) as unknown[]
     const chunks = serializedChunks.map(c => chunkFromDict(c as Parameters<typeof chunkFromDict>[0]))
@@ -422,6 +426,13 @@ export async function loadModel(modelPath?: string): Promise<[Model, string]> {
  * hanging. Throws a clear error (including git's stderr) when the clone fails.
  */
 function cloneShallow(url: string, dir: string, ref?: string): void {
+  // A ref beginning with `-` would be parsed by git as a flag (e.g.
+  // `--upload-pack=…`, `--config=…`) rather than a branch name — the `--`
+  // separator below only shields the trailing url/dir, not `--branch <ref>`.
+  // Reject it so a hostile ref can't inject git options (CWE-88).
+  if (ref !== undefined && ref.startsWith('-'))
+    throw new Error(`Invalid git ref (must not start with '-'): ${ref}`)
+
   const args = ['clone', '--depth', '1']
   if (ref !== undefined)
     args.push('--branch', ref)
@@ -448,6 +459,41 @@ function cloneShallow(url: string, dir: string, ref?: string): void {
  */
 function hashChunks(serializedChunks: unknown[]): string {
   return createHash('sha256').update(JSON.stringify(serializedChunks)).digest('hex')
+}
+
+function isContentType(value: unknown): value is ContentType {
+  return typeof value === 'string'
+    && (Object.values(ContentTypeEnum) as string[]).includes(value)
+}
+
+/**
+ * Parse and validate a persisted `manifest.json`. The manifest is an on-disk
+ * trust boundary, so every field is checked at runtime (mirroring
+ * {@link chunkFromDict}) — a corrupt or hand-edited manifest fails loudly here
+ * instead of producing a `CspIndex` whose typed fields (`content`, `sourceId`,
+ * `modelId`) silently lie about the persisted data.
+ */
+export function parseManifest(raw: unknown): IndexManifest {
+  if (raw === null || typeof raw !== 'object')
+    throw new Error('Invalid manifest: not an object')
+  const m = raw as Record<string, unknown>
+  if (typeof m.schemaVersion !== 'number')
+    throw new Error('Invalid manifest: schemaVersion must be a number')
+  if (typeof m.contentHash !== 'string')
+    throw new Error('Invalid manifest: contentHash must be a string')
+  if (!(m.sourceId === null || typeof m.sourceId === 'string'))
+    throw new Error('Invalid manifest: sourceId must be a string or null')
+  if (typeof m.modelId !== 'string')
+    throw new Error('Invalid manifest: modelId must be a string')
+  if (!Array.isArray(m.content) || !m.content.every(isContentType))
+    throw new Error('Invalid manifest: content must be an array of ContentType')
+  return {
+    schemaVersion: m.schemaVersion,
+    contentHash: m.contentHash,
+    sourceId: m.sourceId,
+    content: m.content,
+    modelId: m.modelId,
+  }
 }
 
 function normalizeContent(

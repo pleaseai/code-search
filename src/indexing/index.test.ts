@@ -176,6 +176,17 @@ describe('CspIndex save → loadFromDisk roundtrip', () => {
     await expect(CspIndex.loadFromDisk(dir)).rejects.toThrow(/schema version/i)
   })
 
+  it('loadFromDisk rejects a manifest with an invalid content field', async () => {
+    const idx = buildIndex([makeChunk('a.ts', 1, 10, 'typescript', 'A')])
+    await idx.save(dir)
+    // Schema version stays valid; `content` is corrupted to a non-ContentType.
+    const manifestPath = join(dir, 'manifest.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>
+    manifest.content = ['not-a-content-type']
+    writeFileSync(manifestPath, JSON.stringify(manifest))
+    await expect(CspIndex.loadFromDisk(dir)).rejects.toThrow(/Invalid manifest/)
+  })
+
   it('round-trips chunk content losslessly and yields stable search results', async () => {
     const chunks: Chunk[] = [
       makeChunk('a.ts', 1, 10, 'typescript', 'alpha beta'),
@@ -382,6 +393,19 @@ describe('CspIndex.fromGit', () => {
       CspIndex.fromGit(`file://${bogus}`, { content: ContentType.CODE }),
     ).rejects.toThrow(/clone/i)
     // Failure path must not leak the temp checkout directory either.
+    expect(cloneTempDirCount()).toBe(before)
+  })
+
+  it('rejects a ref that would inject a git flag (leading dash)', async () => {
+    const before = cloneTempDirCount()
+    await expect(
+      CspIndex.fromGit(`file://${repoDir}`, {
+        content: ContentType.CODE,
+        ref: '--upload-pack=touch /tmp/pwned',
+      }),
+    ).rejects.toThrow(/Invalid git ref/)
+    // The guard throws inside the clone step; fromGit's `finally` still cleans
+    // up the temp checkout, so no dir leaks.
     expect(cloneTempDirCount()).toBe(before)
   })
 })

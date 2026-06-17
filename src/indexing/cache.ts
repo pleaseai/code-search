@@ -14,12 +14,12 @@
 // composes these primitives.
 
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join, normalize, relative } from 'node:path'
 import { ContentType } from '../types.ts'
 import { isGitUrl } from '../utils.ts'
-import { CspIndex, DEFAULT_CONTENT } from './index.ts'
+import { CspIndex, DEFAULT_CONTENT, parseManifest } from './index.ts'
 import type { CspIndexFromGitOptions } from './index.ts'
 import { MAX_FILE_BYTES } from './create.ts'
 import { walkFiles } from './file-walker.ts'
@@ -152,23 +152,30 @@ export function clearIndexCache(options: CacheLocationOptions = {}): ClearIndexR
   const home = cacheHome(options)
   const indexRoot = resolveIndexRoot(options)
 
-  // Guard: the deletion target must be the `index` child of the home, never the
-  // home itself. If either invariant fails we refuse to delete anything.
-  if (basename(indexRoot) !== 'index' || normalize(indexRoot) === normalize(home))
-    throw new Error(`Refusing to clear unsafe index path: ${indexRoot}`)
-
   if (!existsSync(indexRoot))
     return { path: indexRoot, cleared: false, entries: 0 }
 
+  // Resolve symlinks before the guard so a symlinked `index` (or home) cannot
+  // redirect the delete outside the cache tree: rmSync follows the link and
+  // would otherwise wipe the target's contents. realpath needs the path to
+  // exist, which the existsSync above guarantees for indexRoot.
+  const realIndexRoot = realpathSync(indexRoot)
+  const realHome = existsSync(home) ? realpathSync(home) : normalize(home)
+
+  // Guard: the (resolved) deletion target must be the `index` child of the
+  // home, never the home itself. If either invariant fails we delete nothing.
+  if (basename(realIndexRoot) !== 'index' || normalize(realIndexRoot) === normalize(realHome))
+    throw new Error(`Refusing to clear unsafe index path: ${realIndexRoot}`)
+
   let entries = 0
   try {
-    entries = readdirSync(indexRoot).length
+    entries = readdirSync(realIndexRoot).length
   }
   catch {
     entries = 0
   }
 
-  rmSync(indexRoot, { recursive: true, force: true })
+  rmSync(realIndexRoot, { recursive: true, force: true })
   return { path: indexRoot, cleared: true, entries }
 }
 
@@ -315,23 +322,34 @@ async function tryReuse(
   isGit: boolean,
   sourceHash: string | null,
 ): Promise<CspIndex | null> {
-  if (!existsSync(join(cacheDir, 'manifest.json')))
+  const manifestPath = join(cacheDir, 'manifest.json')
+  if (!existsSync(manifestPath))
     return null
 
-  let cached: CspIndex
+  // For local sources, compare the content hash *before* the expensive full
+  // load (chunks + bm25 + dense vectors + model). On a cache miss this skips
+  // loading an index we are about to discard. Git sources are URL+ref keyed,
+  // so a present manifest is sufficient.
+  if (!isGit) {
+    let manifest
+    try {
+      manifest = parseManifest(JSON.parse(readFileSync(manifestPath, 'utf8')))
+    }
+    catch {
+      // Corrupt/partial manifest — treat as a miss and rebuild.
+      return null
+    }
+    if (manifest.contentHash !== sourceHash)
+      return null
+  }
+
   try {
-    cached = await CspIndex.loadFromDisk(cacheDir)
+    return await CspIndex.loadFromDisk(cacheDir)
   }
   catch {
     // Corrupt/partial cache entry — treat as a miss and rebuild.
     return null
   }
-
-  if (isGit)
-    return cached
-
-  const manifest = JSON.parse(readFileSync(join(cacheDir, 'manifest.json'), 'utf8')) as { contentHash?: string }
-  return manifest.contentHash === sourceHash ? cached : null
 }
 
 /** Build a fresh index from a local path or git URL. */

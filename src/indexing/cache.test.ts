@@ -294,4 +294,20 @@ describe('clearIndexCache', () => {
     expect(indexRoot.endsWith(`${sep}index`)).toBe(true)
     expect(indexRoot).not.toBe(base)
   })
+
+  it('refuses to follow a symlinked index root to an outside target', () => {
+    const { mkdirSync, writeFileSync: write, symlinkSync } = require('node:fs') as typeof import('node:fs')
+    // A victim directory outside the cache tree whose content must survive.
+    const victim = join(tmpHome, 'victim')
+    mkdirSync(victim, { recursive: true })
+    write(join(victim, 'precious.txt'), 'do not delete')
+    // Make `~/.csp/index` a symlink pointing at the victim.
+    mkdirSync(base, { recursive: true })
+    symlinkSync(victim, resolveIndexRoot({ baseDir: base }))
+
+    // The guard resolves the symlink: realpath's basename is `victim`, not
+    // `index`, so it refuses — rmSync never follows the link.
+    expect(() => clearIndexCache({ baseDir: base })).toThrow(/Refusing to clear unsafe/)
+    expect(existsSync(join(victim, 'precious.txt'))).toBe(true)
+  })
 })
