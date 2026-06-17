@@ -22,8 +22,23 @@ Concrete example (`src/indexing/create.test.ts`, observed 2026-06-18, baseline 3
   (AsyncIterable), `await chunkSource(...)` (Promise), `language ?? null`, and unifying
   `dense.ts`/`sparse.ts` local `Chunk` into `../types.ts` (with `export type { Chunk }`
   re-export so `dense.test.ts`/`sparse.test.ts` keep importing `Chunk` from those modules).
-  Do NOT redo the Chunk unification — it is done. The `makeStubModel`/`documents`/
-  `ContentType.Docs` test blockers above are still open and belong to T003.
+  Do NOT redo the Chunk unification — it is done.
+
+T003 (2026-06-18, commit 7aa721a) wired `src/indexing/index.ts` (fromPath + ctor options
+object + stats + DEFAULT_CONTENT export + save/loadFromDisk throwing stubs + loadModel tuple).
+That fixed the `DEFAULT_CONTENT` import blocker in `index.test.ts`, but the test file STILL
+won't load — the blockers that remain are ALL outside `src/indexing/index.ts` (T003's only
+Files-scope), so they were NOT fixed and must be handled by whoever owns dense.ts/sparse.ts:
+- `makeStubModel` not exported from `dense.ts`; test calls `makeStubModel('name', dim)` but
+  real sig is private `makeStubModel(dim: number)` → needs dense.ts export + 2-arg signature.
+- test uses `new SelectableBasicBackend(vectors, dim)` but current ctor is `(vectors, BasicArgs)`
+  → needs dense.ts ctor change.
+- test uses `new Bm25Index([['x']])` (public ctor) but ctor is private (`static build` only)
+  → needs sparse.ts change.
+- test line 197 uses `ContentType.Code` (should be `CODE`) → needs the test file itself fixed.
+The `findRelated`/`search` filter-behavior asserts in `index.test.ts` are T004 (behavioral),
+not T003. So `index.test.ts` goes green only after dense.ts + sparse.ts + the test file are
+fixed AND T004 ranking is wired — not within any single one of those scopes.
 
 **Why:** the plan front-loaded test files for the eventual API; impl lands incrementally
 across tasks/phases, so a test can be red at baseline through no fault of the current task.
