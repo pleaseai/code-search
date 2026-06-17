@@ -17,9 +17,13 @@ Concrete example (`src/indexing/create.test.ts`, observed 2026-06-18, baseline 3
 - accesses `bm25Index.documents` but `Bm25Index` exposes no `documents` property
   (state is a private `#state` field; only `static build`/`getScores`/`save`/`load`).
 - uses `ContentType.Docs` but the enum is `CODE | DOCS | CONFIG` (uppercase).
-- `create.ts` also has 4 pre-existing async/Chunk-type errors (lines 49/67/74)
-  belonging to the T003 orchestration wiring (`walkFiles` is AsyncIterable,
-  `chunkSource` returns a Promise).
+- `create.ts` previously had 4 async/Chunk-type errors (lines 49/67/74) — these were
+  RESOLVED in T002 round 2 (2026-06-18, commit a328727): `for await` over `walkFiles`
+  (AsyncIterable), `await chunkSource(...)` (Promise), `language ?? null`, and unifying
+  `dense.ts`/`sparse.ts` local `Chunk` into `../types.ts` (with `export type { Chunk }`
+  re-export so `dense.test.ts`/`sparse.test.ts` keep importing `Chunk` from those modules).
+  Do NOT redo the Chunk unification — it is done. The `makeStubModel`/`documents`/
+  `ContentType.Docs` test blockers above are still open and belong to T003.
 
 **Why:** the plan front-loaded test files for the eventual API; impl lands incrementally
 across tasks/phases, so a test can be red at baseline through no fault of the current task.
