@@ -4,3 +4,4 @@
 - [csp test files are ahead of impl](csp-test-files-ahead-of-impl.md) — some indexing *.test.ts depend on not-yet-existing APIs; a scoped source fix won't make them green
 - [csp worktree test env gotchas](csp-worktree-test-env-gotchas.md) — full `bun test` is flooded by tmpfs ENOSPC and ESLint can't run (no jiti); trust isolated runs
 - [csp bun mock.module is irreversible](csp-bun-mock-module-irreversible.md) — top-level mock.module leaks process-wide across files; use DI/static reassignment instead
+- [csp dense roundtrip has no float drift](csp-dense-roundtrip-no-drift.md) — SelectableBasicBackend save→load is bit-stable; re-normalizing unit vectors is idempotent; NFR-002 safe, T007 can reuse .load
