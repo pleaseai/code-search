@@ -1,0 +1,60 @@
+src/cli.ts
+  s_63dbce13b2b053::t_b51fa8354ae0b2 11
+  s_63dbce13b2b053::t_33a0b2e5ebb339 206
+  s_63dbce13b2b053::t_73071e6f054a7f 291-293,300-311,314-328
+  s_63dbce13b2b053::t_a128e935373bbf 232
+  s_63dbce13b2b053::t_42c6e9e118f025 34,41
+  s_63dbce13b2b053::t_efa0eea922d13e 390-400
+  s_63dbce13b2b053::t_2934f858f72b36 294-299,312-313
+  s_63dbce13b2b053::t_75b0f64a81b6c5 199
+  s_63dbce13b2b053::t_9da2a509819e5c 482-493
+  s_63dbce13b2b053::t_18daf5b03c7975 16,18,24-25
+src/agents/antigravity.md
+  s_63dbce13b2b053::t_87ecbbb0ad68fb 1-58
+src/cli.test.ts
+  s_63dbce13b2b053::t_e1f53467f716c0 41-46
+  s_63dbce13b2b053::t_14525d6f6d2161 346,360
+  s_63dbce13b2b053::t_591b91c8cfec5c 294-345,347-359,361-378
+  s_63dbce13b2b053::t_77218b03a07dba 15,17,23-24
+  s_63dbce13b2b053::t_40d7d1341cf71d 432-438
+README.md
+  s_63dbce13b2b053::t_8161b612a5c0d7 315,324-327
+  s_63dbce13b2b053::t_947e0ca9b7131c 401-402,405
+  s_63dbce13b2b053::t_deaaefe9b5a629 370-383,388-389,394-400,403-404
+src/stats.ts
+  s_63dbce13b2b053::t_33e407316f8020 5
+  s_63dbce13b2b053::t_ef663703ee25fd 232-258
+  s_63dbce13b2b053::t_024c2535244899 279-284,294-308,312,314-321,326-327,329-330,334-335,338-339,341-344,349-369,371
+  s_63dbce13b2b053::t_c686acc44f492d 118-130
+  s_63dbce13b2b053::t_714da04463fb1c 2
+src/agents/reasonix.md
+  s_63dbce13b2b053::t_87ecbbb0ad68fb 1-57
+src/agents/pi.md
+  s_63dbce13b2b053::t_87ecbbb0ad68fb 1-55
+README.ko.md
+  s_63dbce13b2b053::t_9ed2b7ecf2e9d8 370-383,388-389,394-400,403-404
+  s_63dbce13b2b053::t_8ef61679cdc611 401-402,405
+  s_63dbce13b2b053::t_e6f677ceddd5cc 315,324-327
+src/agents/commandcode.md
+  s_63dbce13b2b053::t_87ecbbb0ad68fb 1-56
+src/stats.test.ts
+  s_63dbce13b2b053::t_195de09656fa28 9
+  s_63dbce13b2b053::t_ba03bd882f92c8 213-227
+  s_63dbce13b2b053::t_6e61926c261d7d 261,263-267,278,282-294,297,299,305-306
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "bb085b589cb1cbd5ac6aa9a6755f8e795294b4f6",
+  "prompts": {},
+  "sessions": {
+    "s_63dbce13b2b053": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "142356d9-ead3-4669-b7d1-6236e74a6698",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
