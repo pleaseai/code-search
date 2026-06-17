@@ -1,7 +1,7 @@
 // Tests for src/indexing/index.ts (CspIndex)
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
@@ -163,6 +163,93 @@ describe('CspIndex save → loadFromDisk roundtrip', () => {
   it('loadFromDisk throws when a persisted artifact is missing', async () => {
     // Dir exists but is empty.
     await expect(CspIndex.loadFromDisk(dir)).rejects.toThrow(/Missing:/)
+  })
+})
+
+describe('CspIndex.save', () => {
+  let dir: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'csp-save-'))
+  })
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  function readJson(name: string): unknown {
+    return JSON.parse(readFileSync(join(dir, name), 'utf8'))
+  }
+
+  it('writes all index artifacts to the target directory', async () => {
+    const chunks: Chunk[] = [
+      makeChunk('a.ts', 1, 10, 'typescript', 'A'),
+      makeChunk('b.ts', 1, 5, 'python', 'B'),
+    ]
+    const idx = buildIndex(chunks)
+    await idx.save(dir)
+
+    for (const name of ['manifest.json', 'chunks.json', 'bm25.json', 'vectors.bin', 'args.json'])
+      expect(existsSync(join(dir, name))).toBe(true)
+  })
+
+  it('creates the target directory if it does not exist', async () => {
+    const nested = join(dir, 'a', 'b', 'idx')
+    const idx = buildIndex([makeChunk('a.ts', 1, 10)])
+    await idx.save(nested)
+    expect(existsSync(join(nested, 'manifest.json'))).toBe(true)
+  })
+
+  it('writes a manifest with schema version, content, source id, and model id', async () => {
+    const chunks: Chunk[] = [makeChunk('a.ts', 1, 10, 'typescript', 'A')]
+    const idx = buildIndex(chunks)
+    await idx.save(dir)
+
+    const manifest = readJson('manifest.json') as Record<string, unknown>
+    expect(manifest.schemaVersion).toBe(1)
+    expect(manifest.content).toEqual([...DEFAULT_CONTENT])
+    // buildIndex sets root: null → sourceId is null.
+    expect(manifest.sourceId).toBeNull()
+    expect(manifest.modelId).toBe('test-model')
+    // contentHash is deterministic and non-empty.
+    expect(typeof manifest.contentHash).toBe('string')
+    expect((manifest.contentHash as string).length).toBeGreaterThan(0)
+  })
+
+  it('serializes chunks in camelCase (chunkToDict) form, preserving order', async () => {
+    const chunks: Chunk[] = [
+      makeChunk('a.ts', 1, 10, 'typescript', 'A'),
+      makeChunk('b.ts', 1, 5, 'python', 'B'),
+    ]
+    const idx = buildIndex(chunks)
+    await idx.save(dir)
+
+    const serialized = readJson('chunks.json') as Array<Record<string, unknown>>
+    expect(serialized.length).toBe(2)
+    expect(serialized.map(c => c.filePath)).toEqual(['a.ts', 'b.ts'])
+    const first = serialized[0]!
+    expect(first.content).toBe('A')
+    expect(first.startLine).toBe(1)
+    expect(first.endLine).toBe(10)
+    expect(first.language).toBe('typescript')
+    expect(first.location).toBe('a.ts:1-10')
+    // snake_case wire keys must NOT leak into the round-trip format.
+    expect(first.file_path).toBeUndefined()
+  })
+
+  it('produces a deterministic contentHash for identical chunks', async () => {
+    const make = (): CspIndex =>
+      buildIndex([makeChunk('a.ts', 1, 10, 'typescript', 'A')])
+
+    const dir2 = mkdtempSync(join(tmpdir(), 'csp-save-2-'))
+    try {
+      await make().save(dir)
+      await make().save(dir2)
+      const h1 = (JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as Record<string, unknown>).contentHash
+      const h2 = (JSON.parse(readFileSync(join(dir2, 'manifest.json'), 'utf8')) as Record<string, unknown>).contentHash
+      expect(h1).toBe(h2)
+    } finally {
+      rmSync(dir2, { recursive: true, force: true })
+    }
   })
 })
 

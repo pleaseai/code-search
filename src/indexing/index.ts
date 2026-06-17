@@ -7,22 +7,46 @@
 // Wiring status:
 //   - fromPath: implemented (this task, T003).
 //   - fromGit:  stub (T005).
-//   - search / findRelated: sync stubs returning [] (real ranking wired in T004).
-//   - save / loadFromDisk: throwing stubs (real persistence in T006 / T007);
-//     declared here so the Phase A branch type-checks (cli.ts references
-//     CspIndex.loadFromDisk and index.save).
+//   - search / findRelated: sync delegation to search.ts (T004).
+//   - save: implemented (this task, T006) — writes manifest + chunks + bm25 + dense.
+//   - loadFromDisk: throwing stub (real persistence in T007); declared here so
+//     the Phase A/B branch type-checks (cli.ts references CspIndex.loadFromDisk).
 
 import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdtempSync, rmSync, statSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Chunk, ContentType, IndexStats, SearchResult } from '../types.ts'
-import { ContentType as ContentTypeEnum } from '../types.ts'
+import { chunkToDict, ContentType as ContentTypeEnum } from '../types.ts'
 import { search as runSearch } from '../search.ts'
 import { createIndexFromPath } from './create.ts'
 import { loadModel as loadDenseModel } from './dense.ts'
 import type { Model, SelectableBasicBackend } from './dense.ts'
 import type { Bm25Index } from './sparse.ts'
+
+/**
+ * On-disk index schema version. Bumped when the persisted artifact layout or
+ * format changes; {@link CspIndex.loadFromDisk} (T007) rejects mismatches.
+ */
+export const INDEX_SCHEMA_VERSION = 1
+
+/**
+ * Persisted index manifest — the top-level metadata that ties the on-disk
+ * artifacts (chunks.json / bm25.json / vectors.bin / args.json) together and
+ * guards against loading an incompatible index.
+ */
+export interface IndexManifest {
+  schemaVersion: number
+  /** Hash of the chunk contents — deterministic identity of the indexed corpus. */
+  contentHash: string
+  /** Source root the index was built from (absolute path / git URL), or null. */
+  sourceId: string | null
+  /** Content types this index covers. */
+  content: ContentType[]
+  /** Embedding model identifier, so a load can reject a model mismatch. */
+  modelId: string
+}
 
 /** Default content selection when the caller does not specify one (code-only). */
 export const DEFAULT_CONTENT: readonly ContentType[] = [ContentTypeEnum.CODE]
@@ -274,11 +298,34 @@ export class CspIndex {
   }
 
   /**
-   * Persist the index to `dir`. Real implementation lands in T006.
-   * Declared as a throwing stub so cli.ts (`index.save(out)`) type-checks.
+   * Persist the index to `dir`, writing five artifacts:
+   *   - `chunks.json`   — chunks in camelCase round-trip form ({@link chunkToDict}).
+   *   - `bm25.json`     — sparse index ({@link Bm25Index.save}).
+   *   - `vectors.bin` + `args.json` — dense index ({@link SelectableBasicBackend.save}).
+   *   - `manifest.json` — schema version, content hash, source id, content, model id.
+   *
+   * The directory is created if absent. The five file names are mutually
+   * distinct, so the backends do not clobber one another. The dense backend
+   * writes already-normalized vectors and re-normalizes on load idempotently,
+   * so the round-trip is bit-stable (verified — no float drift, NFR-002).
    */
-  async save(_dir: string): Promise<void> {
-    throw new Error('CspIndex.save: not yet implemented (T006)')
+  async save(dir: string): Promise<void> {
+    mkdirSync(dir, { recursive: true })
+
+    const serializedChunks = this.chunks.map(chunkToDict)
+    writeFileSync(join(dir, 'chunks.json'), JSON.stringify(serializedChunks))
+
+    await this.bm25Index.save(dir)
+    await this.semanticIndex.save(dir)
+
+    const manifest: IndexManifest = {
+      schemaVersion: INDEX_SCHEMA_VERSION,
+      contentHash: hashChunks(serializedChunks),
+      sourceId: this.root,
+      content: [...this.content],
+      modelId: this.modelPath,
+    }
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest))
   }
 
   /**
@@ -328,6 +375,16 @@ function cloneShallow(url: string, dir: string, ref?: string): void {
     const detail = (result.stderr ?? '').trim() || `exit code ${result.status}`
     throw new Error(`git clone failed for ${url}: ${detail}`)
   }
+}
+
+/**
+ * Deterministic content hash of the serialized chunks. T006 only needs a stable
+ * identity for the indexed corpus; the precise repo-content hash used for cache
+ * invalidation lands in T009 (cache.ts). Uses sha256 over the chunks JSON so
+ * identical chunk sets always produce the same digest.
+ */
+function hashChunks(serializedChunks: unknown[]): string {
+  return createHash('sha256').update(JSON.stringify(serializedChunks)).digest('hex')
 }
 
 function normalizeContent(
