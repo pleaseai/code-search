@@ -104,7 +104,7 @@ CspIndex.search/findRelated → search.ts search(query, model, semanticIndex, bm
   STOP: dense/bm25 save가 같은 dir에 파일명 충돌을 일으키면 멈추고 보고
   STOP: dense `save`가 정규화된 벡터를 쓰고 `load`가 재정규화하여 float drift로 NFR-002(roundtrip 동등성)가 깨지면, 즉흥 처리 말고 멈추고 보고(미정규화 저장 또는 load 시 skipNormalize로 해소)
 - [x] T007 CspIndex.loadFromDisk(dir) 구현 — manifest 검증(스키마 버전·modelId 불일치 시 오류), chunks/bm25/dense 복원 + 모델 재로드 (file: src/indexing/index.ts) (depends on T006)
-- [ ] T008 cli index `-o`·search/find-related `--index`를 save/loadFromDisk에 배선(명시 경로 존중) (file: src/cli.ts) (depends on T007)
+- [x] T008 cli index `-o`·search/find-related `--index`를 save/loadFromDisk에 배선(명시 경로 존중) (file: src/cli.ts) (depends on T007)
 
 ### Phase C — 글로벌 content-hash 자동 캐시 + ADR (P2)
 
