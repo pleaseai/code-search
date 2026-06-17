@@ -14,9 +14,9 @@
 // composes these primitives.
 
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join, normalize, relative } from 'node:path'
+import { basename, dirname, join, normalize, relative } from 'node:path'
 import { ContentType } from '../types.ts'
 import { isGitUrl } from '../utils.ts'
 import { CspIndex, DEFAULT_CONTENT } from './index.ts'
@@ -84,6 +84,18 @@ export function resolveCacheDir(
 }
 
 /**
+ * Resolve the root directory that holds every cached index, i.e. the parent of
+ * all {@link resolveCacheDir} leaves. Returns `<home>/index`, reusing the same
+ * `~/.csp` home (and `baseDir` override) as the rest of the cache helpers.
+ *
+ * This is the *only* directory `csp clear index` may remove — never the
+ * `~/.csp` home itself (which also holds `savings.jsonl`).
+ */
+export function resolveIndexRoot(options: CacheLocationOptions = {}): string {
+  return join(cacheHome(options), 'index')
+}
+
+/**
  * Compute a deterministic, order-independent content hash for a file set.
  *
  * Files are sorted by path, then each path and its content are folded into a
@@ -114,6 +126,50 @@ export function ensureCacheDir(dir: string, options: CacheLocationOptions = {}):
   mkdirSync(dir, { recursive: true, mode: CACHE_DIR_MODE })
   for (const segment of chainTo(dir, cacheHome(options)))
     chmodSync(segment, CACHE_DIR_MODE)
+}
+
+/** Outcome of {@link clearIndexCache}: the targeted path, whether it was removed, and the entry count. */
+export interface ClearIndexResult {
+  /** The index root that was targeted (`<home>/index`). */
+  path: string
+  /** True when an existing index root was removed; false when none existed. */
+  cleared: boolean
+  /** Number of top-level cache entries removed (0 when nothing existed). */
+  entries: number
+}
+
+/**
+ * Remove the cached-index root (`<home>/index`) and report how many entries it
+ * held. **Safety-critical (AC-015):** this deletes *only* the `index` directory
+ * — never the `~/.csp` home or its `savings.jsonl`. The target is asserted to
+ * end with the `index` segment and to differ from the home before any removal,
+ * so a misconfigured `baseDir` cannot escalate into a home-wide rmtree.
+ *
+ * Returns `{ cleared: false, entries: 0 }` when no index root exists (not an
+ * error — the CLI reports it as "No index cache found").
+ */
+export function clearIndexCache(options: CacheLocationOptions = {}): ClearIndexResult {
+  const home = cacheHome(options)
+  const indexRoot = resolveIndexRoot(options)
+
+  // Guard: the deletion target must be the `index` child of the home, never the
+  // home itself. If either invariant fails we refuse to delete anything.
+  if (basename(indexRoot) !== 'index' || normalize(indexRoot) === normalize(home))
+    throw new Error(`Refusing to clear unsafe index path: ${indexRoot}`)
+
+  if (!existsSync(indexRoot))
+    return { path: indexRoot, cleared: false, entries: 0 }
+
+  let entries = 0
+  try {
+    entries = readdirSync(indexRoot).length
+  }
+  catch {
+    entries = 0
+  }
+
+  rmSync(indexRoot, { recursive: true, force: true })
+  return { path: indexRoot, cleared: true, entries }
 }
 
 /**

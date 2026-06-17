@@ -343,34 +343,91 @@ describe('csp clear', () => {
     expect(writes.join('')).toContain('No savings file found at `/tmp/x/savings.jsonl`')
   })
 
-  test('clear index notes there is no managed index cache', async () => {
+  test('clear index deletes the index cache and leaves savings untouched', async () => {
     const { writes, restore } = captureStdout()
-    let called = 0
+    let savingsCalled = 0
+    let indexCalled = 0
     try {
       await runCli(['clear', 'index'], {
-        clearSavings: () => { called++; return { path: '/tmp/x/savings.jsonl', cleared: true } },
+        clearSavings: () => { savingsCalled++; return { path: '/tmp/x/savings.jsonl', cleared: true } },
+        clearIndex: () => { indexCalled++; return { path: '/tmp/x/index', cleared: true, entries: 3 } },
       })
     }
     finally {
       restore()
     }
-    expect(called).toBe(0) // index-only must not touch savings
-    expect(writes.join('')).toContain('No index cache to clear')
+    expect(indexCalled).toBe(1)
+    expect(savingsCalled).toBe(0) // index-only must not touch savings
+    const out = writes.join('')
+    expect(out).toContain('Cleared 3 cached index entries')
+    expect(out).toContain('/tmp/x/index')
   })
 
-  test('clear all clears savings and notes the index', async () => {
+  test('clear index reports when no index cache exists', async () => {
     const { writes, restore } = captureStdout()
     try {
-      await runCli(['clear', 'all'], {
+      await runCli(['clear', 'index'], {
         clearSavings: () => ({ path: '/tmp/x/savings.jsonl', cleared: true }),
+        clearIndex: () => ({ path: '/tmp/x/index', cleared: false, entries: 0 }),
       })
     }
     finally {
       restore()
     }
+    expect(writes.join('')).toContain('No index cache found at `/tmp/x/index`')
+  })
+
+  test('clear all clears index and savings as two independent actions', async () => {
+    const { writes, restore } = captureStdout()
+    let savingsCalled = 0
+    let indexCalled = 0
+    try {
+      await runCli(['clear', 'all'], {
+        clearSavings: () => { savingsCalled++; return { path: '/tmp/x/savings.jsonl', cleared: true } },
+        clearIndex: () => { indexCalled++; return { path: '/tmp/x/index', cleared: true, entries: 2 } },
+      })
+    }
+    finally {
+      restore()
+    }
+    // Both seams invoked independently — savings cleared via its own call, not
+    // as a side effect of removing the index root.
+    expect(indexCalled).toBe(1)
+    expect(savingsCalled).toBe(1)
     const out = writes.join('')
-    expect(out).toContain('No index cache to clear')
+    expect(out).toContain('Cleared 2 cached index entries')
     expect(out).toContain('Cleared savings at')
+  })
+
+  test('clear index over a real temp home removes only index/ and preserves savings (AC-015)', async () => {
+    const { mkdirSync, writeFileSync, existsSync: exists } = require('node:fs') as typeof import('node:fs')
+    const { clearIndexCache, resolveIndexRoot } = require('./indexing/cache.ts') as typeof import('./indexing/cache.ts')
+    const tmpHome = await mkdtemp(join(tmpdir(), 'csp-cli-clear-'))
+    const base = join(tmpHome, '.csp')
+    const indexRoot = resolveIndexRoot({ baseDir: base })
+    const savings = join(base, 'savings.jsonl')
+    try {
+      mkdirSync(join(indexRoot, 'key-a'), { recursive: true })
+      writeFileSync(savings, '{"call":"search"}\n')
+
+      const { restore } = captureStdout()
+      try {
+        await runCli(['clear', 'index'], {
+          clearIndex: () => clearIndexCache({ baseDir: base }),
+        })
+      }
+      finally {
+        restore()
+      }
+
+      // Index gone; home directory and savings file still present.
+      expect(exists(indexRoot)).toBe(false)
+      expect(exists(savings)).toBe(true)
+      expect(exists(base)).toBe(true)
+    }
+    finally {
+      await rm(tmpHome, { recursive: true, force: true })
+    }
   })
 
   test('clear with an invalid type exits 1', async () => {

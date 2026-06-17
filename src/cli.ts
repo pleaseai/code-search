@@ -6,7 +6,7 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 // TODO(integration): replace stub when sibling modules land
-import { loadOrBuildIndex } from './indexing/cache.ts'
+import { clearIndexCache, loadOrBuildIndex } from './indexing/cache.ts'
 import { CspIndex } from './indexing/index.ts'
 import { serve } from './mcp/server.ts'
 import { clearSavings, formatSavingsReport } from './stats.ts'
@@ -237,6 +237,12 @@ interface RunOptions {
   readAgentFile?: (agent: Agent) => Promise<string>
   formatSavings?: (opts: { verbose: boolean }) => string
   clearSavings?: () => { path: string, cleared: boolean }
+  /**
+   * Index-cache clearing seam for `clear index` / `clear all`. Defaults to
+   * {@link clearIndexCache} (which targets `~/.csp/index`); tests inject it with
+   * a temp `baseDir` so the real home is never touched.
+   */
+  clearIndex?: () => { path: string, cleared: boolean, entries: number }
   cwd?: () => string
 }
 
@@ -310,40 +316,48 @@ async function _runIndex(opts: {
   await index.save(out)
 }
 
+/** Report the outcome of an index-cache clear to stdout. */
+function _reportIndexClear(result: { path: string, cleared: boolean, entries: number }): void {
+  process.stdout.write(
+    result.cleared
+      ? `Cleared ${result.entries} cached index entries at \`${result.path}\`\n`
+      : `No index cache found at \`${result.path}\`\n`,
+  )
+}
+
+/** Report the outcome of a savings clear to stdout. */
+function _reportSavingsClear(result: { path: string, cleared: boolean }): void {
+  process.stdout.write(
+    result.cleared
+      ? `Cleared savings at \`${result.path}\`\n`
+      : `No savings file found at \`${result.path}\`\n`,
+  )
+}
+
 /**
  * Run the `clear` subcommand.
  *
- * `clear savings` (and `all`) deletes the `~/.csp/savings.jsonl` telemetry
- * file. `clear index` is currently a no-op note: index persistence is not
- * wired up yet (the `CspIndex` orchestrator is a stub), and the storage model
- * — repo-local `.csp/` vs a global cache — is still undecided. For now
- * `csp index -o <path>` writes only to the path you pass, so delete those
- * directories yourself.
+ * `clear index` deletes the global on-disk index cache at `~/.csp/index/`.
+ * `clear savings` deletes the `~/.csp/savings.jsonl` telemetry file. `clear all`
+ * runs **both** as two independent actions — the index root is removed first,
+ * then `clearSavings()` is called separately, so removing the index never
+ * affects savings and vice versa. The `~/.csp` home itself is never deleted.
  */
 export function _runClear(
   type: string,
   clearSavingsImpl: () => { path: string, cleared: boolean } = clearSavings,
+  clearIndexImpl: () => { path: string, cleared: boolean, entries: number } = clearIndexCache,
 ): number {
   if (!(CLEAR_CHOICES as readonly string[]).includes(type)) {
     process.stderr.write(`Invalid clear type: ${type}. Choices: ${CLEAR_CHOICES.join(', ')}\n`)
     return 1
   }
 
-  if (type === 'index' || type === 'all') {
-    process.stdout.write(
-      'No index cache to clear — index persistence is not wired up yet; '
-      + '`csp index -o <path>` writes only to the path you choose.\n',
-    )
-  }
+  if (type === 'index' || type === 'all')
+    _reportIndexClear(clearIndexImpl())
 
-  if (type === 'savings' || type === 'all') {
-    const { path: statsPath, cleared } = clearSavingsImpl()
-    process.stdout.write(
-      cleared
-        ? `Cleared savings at \`${statsPath}\`\n`
-        : `No savings file found at \`${statsPath}\`\n`,
-    )
-  }
+  if (type === 'savings' || type === 'all')
+    _reportSavingsClear(clearSavingsImpl())
 
   return 0
 }
@@ -415,9 +429,9 @@ export async function runCli(argv: string[], options: RunOptions = {}): Promise<
         process.stderr.write(`clear requires a type. Choices: ${CLEAR_CHOICES.join(', ')}\n`)
         return 1
       }
-      return options.clearSavings
-        ? _runClear(type, options.clearSavings)
-        : _runClear(type)
+      const clearSavingsImpl = options.clearSavings ?? clearSavings
+      const clearIndexImpl = options.clearIndex ?? clearIndexCache
+      return _runClear(type, clearSavingsImpl, clearIndexImpl)
     }
 
     if (command === 'mcp') {

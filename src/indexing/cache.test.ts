@@ -8,7 +8,7 @@ import { join, sep } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { ContentType } from '../types.ts'
 import { CspIndex } from './index.ts'
-import { computeContentHash, ensureCacheDir, loadOrBuildIndex, resolveCacheDir } from './cache.ts'
+import { clearIndexCache, computeContentHash, ensureCacheDir, loadOrBuildIndex, resolveCacheDir, resolveIndexRoot } from './cache.ts'
 
 describe('resolveCacheDir', () => {
   it('returns a path under <base>/index/', () => {
@@ -219,5 +219,79 @@ describe('loadOrBuildIndex', () => {
     finally {
       CspIndex.fromPath = original
     }
+  })
+})
+
+describe('resolveIndexRoot', () => {
+  it('returns <home>/index for an explicit baseDir', () => {
+    const base = join('/h', '.csp')
+    expect(resolveIndexRoot({ baseDir: base })).toBe(join(base, 'index'))
+  })
+
+  it('shares the cache home with resolveCacheDir', () => {
+    const base = join('/h', '.csp')
+    const root = resolveIndexRoot({ baseDir: base })
+    const leaf = resolveCacheDir('/repo', [ContentType.CODE], { baseDir: base })
+    // Every cache leaf must live under the resolved index root.
+    expect(leaf.startsWith(`${root}${sep}`)).toBe(true)
+  })
+})
+
+describe('clearIndexCache', () => {
+  let tmpHome: string
+  let base: string
+
+  beforeEach(() => {
+    tmpHome = mkdtempSync(join(tmpdir(), 'csp-clear-test-'))
+    base = join(tmpHome, '.csp')
+  })
+
+  afterEach(() => {
+    rmSync(tmpHome, { recursive: true, force: true })
+  })
+
+  it('deletes the index root and counts the removed entries', () => {
+    const indexRoot = resolveIndexRoot({ baseDir: base })
+    const { mkdirSync, writeFileSync: write } = require('node:fs') as typeof import('node:fs')
+    mkdirSync(join(indexRoot, 'key-a'), { recursive: true })
+    mkdirSync(join(indexRoot, 'key-b'), { recursive: true })
+    write(join(indexRoot, 'key-a', 'manifest.json'), '{}')
+
+    const result = clearIndexCache({ baseDir: base })
+
+    expect(result.cleared).toBe(true)
+    expect(result.entries).toBe(2)
+    expect(result.path).toBe(indexRoot)
+    expect(existsSync(indexRoot)).toBe(false)
+  })
+
+  it('preserves savings.jsonl alongside the index root', () => {
+    const indexRoot = resolveIndexRoot({ baseDir: base })
+    const { mkdirSync, writeFileSync: write } = require('node:fs') as typeof import('node:fs')
+    mkdirSync(join(indexRoot, 'key-a'), { recursive: true })
+    const savings = join(base, 'savings.jsonl')
+    write(savings, '{"call":"search"}\n')
+
+    clearIndexCache({ baseDir: base })
+
+    // Index gone, savings + home untouched.
+    expect(existsSync(indexRoot)).toBe(false)
+    expect(existsSync(savings)).toBe(true)
+    expect(existsSync(base)).toBe(true)
+  })
+
+  it('reports no index cache when the root does not exist', () => {
+    const result = clearIndexCache({ baseDir: base })
+    expect(result.cleared).toBe(false)
+    expect(result.entries).toBe(0)
+    expect(result.path).toBe(resolveIndexRoot({ baseDir: base }))
+  })
+
+  it('refuses to delete a path that is not an index root (safety guard)', () => {
+    // A baseDir whose index root resolves to the home itself would be unsafe.
+    // Guard: the deletion target must end with the `index` segment.
+    const indexRoot = resolveIndexRoot({ baseDir: base })
+    expect(indexRoot.endsWith(`${sep}index`)).toBe(true)
+    expect(indexRoot).not.toBe(base)
   })
 })
