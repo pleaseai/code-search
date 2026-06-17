@@ -108,7 +108,7 @@ CspIndex.search/findRelated → search.ts search(query, model, semanticIndex, bm
 
 ### Phase C — 글로벌 content-hash 자동 캐시 + ADR (P2)
 
-- [ ] T009 cache 모듈 신규 — resolveCacheDir(`~/.csp/index/<key>`), computeContentHash(정렬 매니페스트: 상대경로+내용), 캐시 키에 소스 동일성 포함. `~/.csp/`(이미 stats.ts가 mode 없이 생성)·`~/.csp/index/`·leaf까지 0700 보장(`mkdir {recursive,mode:0o700}` + 기존 디렉터리는 chmod) (file: src/indexing/cache.ts) (depends on T006)
+- [x] T009 cache 모듈 신규 — resolveCacheDir(`~/.csp/index/<key>`), computeContentHash(정렬 매니페스트: 상대경로+내용), 캐시 키에 소스 동일성 포함. `~/.csp/`(이미 stats.ts가 mode 없이 생성)·`~/.csp/index/`·leaf까지 0700 보장(`mkdir {recursive,mode:0o700}` + 기존 디렉터리는 chmod) (file: src/indexing/cache.ts) (depends on T006)
   STOP: content-hash 입력이 `fromGit`에서 비결정적(체크아웃 메타데이터 포함)이면 멈추고 보고 — 폴백으로 git commit SHA를 소스 키에 사용
 - [ ] T010 loadOrBuildIndex 자동 캐시 — 디스크 캐시 조회·content-hash 검증·재사용/빌드+저장·무효화 (file: src/indexing/cache.ts) (depends on T009, T007)
 - [ ] T011 cli **search/find-related**(명시 경로 없음)를 loadOrBuildIndex 자동 캐시에 배선. `csp index`는 명시 `-o`를 계속 요구(명시 영속화 전용) — 자동 캐시 대상 아님 (file: src/cli.ts) (depends on T010, T008)
