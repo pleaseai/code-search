@@ -102,6 +102,15 @@ export class Bm25Index {
     this.#state = state
   }
 
+  /**
+   * Per-document token counts in document order — one entry per indexed
+   * document. Exposed read-only so callers can assert the corpus size
+   * (`documents.length === numDocs`) without reaching into private state.
+   */
+  get documents(): readonly number[] {
+    return Array.from(this.#state.docLengths)
+  }
+
   /** Build an index from an array of pre-tokenized documents. */
   static build(documents: string[][]): Bm25Index {
     const numDocs = documents.length
