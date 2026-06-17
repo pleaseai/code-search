@@ -164,6 +164,39 @@ describe('CspIndex save → loadFromDisk roundtrip', () => {
     // Dir exists but is empty.
     await expect(CspIndex.loadFromDisk(dir)).rejects.toThrow(/Missing:/)
   })
+
+  it('loadFromDisk throws on a schema version mismatch', async () => {
+    const idx = buildIndex([makeChunk('a.ts', 1, 10, 'typescript', 'A')])
+    await idx.save(dir)
+    // Corrupt the manifest's schema version to simulate a future/older index.
+    const manifestPath = join(dir, 'manifest.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>
+    manifest.schemaVersion = 999
+    writeFileSync(manifestPath, JSON.stringify(manifest))
+    await expect(CspIndex.loadFromDisk(dir)).rejects.toThrow(/schema version/i)
+  })
+
+  it('round-trips chunk content losslessly and yields stable search results', async () => {
+    const chunks: Chunk[] = [
+      makeChunk('a.ts', 1, 10, 'typescript', 'alpha beta'),
+      makeChunk('b.ts', 11, 20, 'typescript', 'gamma delta'),
+      makeChunk('c.py', 1, 5, 'python', 'epsilon'),
+    ]
+    const idx = buildIndex(chunks)
+    await idx.save(dir)
+
+    // Chunk fields survive the round-trip intact (chunkToDict/chunkFromDict symmetry).
+    const loaded = await CspIndex.loadFromDisk(dir)
+    expect(loaded.chunks).toEqual(chunks)
+    expect(loaded.stats).toEqual(idx.stats)
+
+    // Two independent loads of the same persisted index produce identical
+    // ranked results — the restored bm25/dense/model state is deterministic.
+    const loaded2 = await CspIndex.loadFromDisk(dir)
+    const a = loaded.search('alpha', { topK: 3 }).map(r => r.chunk.filePath)
+    const b = loaded2.search('alpha', { topK: 3 }).map(r => r.chunk.filePath)
+    expect(a).toEqual(b)
+  })
 })
 
 describe('CspIndex.save', () => {

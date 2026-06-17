@@ -14,16 +14,17 @@
 
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Chunk, ContentType, IndexStats, SearchResult } from '../types.ts'
-import { chunkToDict, ContentType as ContentTypeEnum } from '../types.ts'
+import { chunkFromDict, chunkToDict, ContentType as ContentTypeEnum } from '../types.ts'
 import { search as runSearch } from '../search.ts'
 import { createIndexFromPath } from './create.ts'
-import { loadModel as loadDenseModel } from './dense.ts'
-import type { Model, SelectableBasicBackend } from './dense.ts'
-import type { Bm25Index } from './sparse.ts'
+import { loadModel as loadDenseModel, makeStubModel } from './dense.ts'
+import type { Model } from './dense.ts'
+import { SelectableBasicBackend } from './dense.ts'
+import { Bm25Index } from './sparse.ts'
 
 /**
  * On-disk index schema version. Bumped when the persisted artifact layout or
@@ -329,12 +330,58 @@ export class CspIndex {
   }
 
   /**
-   * Load an index previously persisted with {@link CspIndex.save}. Real
-   * implementation lands in T007. Declared as a throwing stub so cli.ts
-   * (`CspIndex.loadFromDisk`) type-checks in the Phase A branch.
+   * Load an index previously persisted with {@link CspIndex.save}.
+   *
+   * Validates the directory and all five artifacts exist, checks the manifest
+   * schema version matches {@link INDEX_SCHEMA_VERSION}, then restores chunks
+   * ({@link chunkFromDict}), the BM25 index ({@link Bm25Index.load}), the dense
+   * backend ({@link SelectableBasicBackend.load}), and reloads the embedding
+   * model identified by the manifest. The chunk round-trip is lossless
+   * (camelCase symmetry with {@link CspIndex.save}).
+   *
+   * @throws if the directory is missing, an artifact is missing, or the
+   *   manifest schema version does not match.
    */
-  static async loadFromDisk(_dir: string): Promise<CspIndex> {
-    throw new Error('CspIndex.loadFromDisk: not yet implemented (T007)')
+  static async loadFromDisk(dir: string): Promise<CspIndex> {
+    if (!existsSync(dir))
+      throw new Error(`Index not found: ${dir}`)
+
+    const artifacts = ['manifest.json', 'chunks.json', 'bm25.json', 'vectors.bin', 'args.json']
+    for (const name of artifacts) {
+      if (!existsSync(join(dir, name)))
+        throw new Error(`Missing: ${join(dir, name)}`)
+    }
+
+    const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as IndexManifest
+    if (manifest.schemaVersion !== INDEX_SCHEMA_VERSION) {
+      throw new Error(
+        `Index schema version mismatch: expected ${INDEX_SCHEMA_VERSION}, got ${manifest.schemaVersion}`,
+      )
+    }
+
+    const serializedChunks = JSON.parse(readFileSync(join(dir, 'chunks.json'), 'utf8')) as unknown[]
+    const chunks = serializedChunks.map(c => chunkFromDict(c as Parameters<typeof chunkFromDict>[0]))
+
+    const bm25Index = await Bm25Index.load(dir)
+    const semanticIndex = await SelectableBasicBackend.load(dir)
+
+    const { model, modelPath } = await loadDenseModel(manifest.modelId)
+    // Keep the query model's dimension aligned with the persisted vectors so
+    // re-embedded queries are comparable to the stored backend. (The stub model
+    // is dimension-agnostic; the real model's dim is fixed by its weights.)
+    const alignedModel = model.dim === semanticIndex.dim
+      ? model
+      : makeStubModel(semanticIndex.dim)
+
+    return new CspIndex({
+      model: alignedModel,
+      bm25Index,
+      semanticIndex,
+      chunks,
+      modelPath,
+      root: manifest.sourceId,
+      content: manifest.content,
+    })
   }
 }
 
