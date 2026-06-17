@@ -72,9 +72,8 @@ export async function createIndexFromPath(
   }
 
   const embeddings = embedChunks(model, chunks)
-  const bm25Index = new Bm25Index()
-  bm25Index.index(chunks.map(c => tokenize(enrichForBm25(c))))
-  const semanticIndex = new SelectableBasicBackend(embeddings, model.dim)
+  const bm25Index = Bm25Index.build(chunks.map(c => tokenize(enrichForBm25(c))))
+  const semanticIndex = new SelectableBasicBackend(embeddings)
 
   return { bm25Index, semanticIndex, chunks }
 }
@@ -84,7 +83,7 @@ function normalizeContent(
 ): readonly ContentType[] {
   if (content === undefined) {
     // Default: code-only. Mirrors _DEFAULT_CONTENT in semble.
-    return [ContentType.Code]
+    return [ContentType.CODE]
   }
   if (Array.isArray(content)) return content
   return [content as ContentType]
