@@ -186,7 +186,9 @@ export class CspIndex {
    * results (semble parity).
    */
   findRelated(
-    seed: Chunk | SearchResult,
+    // Seed needs only the chunk; accept a bare Chunk or anything carrying one
+    // (e.g. a SearchResult) without forcing the caller to supply `toDict`.
+    seed: Chunk | { chunk: Chunk, score?: number },
     options: SearchOptions = {},
   ): SearchResult[] {
     const seedChunk = 'chunk' in seed ? seed.chunk : seed
