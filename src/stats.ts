@@ -118,14 +118,22 @@ export function saveSearchStats(
 /**
  * Delete the savings stats file if it exists.
  *
- * Returns the (now-removed or absent) file path and whether a file was
- * actually deleted, so callers can report an accurate message.
+ * Deletion (not truncation) mirrors semble's `clear` (`path.unlink()`) and
+ * lets `csp savings` fall back to the "No stats yet" message — a truncated,
+ * still-present file would instead render an all-zero report. Best-effort:
+ * a permission error or broken symlink is swallowed and reported as
+ * `cleared: false` rather than crashing the CLI.
  */
 export function clearSavings(): { path: string, cleared: boolean } {
   if (!existsSync(_STATS_FILE))
     return { path: _STATS_FILE, cleared: false }
-  rmSync(_STATS_FILE)
-  return { path: _STATS_FILE, cleared: true }
+  try {
+    rmSync(_STATS_FILE)
+    return { path: _STATS_FILE, cleared: true }
+  }
+  catch {
+    return { path: _STATS_FILE, cleared: false }
+  }
 }
 
 interface StatsRecord {
