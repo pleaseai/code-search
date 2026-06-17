@@ -120,7 +120,7 @@ CspIndex.search/findRelated → search.ts search(query, model, semanticIndex, bm
 
 - [x] T014 `_runClear` index/all을 배선 — 삭제 대상은 **오직 `~/.csp/index/`**(`~/.csp/` 루트 rmtree 금지). `clear all`은 `~/.csp/index/` 삭제 **후** `clearSavings()`를 독립 호출. 제거 항목 수/용량 보고, savings 보존 (file: src/cli.ts) (depends on T009)
   STOP: 삭제 경로가 `~/.csp/` 루트 또는 `~/.csp/savings.jsonl`을 포함하면 멈추고 보고(AC-015 위반)
-- [ ] T015 README.md/README.ko.md clear·index·savings 갱신 + CLAUDE.md(.csp 노트, `.load`→`loadFromDisk`, file-walker 비의존 확인) (files: README.md, README.ko.md, CLAUDE.md) (depends on T011, T014)
+- [x] T015 README.md/README.ko.md clear·index·savings 갱신 + CLAUDE.md(.csp 노트, `.load`→`loadFromDisk`, file-walker 비의존 확인) (files: README.md, README.ko.md, CLAUDE.md) (depends on T011, T014)
 
 ## Dependencies
 
