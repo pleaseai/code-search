@@ -1,0 +1,31 @@
+.please/docs/tracks/active/cspindex-orchestrator-20260617/plan.md
+  s_03c2eb254feccd::t_ad0cdd005f804d 248
+CLAUDE.md
+  s_03c2eb254feccd::t_76e0838eda8522 60
+  s_03c2eb254feccd::t_7ee00806710473 46
+  s_03c2eb254feccd::t_aa46da44b3ef70 49
+README.ko.md
+  s_03c2eb254feccd::t_dd962a4144b47b 379-380
+  s_03c2eb254feccd::t_edc36a9ffc5e8a 423-424,427-429
+  s_03c2eb254feccd::t_bcaaca38492a7f 172
+README.md
+  s_03c2eb254feccd::t_6c2fac10d2fba7 172
+  s_03c2eb254feccd::t_faecee4b2697f2 379-380
+  s_03c2eb254feccd::t_e2a29051a9ae5b 423-424,427-429
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "66310c1688f2bb347aad69f2c1816ca7796d31ef",
+  "prompts": {},
+  "sessions": {
+    "s_03c2eb254feccd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bff2e159-8947-40e3-b887-99924257120b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
