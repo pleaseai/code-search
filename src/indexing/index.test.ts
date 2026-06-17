@@ -27,7 +27,7 @@ function makeChunk(
 }
 
 function buildIndex(chunks: Chunk[]): CspIndex {
-  const model = makeStubModel('test-model', 4)
+  const model = makeStubModel(4)
   const vectors = chunks.map((_, i) => {
     const v = new Float32Array(4)
     v[0] = i + 1
@@ -35,8 +35,8 @@ function buildIndex(chunks: Chunk[]): CspIndex {
   })
   return new CspIndex({
     model,
-    bm25Index: new Bm25Index(chunks.map(() => ['x'])),
-    semanticIndex: new SelectableBasicBackend(vectors, 4),
+    bm25Index: Bm25Index.build(chunks.map(() => ['x'])),
+    semanticIndex: new SelectableBasicBackend(vectors),
     chunks,
     modelPath: 'test-model',
     root: null,
@@ -194,7 +194,7 @@ describe('CspIndex.fromPath', () => {
       join(dir, 'sample.ts'),
       'export function greet(name: string) {\n  return `hi ${name}`\n}\n',
     )
-    const idx = await CspIndex.fromPath(dir, { content: ContentType.Code })
+    const idx = await CspIndex.fromPath(dir, { content: ContentType.CODE })
     expect(idx.stats.totalChunks).toBeGreaterThan(0)
     expect(idx.stats.indexedFiles).toBe(1)
     expect(idx.chunks[0]!.filePath).toBe('sample.ts')

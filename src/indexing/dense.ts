@@ -88,7 +88,7 @@ function stubEmbed(text: string, dim: number): Float32Array {
   return v
 }
 
-function makeStubModel(dim: number): Model {
+export function makeStubModel(dim: number): Model {
   return {
     dim,
     encode(texts: string[]): Float32Array[] {
