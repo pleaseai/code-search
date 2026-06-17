@@ -1,0 +1,29 @@
+{
+  "name": "csp",
+  "version": "0.0.0",
+  "description": "Fast, local, token-efficient hybrid code search for agents. Registers the csp MCP server (search, find_related) and a csp-search skill.",
+  "author": {
+    "name": "Minsu Lee",
+    "email": "minsu.lee@dietfriends.kr",
+    "url": "https://github.com/amondnet"
+  },
+  "homepage": "https://github.com/pleaseai/code-search",
+  "repository": "https://github.com/pleaseai/code-search",
+  "license": "MIT",
+  "keywords": ["code-search", "hybrid-search", "semantic-search", "bm25", "embeddings", "mcp", "agent", "rag"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.codex.json",
+  "interface": {
+    "displayName": "Code Search (csp)",
+    "shortDescription": "Fast, local, token-efficient code search for agents.",
+    "longDescription": "Hybrid (dense embeddings + BM25) code search built for agents. Returns the exact code snippets they need using ~98% fewer tokens than grep+read, entirely on CPU with no API keys or external services. Bundles the csp MCP server (search, find_related) and a csp-search skill.",
+    "developerName": "PleaseAI",
+    "category": "Developer Tools",
+    "capabilities": ["Read"],
+    "websiteURL": "https://github.com/pleaseai/code-search",
+    "defaultPrompt": [
+      "Use csp to find where authentication is handled in this repo.",
+      "Use csp to locate the function that saves the model to disk."
+    ]
+  }
+}

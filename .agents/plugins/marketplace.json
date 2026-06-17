@@ -1,0 +1,16 @@
+{
+  "name": "pleaseai",
+  "interface": {
+    "displayName": "PleaseAI"
+  },
+  "plugins": [
+    {
+      "name": "csp",
+      "source": {
+        "source": "local",
+        "path": "./plugins/csp"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

@@ -46,6 +46,26 @@ claude mcp add csp -s user -- bunx @pleaseai/csp mcp
 
 다른 하니스(Cursor, Codex, OpenCode 등)는 아래 [MCP 서버](#mcp-서버) 섹션을 참고하세요.
 
+### 플러그인 (Claude Code & Codex)
+
+`csp`를 설정하는 가장 빠른 방법은 플러그인입니다. MCP 서버와 `csp-search` 헬퍼를 한 번에 등록하며, 동일한 디렉터리에서 Claude Code와 Codex 양쪽을 지원합니다.
+
+Claude Code:
+
+```text
+/plugin marketplace add pleaseai/code-search
+/plugin install csp@pleaseai
+```
+
+Codex:
+
+```bash
+codex plugin marketplace add pleaseai/code-search
+codex plugin add csp@pleaseai
+```
+
+`csp` MCP 서버(`search`, `find_related`)와 함께 `csp-search` 서브에이전트(Claude Code) / 스킬(Codex)을 번들합니다. 서버를 `bunx`로 실행하려면 `PATH`에 [Bun](https://bun.sh)이 있어야 합니다. 자세한 내용은 [plugins/csp](plugins/csp/README.md)를 참고하세요.
+
 ### AGENTS.md
 
 에이전트의 컨텍스트에 `csp` 사용법을 추가해 언제 어떻게 CLI를 호출할지 알 수 있도록 합니다. 먼저 `csp` CLI를 설치한 뒤, 아래 스니펫을 `AGENTS.md` 또는 `CLAUDE.md`에 추가하세요.
