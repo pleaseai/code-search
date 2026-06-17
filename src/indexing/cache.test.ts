@@ -6,9 +6,9 @@ import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { ContentType } from '../types'
-import { CspIndex } from './index'
-import { computeContentHash, ensureCacheDir, loadOrBuildIndex, resolveCacheDir } from './cache'
+import { ContentType } from '../types.ts'
+import { CspIndex } from './index.ts'
+import { computeContentHash, ensureCacheDir, loadOrBuildIndex, resolveCacheDir } from './cache.ts'
 
 describe('resolveCacheDir', () => {
   it('returns a path under <base>/index/', () => {
