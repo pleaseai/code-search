@@ -1,0 +1,26 @@
+.claude/agent-memory/please-implement-executor/csp-test-files-ahead-of-impl.md
+  s_03c2eb254feccd::t_03f03fc9a7bcff 71-83
+.claude/agent-memory/please-implement-executor/csp-worktree-test-env-gotchas.md
+  s_03c2eb254feccd::t_49a62d93697542 10-18,20-24
+  s_03c2eb254feccd::t_10f82cc4594e29 3
+.claude/agent-memory/please-implement-executor/MEMORY.md
+  s_03c2eb254feccd::t_5e90d7716b6f6c 6
+.claude/agent-memory/please-implement-executor/csp-bun-mock-module-irreversible.md
+  s_03c2eb254feccd::t_41403e4e0f7905 1-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "5bbffb34fa7a0600dd2b72b2137fd185732d4e38",
+  "prompts": {},
+  "sessions": {
+    "s_03c2eb254feccd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bff2e159-8947-40e3-b887-99924257120b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
