@@ -86,6 +86,16 @@ export interface CspIndexFromGitOptions extends CspIndexLoadOptions {
   ref?: string
 }
 
+/** Options for {@link CspIndex.save}. */
+export interface CspIndexSaveOptions {
+  /**
+   * Override for the manifest `contentHash`. {@link loadOrBuildIndex} injects a
+   * source-file hash here so cache validity can be checked before a rebuild.
+   * Omitted → defaults to the serialized-chunks hash (T006 behavior).
+   */
+  contentHash?: string
+}
+
 /** Constructor payload — the fully built index state. */
 export interface CspIndexState {
   model: Model
@@ -309,8 +319,14 @@ export class CspIndex {
    * distinct, so the backends do not clobber one another. The dense backend
    * writes already-normalized vectors and re-normalizes on load idempotently,
    * so the round-trip is bit-stable (verified — no float drift, NFR-002).
+   *
+   * `options.contentHash` overrides the manifest's `contentHash`. The auto-cache
+   * orchestrator ({@link loadOrBuildIndex}) injects a *source-file* hash here so
+   * the manifest records a value it can recompute and compare against the live
+   * source before a build. When omitted, `contentHash` defaults to the hash of
+   * the serialized chunks (T006 behavior — backward compatible).
    */
-  async save(dir: string): Promise<void> {
+  async save(dir: string, options: CspIndexSaveOptions = {}): Promise<void> {
     mkdirSync(dir, { recursive: true })
 
     const serializedChunks = this.chunks.map(chunkToDict)
@@ -321,7 +337,7 @@ export class CspIndex {
 
     const manifest: IndexManifest = {
       schemaVersion: INDEX_SCHEMA_VERSION,
-      contentHash: hashChunks(serializedChunks),
+      contentHash: options.contentHash ?? hashChunks(serializedChunks),
       sourceId: this.root,
       content: [...this.content],
       modelId: this.modelPath,

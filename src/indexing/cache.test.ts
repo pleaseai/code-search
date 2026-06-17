@@ -1,12 +1,14 @@
 // Unit tests for the index cache module (T009): cache-dir resolution,
 // content hashing, and 0700 directory hardening.
+// T010 adds loadOrBuildIndex orchestration tests at the bottom.
 
-import { mkdtempSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { ContentType } from '../types'
-import { computeContentHash, ensureCacheDir, resolveCacheDir } from './cache'
+import { CspIndex } from './index'
+import { computeContentHash, ensureCacheDir, loadOrBuildIndex, resolveCacheDir } from './cache'
 
 describe('resolveCacheDir', () => {
   it('returns a path under <base>/index/', () => {
@@ -140,5 +142,82 @@ describe('ensureCacheDir', () => {
     ensureCacheDir(leaf, { baseDir: base })
     // The created tree must live under the injected base, never the real home.
     expect(leaf.startsWith(tmpHome)).toBe(true)
+  })
+})
+
+describe('loadOrBuildIndex', () => {
+  let tmpHome: string
+  let srcDir: string
+  let base: string
+
+  beforeEach(() => {
+    tmpHome = mkdtempSync(join(tmpdir(), 'csp-lob-home-'))
+    srcDir = mkdtempSync(join(tmpdir(), 'csp-lob-src-'))
+    base = join(tmpHome, '.csp')
+    // A minimal indexable source: one code file.
+    writeFileSync(join(srcDir, 'a.ts'), 'export function alpha() { return 1 }\n')
+  })
+
+  afterEach(() => {
+    rmSync(tmpHome, { recursive: true, force: true })
+    rmSync(srcDir, { recursive: true, force: true })
+  })
+
+  it('cache miss: builds the index and writes a manifest to the cache dir', async () => {
+    const index = await loadOrBuildIndex(srcDir, { baseDir: base })
+
+    expect(index).toBeInstanceOf(CspIndex)
+    expect(index.chunks.length).toBeGreaterThan(0)
+
+    const cacheDir = resolveCacheDir(srcDir, [ContentType.CODE], { baseDir: base })
+    expect(existsSync(join(cacheDir, 'manifest.json'))).toBe(true)
+  })
+
+  it('cache hit: a second call reuses the cache without rebuilding', async () => {
+    await loadOrBuildIndex(srcDir, { baseDir: base })
+
+    // Spy on the build path: fromPath must NOT be called on the cache hit.
+    const original = CspIndex.fromPath
+    let buildCalls = 0
+    CspIndex.fromPath = async (...args: Parameters<typeof original>) => {
+      buildCalls += 1
+      return original.apply(CspIndex, args)
+    }
+    try {
+      const index = await loadOrBuildIndex(srcDir, { baseDir: base })
+      expect(index).toBeInstanceOf(CspIndex)
+      expect(index.chunks.length).toBeGreaterThan(0)
+      expect(buildCalls).toBe(0)
+    }
+    finally {
+      CspIndex.fromPath = original
+    }
+  })
+
+  it('invalidation: a source change rebuilds and reflects new content', async () => {
+    const first = await loadOrBuildIndex(srcDir, { baseDir: base })
+    const firstChunkCount = first.chunks.length
+
+    // Mutate the source: add a second file so the content hash changes.
+    writeFileSync(join(srcDir, 'b.ts'), 'export function beta() { return 2 }\n')
+
+    const original = CspIndex.fromPath
+    let buildCalls = 0
+    CspIndex.fromPath = async (...args: Parameters<typeof original>) => {
+      buildCalls += 1
+      return original.apply(CspIndex, args)
+    }
+    try {
+      const second = await loadOrBuildIndex(srcDir, { baseDir: base })
+      // Stale cache → rebuild happened.
+      expect(buildCalls).toBe(1)
+      // New file's content is now indexed.
+      const paths = new Set(second.chunks.map(c => c.filePath))
+      expect(paths.has('b.ts')).toBe(true)
+      expect(second.chunks.length).toBeGreaterThanOrEqual(firstChunkCount)
+    }
+    finally {
+      CspIndex.fromPath = original
+    }
   })
 })

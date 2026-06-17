@@ -14,10 +14,16 @@
 // composes these primitives.
 
 import { createHash } from 'node:crypto'
-import { chmodSync, mkdirSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join, normalize } from 'node:path'
-import type { ContentType } from '../types.ts'
+import { dirname, join, normalize, relative } from 'node:path'
+import { ContentType } from '../types.ts'
+import { isGitUrl } from '../utils.ts'
+import { CspIndex, DEFAULT_CONTENT } from './index.ts'
+import type { CspIndexFromGitOptions } from './index.ts'
+import { MAX_FILE_BYTES } from './create.ts'
+import { walkFiles } from './file-walker.ts'
+import { getExtensions } from './files.ts'
 
 /** Directory permissions for every cache directory (owner-only). NFR-003. */
 const CACHE_DIR_MODE = 0o700
@@ -141,4 +147,154 @@ function normalizeSource(source: string): string {
 /** Coerce string / `Uint8Array` content to bytes for hashing. */
 function toBytes(content: string | Uint8Array): Uint8Array {
   return typeof content === 'string' ? new TextEncoder().encode(content) : content
+}
+
+/** Options for {@link loadOrBuildIndex}. */
+export interface LoadOrBuildOptions extends CacheLocationOptions {
+  /** Content selection to index (defaults to {@link DEFAULT_CONTENT}). */
+  content?: readonly ContentType[]
+  /** Embedding model identifier forwarded to the build path. */
+  modelPath?: string
+}
+
+/**
+ * Collect the source files {@link CspIndex.fromPath} would index, as
+ * {@link CacheFile} entries (relative path + raw content), for content hashing.
+ *
+ * Uses the same walk + extension resolution as `createIndexFromPath`: the
+ * configured content selection drives `getExtensions`, `walkFiles` applies the
+ * `.gitignore`/`.cspignore` + default-ignore rules, and over-large files are
+ * skipped (matching the index's own `MAX_FILE_BYTES` cutoff). Paths are made
+ * relative to `root` so the hash is stable across machines / mount points.
+ */
+async function collectSourceFiles(
+  root: string,
+  content: readonly ContentType[],
+): Promise<CacheFile[]> {
+  const extensions = getExtensions(content.map(c => c as `${ContentType}`), undefined)
+  const files: CacheFile[] = []
+  for await (const filePath of walkFiles(root, extensions)) {
+    let size: number
+    try {
+      size = statSync(filePath).size
+    }
+    catch {
+      continue
+    }
+    if (size > MAX_FILE_BYTES)
+      continue
+    let raw: string
+    try {
+      raw = readFileSync(filePath, 'utf8')
+    }
+    catch {
+      continue
+    }
+    files.push({ path: relative(root, filePath), content: raw })
+  }
+  return files
+}
+
+/**
+ * Load a cached index for `source` if one exists and is still valid, otherwise
+ * build it, persist it to the cache, and return it.
+ *
+ * Local paths: the live source file set is hashed ({@link computeContentHash})
+ * and compared against the cached manifest's `contentHash`. A match means the
+ * cache is fresh → reuse via {@link CspIndex.loadFromDisk}. A mismatch (the
+ * source changed) invalidates the cache → rebuild and overwrite. The source
+ * hash is injected into {@link CspIndex.save} so the manifest records a value
+ * recomputed the same way on the next call.
+ *
+ * Git URLs (T009 STOP fallback): re-hashing a remote without a clone is not
+ * possible, and a temp checkout's metadata makes a content hash
+ * non-deterministic — so git sources are keyed by URL + ref alone
+ * ({@link resolveCacheDir}). An existing cache for that key is reused; otherwise
+ * the index is cloned, built, and saved (with the build-time content hash
+ * recorded for transparency, not validation).
+ */
+export async function loadOrBuildIndex(
+  source: string,
+  options: LoadOrBuildOptions = {},
+): Promise<CspIndex> {
+  const content = options.content ?? DEFAULT_CONTENT
+  const { baseDir, ref, modelPath } = options
+  const isGit = isGitUrl(source)
+
+  const locationOptions: CacheLocationOptions = {}
+  if (baseDir !== undefined)
+    locationOptions.baseDir = baseDir
+  if (ref !== undefined)
+    locationOptions.ref = ref
+
+  const cacheDir = resolveCacheDir(source, content, locationOptions)
+  ensureCacheDir(cacheDir, baseDir !== undefined ? { baseDir } : {})
+
+  // The source-file hash is the cache-validity oracle for local paths; git
+  // sources have no cheap live hash, so their key alone gates reuse.
+  const sourceHash = isGit ? null : computeContentHash(await collectSourceFiles(source, content))
+
+  const cached = await tryReuse(cacheDir, isGit, sourceHash)
+  if (cached !== null)
+    return cached
+
+  const buildOptions: { ref?: string, modelPath?: string } = {}
+  if (ref !== undefined)
+    buildOptions.ref = ref
+  if (modelPath !== undefined)
+    buildOptions.modelPath = modelPath
+
+  const index = await buildIndex(source, isGit, content, buildOptions)
+  await index.save(cacheDir, sourceHash !== null ? { contentHash: sourceHash } : {})
+  return index
+}
+
+/**
+ * Reuse a cached index when present and valid, else `null`. For git sources a
+ * present manifest is enough (URL+ref keyed); for local paths the manifest's
+ * `contentHash` must equal the live `sourceHash`.
+ */
+async function tryReuse(
+  cacheDir: string,
+  isGit: boolean,
+  sourceHash: string | null,
+): Promise<CspIndex | null> {
+  if (!existsSync(join(cacheDir, 'manifest.json')))
+    return null
+
+  let cached: CspIndex
+  try {
+    cached = await CspIndex.loadFromDisk(cacheDir)
+  }
+  catch {
+    // Corrupt/partial cache entry — treat as a miss and rebuild.
+    return null
+  }
+
+  if (isGit)
+    return cached
+
+  const manifest = JSON.parse(readFileSync(join(cacheDir, 'manifest.json'), 'utf8')) as { contentHash?: string }
+  return manifest.contentHash === sourceHash ? cached : null
+}
+
+/** Build a fresh index from a local path or git URL. */
+async function buildIndex(
+  source: string,
+  isGit: boolean,
+  content: readonly ContentType[],
+  options: { ref?: string, modelPath?: string },
+): Promise<CspIndex> {
+  if (isGit) {
+    const gitOptions: CspIndexFromGitOptions = { content }
+    if (options.ref !== undefined)
+      gitOptions.ref = options.ref
+    if (options.modelPath !== undefined)
+      gitOptions.modelPath = options.modelPath
+    return CspIndex.fromGit(source, gitOptions)
+  }
+  const fromPathOptions: { content: readonly ContentType[], modelPath?: string } = { content }
+  if (options.modelPath !== undefined)
+    fromPathOptions.modelPath = options.modelPath
+  return CspIndex.fromPath(source, fromPathOptions)
 }
