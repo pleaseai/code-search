@@ -1,0 +1,19 @@
+src/cli.test.ts
+  s_03c2eb254feccd::t_d1e5fb87ee4301 230-241
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "aa7480718937f2559864d46b6e208836f5c81439",
+  "prompts": {},
+  "sessions": {
+    "s_03c2eb254feccd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bff2e159-8947-40e3-b887-99924257120b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
