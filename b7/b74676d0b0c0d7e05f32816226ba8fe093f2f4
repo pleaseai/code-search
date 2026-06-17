@@ -1,0 +1,44 @@
+.claude/agent-memory/review-review-silent-failure-hunter/csp-error-handling-conventions.md
+  s_03c2eb254feccd::t_3cf13e5a007e8f 1-20
+src/indexing/index.ts
+  s_03c2eb254feccd::t_426bec2865cb0f 371-375,377,380
+  s_03c2eb254feccd::t_cc7f216e2955c9 429-435
+  s_03c2eb254feccd::t_ba035f77a37961 464-498
+.claude/agent-memory/review-review-pr-test-analyzer/MEMORY.md
+  s_03c2eb254feccd::t_6e5aee28e242d5 1-3
+src/indexing/cache.ts
+  s_03c2eb254feccd::t_a5d29484a18dd8 17,22
+  s_03c2eb254feccd::t_f82344a99833c1 325-326,329-345,347
+  s_03c2eb254feccd::t_23e01b1eb32fbb 158-168
+  s_03c2eb254feccd::t_ae9beb0c025df5 172,178
+.claude/agent-memory/review-review-type-design-analyzer/serialization-trust-boundaries.md
+  s_03c2eb254feccd::t_df5bd76f84792b 1-18
+.claude/agent-memory/review-review-type-design-analyzer/MEMORY.md
+  s_03c2eb254feccd::t_b6ca827100839d 1-3
+src/indexing/index.test.ts
+  s_03c2eb254feccd::t_50dc51f469352c 179-189
+  s_03c2eb254feccd::t_1f17dbe6ab0803 398-406,409-410
+  s_03c2eb254feccd::t_3874e7624c10f3 407-408
+.claude/agent-memory/review-review-silent-failure-hunter/MEMORY.md
+  s_03c2eb254feccd::t_581ccefc4eb069 1-3
+src/indexing/cache.test.ts
+  s_03c2eb254feccd::t_3231b334a38392 297-312
+.claude/agent-memory/review-review-pr-test-analyzer/csp-test-patterns.md
+  s_03c2eb254feccd::t_90802197da820e 1-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "b7b74676d0b0c0d7e05f32816226ba8fe093f2f4",
+  "prompts": {},
+  "sessions": {
+    "s_03c2eb254feccd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bff2e159-8947-40e3-b887-99924257120b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
