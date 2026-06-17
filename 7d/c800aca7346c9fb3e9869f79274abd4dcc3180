@@ -1,0 +1,19 @@
+.please/docs/tracks/active/cspindex-orchestrator-20260617/metadata.json
+  s_03c2eb254feccd::t_d87c7d801578e6 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "7dc800aca7346c9fb3e9869f79274abd4dcc3180",
+  "prompts": {},
+  "sessions": {
+    "s_03c2eb254feccd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bff2e159-8947-40e3-b887-99924257120b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
