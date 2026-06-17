@@ -207,7 +207,7 @@ describe('csp search (stub-mocked)', () => {
     }) as typeof process.stdout.write
     try {
       const code = await runCli(['search', 'foo', '.', '-k', '7'], {
-        fromPath: async () => fakeIndex as CspIndex,
+        loadOrBuild: async () => fakeIndex as CspIndex,
       })
       expect(code).toBe(0)
     }
@@ -250,7 +250,7 @@ describe('csp search (stub-mocked)', () => {
     }) as typeof process.stdout.write
     try {
       await runCli(['search', 'foo', '.'], {
-        fromPath: async () => fakeIndex as CspIndex,
+        loadOrBuild: async () => fakeIndex as CspIndex,
       })
     }
     finally {
@@ -424,7 +424,7 @@ describe('csp find-related validates line', () => {
     }) as typeof process.stderr.write
     try {
       const code = await runCli(['find-related', 'src/auth.ts', '42abc', '.'], {
-        fromPath: async () => ({ chunks: [] }) as unknown as CspIndex,
+        loadOrBuild: async () => ({ chunks: [] }) as unknown as CspIndex,
       })
       expect(code).toBe(1)
     }
@@ -501,7 +501,7 @@ describe('runCli error handling', () => {
     }) as typeof process.stderr.write
     try {
       const code = await runCli(['search', 'foo', '--content', 'bogus'], {
-        fromPath: async () => ({ chunks: [] }) as unknown as CspIndex,
+        loadOrBuild: async () => ({ chunks: [] }) as unknown as CspIndex,
       })
       expect(code).toBe(1)
     }
@@ -723,5 +723,115 @@ describe('csp index -o → search --index (real roundtrip, no seams)', () => {
     // A non-empty result set (or an explicit "No results") must be valid JSON.
     const out2 = JSON.parse(writes.join('').trim().split('\n').pop() ?? '{}')
     expect(out2).toBeDefined()
+  })
+})
+
+describe('csp search/find-related (no --index) auto-caches via loadOrBuildIndex (T011)', () => {
+  function captureStdout(): { writes: string[], restore: () => void } {
+    const writes: string[] = []
+    const origWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stdout.write
+    return { writes, restore: () => { process.stdout.write = origWrite } }
+  }
+
+  test('search without --index routes through the loadOrBuild seam with source + content + topK', async () => {
+    let captured: { source?: string, content?: ContentType[], ref?: string | undefined } = {}
+    const fakeIndex: Partial<CspIndex> = {
+      chunks: [],
+      search: (): SearchResult[] => [],
+    }
+    const { writes, restore } = captureStdout()
+    try {
+      const code = await runCli(['search', 'foo', './my-project', '-k', '3'], {
+        loadOrBuild: async (source, opts) => {
+          captured = { source, content: opts.content, ref: opts.ref }
+          return fakeIndex as CspIndex
+        },
+        // fromPath must NOT be used for the build branch anymore.
+        fromPath: async () => { throw new Error('fromPath must not run when auto-cache is wired') },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      restore()
+    }
+    expect(captured.source).toBe('./my-project')
+    expect(captured.content).toEqual([ContentType.CODE])
+    expect(JSON.parse(writes.join('').trim())).toEqual({ error: 'No results found.' })
+  })
+
+  test('search without a path argument defaults the source to "."', async () => {
+    let capturedSource: string | undefined
+    const fakeIndex: Partial<CspIndex> = { chunks: [], search: (): SearchResult[] => [] }
+    const { restore } = captureStdout()
+    try {
+      const code = await runCli(['search', 'foo'], {
+        loadOrBuild: async (source) => { capturedSource = source; return fakeIndex as CspIndex },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      restore()
+    }
+    expect(capturedSource).toBe('.')
+  })
+
+  test('find-related without --index routes through the loadOrBuild seam with its path source', async () => {
+    let capturedSource: string | undefined
+    const seedChunk = { content: 'x', filePath: 'a.ts', startLine: 1, endLine: 5, language: 'typescript' }
+    const fakeIndex: Partial<CspIndex> = {
+      chunks: [seedChunk],
+      findRelated: (): SearchResult[] => [],
+    }
+    const { restore } = captureStdout()
+    try {
+      const code = await runCli(['find-related', 'a.ts', '2', './repo'], {
+        loadOrBuild: async (source) => { capturedSource = source; return fakeIndex as CspIndex },
+        fromPath: async () => { throw new Error('fromPath must not run when auto-cache is wired') },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      restore()
+    }
+    expect(capturedSource).toBe('./repo')
+  })
+
+  test('--index still bypasses the auto-cache seam (T008 guarantee preserved)', async () => {
+    let loadedFrom: string | undefined
+    let autoCacheCalled = false
+    const fakeIndex: Partial<CspIndex> = { chunks: [], search: (): SearchResult[] => [] }
+    const { restore } = captureStdout()
+    try {
+      const code = await runCli(['search', 'foo', '--index', '/explicit/idx'], {
+        readIndex: async (p: string) => { loadedFrom = p; return fakeIndex as CspIndex },
+        loadOrBuild: async () => { autoCacheCalled = true; return fakeIndex as CspIndex },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      restore()
+    }
+    expect(loadedFrom).toBe('/explicit/idx')
+    expect(autoCacheCalled).toBe(false)
+  })
+
+  test('ref flag is forwarded to the loadOrBuild seam', async () => {
+    let capturedRef: string | undefined
+    const fakeIndex: Partial<CspIndex> = { chunks: [], search: (): SearchResult[] => [] }
+    const { restore } = captureStdout()
+    try {
+      const code = await runCli(['search', 'foo', 'https://github.com/o/r', '--ref', 'v1.2.3'], {
+        loadOrBuild: async (_source, opts) => { capturedRef = opts.ref; return fakeIndex as CspIndex },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      restore()
+    }
+    expect(capturedRef).toBe('v1.2.3')
   })
 })

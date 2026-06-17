@@ -6,6 +6,7 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 // TODO(integration): replace stub when sibling modules land
+import { loadOrBuildIndex } from './indexing/cache.ts'
 import { CspIndex } from './indexing/index.ts'
 import { serve } from './mcp/server.ts'
 import { clearSavings, formatSavingsReport } from './stats.ts'
@@ -223,6 +224,12 @@ Examples:
 
 interface RunOptions {
   readIndex?: (path: string) => Promise<CspIndex>
+  /**
+   * Build-or-reuse seam for the auto-cache path (search/find-related without
+   * `--index`). Defaults to {@link loadOrBuildIndex}; tests inject it to avoid
+   * touching the real `~/.csp` home.
+   */
+  loadOrBuild?: (source: string, opts: { content: ContentType[], ref?: string | undefined }) => Promise<CspIndex>
   fromPath?: (path: string, opts: { content: ContentType[] }) => Promise<CspIndex>
   fromGit?: (path: string, opts: { content: ContentType[] }) => Promise<CspIndex>
   serveMcp?: (path: string | undefined, opts: { ref?: string | undefined, content: ContentType[] }) => Promise<void>
@@ -269,6 +276,21 @@ export async function _runInit(opts: {
   const write = opts.writeFileImpl ?? ((p: string, c: string) => writeFile(p, c, 'utf8'))
   await write(dest, content)
   process.stdout.write(`Created ${relDest}\n`)
+}
+
+/**
+ * Default auto-cache seam: forward to {@link loadOrBuildIndex}, re-narrowing
+ * `ref` so an absent ref is omitted rather than passed as explicit `undefined`
+ * (required under `exactOptionalPropertyTypes`).
+ */
+function _defaultLoadOrBuild(
+  source: string,
+  opts: { content: ContentType[], ref?: string | undefined },
+): Promise<CspIndex> {
+  return loadOrBuildIndex(source, {
+    content: opts.content,
+    ...(opts.ref !== undefined ? { ref: opts.ref } : {}),
+  })
 }
 
 async function _runIndex(opts: {
@@ -412,17 +434,20 @@ export async function runCli(argv: string[], options: RunOptions = {}): Promise<
       const indexPath = _getStringFlag(flags, 'index')
       let index: CspIndex
       if (indexPath !== undefined) {
+        // Explicit `--index`: load the pre-built index verbatim. The auto-cache
+        // is intentionally bypassed so an explicit path is always honored.
         const loadImpl = options.readIndex ?? ((p: string) => CspIndex.loadFromDisk(p))
         index = await loadImpl(indexPath)
       }
       else {
+        // No `--index`: route through the on-disk auto-cache, which keys on the
+        // source (local path or git URL), content selection, and git ref, then
+        // reuses a fresh entry or builds + persists one under `~/.csp/index/`.
         const pathArg = command === 'search' ? positional[1] ?? '.' : positional[2] ?? '.'
         const content = _resolveContent(_getContentFlag(flags), _getBoolFlag(flags, 'include-text-files'))
-        const fromPath = options.fromPath ?? ((p: string, o: { content: ContentType[] }) => CspIndex.fromPath(p, o))
-        const fromGit = options.fromGit ?? ((p: string, o: { content: ContentType[] }) => CspIndex.fromGit(p, o))
-        index = isGitUrl(pathArg)
-          ? await fromGit(pathArg, { content })
-          : await fromPath(pathArg, { content })
+        const ref = _getStringFlag(flags, 'ref')
+        const loadOrBuild = options.loadOrBuild ?? _defaultLoadOrBuild
+        index = await loadOrBuild(pathArg, { content, ...(ref !== undefined ? { ref } : {}) })
       }
 
       const topK = _getNumberFlag(flags, 'top-k', 'k') ?? 5
