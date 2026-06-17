@@ -1,0 +1,8 @@
+{
+  "mcp_servers": {
+    "csp": {
+      "command": "bunx",
+      "args": ["@pleaseai/csp", "mcp"]
+    }
+  }
+}
