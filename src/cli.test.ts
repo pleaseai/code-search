@@ -1,7 +1,7 @@
 // Port of (none) — unit tests for src/cli.ts
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync } from 'node:fs'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -572,5 +572,156 @@ describe('csp index --content', () => {
     }
     expect(captured.path).toBe('.')
     expect(captured.content).toEqual([ContentType.CODE, ContentType.DOCS, ContentType.CONFIG])
+  })
+})
+
+describe('csp index -o (explicit path persistence)', () => {
+  test('saves the built index to the explicit -o directory', async () => {
+    let savedTo: string | undefined
+    const fakeIndex: Partial<CspIndex> = {
+      chunks: [],
+      save: async (dir: string) => { savedTo = dir },
+    }
+    const tmp = await mkdtemp(join(tmpdir(), 'csp-cli-index-out-'))
+    const out = join(tmp, 'idx')
+    try {
+      const code = await runCli(['index', '.', '-o', out], {
+        fromPath: async () => fakeIndex as CspIndex,
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      await rm(tmp, { recursive: true, force: true })
+    }
+    // The explicit -o path must be the directory passed to save (no cache rerouting).
+    expect(savedTo).toBe(out)
+  })
+
+  test('without -o keeps the required-flag error and exits 1', async () => {
+    const errs: string[] = []
+    const origErr = process.stderr.write.bind(process.stderr)
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      errs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stderr.write
+    try {
+      const code = await runCli(['index', '.'], {
+        fromPath: async () => ({ chunks: [], save: async () => {} }) as unknown as CspIndex,
+      })
+      expect(code).toBe(1)
+    }
+    finally {
+      process.stderr.write = origErr
+    }
+    expect(errs.join('')).toContain('--out / -o is required for `index`')
+  })
+})
+
+describe('csp search/find-related --index (explicit path respected)', () => {
+  test('search --index loads via loadFromDisk seam with the explicit path', async () => {
+    let loadedFrom: string | undefined
+    const fakeIndex: Partial<CspIndex> = {
+      chunks: [],
+      search: (): SearchResult[] => [],
+    }
+    const writes: string[] = []
+    const origWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stdout.write
+    try {
+      const code = await runCli(['search', 'foo', '--index', '/some/explicit/idx'], {
+        readIndex: async (p: string) => { loadedFrom = p; return fakeIndex as CspIndex },
+        // fromPath provided to prove it is NOT used when --index is set.
+        fromPath: async () => { throw new Error('fromPath must not run when --index is given') },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      process.stdout.write = origWrite
+    }
+    expect(loadedFrom).toBe('/some/explicit/idx')
+    expect(JSON.parse(writes.join('').trim())).toEqual({ error: 'No results found.' })
+  })
+
+  test('find-related --index loads via loadFromDisk seam with the explicit path', async () => {
+    let loadedFrom: string | undefined
+    const seedChunk = { content: 'x', filePath: 'a.ts', startLine: 1, endLine: 5, language: 'typescript' }
+    const fakeIndex: Partial<CspIndex> = {
+      chunks: [seedChunk],
+      findRelated: (): SearchResult[] => [],
+    }
+    const writes: string[] = []
+    const origWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stdout.write
+    try {
+      const code = await runCli(['find-related', 'a.ts', '2', '--index', '/explicit/idx2'], {
+        readIndex: async (p: string) => { loadedFrom = p; return fakeIndex as CspIndex },
+        fromPath: async () => { throw new Error('fromPath must not run when --index is given') },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      process.stdout.write = origWrite
+    }
+    expect(loadedFrom).toBe('/explicit/idx2')
+  })
+
+  test('search --index with a missing path surfaces a clear error and exits 1', async () => {
+    const errs: string[] = []
+    const origErr = process.stderr.write.bind(process.stderr)
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      errs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stderr.write
+    const missing = join(tmpdir(), `csp-no-such-index-${Date.now()}`)
+    try {
+      // No readIndex seam → real CspIndex.loadFromDisk runs and must throw a clear error.
+      const code = await runCli(['search', 'foo', '--index', missing])
+      expect(code).toBe(1)
+    }
+    finally {
+      process.stderr.write = origErr
+    }
+    expect(errs.join('')).toContain('Index not found:')
+    expect(errs.join('')).toContain(missing)
+  })
+})
+
+describe('csp index -o → search --index (real roundtrip, no seams)', () => {
+  test('persisted index is loadable and searchable via the explicit path', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'csp-cli-roundtrip-'))
+    const out = join(tmp, 'idx')
+    const writes: string[] = []
+    const origWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stdout.write
+    try {
+      // Build a real CspIndex from a tiny source dir, persist via `csp index -o`.
+      const src = join(tmp, 'src')
+      await mkdir(src, { recursive: true })
+      await writeFile(join(src, 'auth.ts'), 'export function login(user: string) { return user }\n', 'utf8')
+      const idxCode = await runCli(['index', src, '-o', out])
+      expect(idxCode).toBe(0)
+      // The manifest proves persistence happened at the explicit path.
+      expect(existsSync(join(out, 'manifest.json'))).toBe(true)
+
+      // Load it back through the explicit --index path and search.
+      const searchCode = await runCli(['search', 'login', '--index', out, '-k', '3'])
+      expect(searchCode).toBe(0)
+    }
+    finally {
+      process.stdout.write = origWrite
+      await rm(tmp, { recursive: true, force: true })
+    }
+    // A non-empty result set (or an explicit "No results") must be valid JSON.
+    const out2 = JSON.parse(writes.join('').trim().split('\n').pop() ?? '{}')
+    expect(out2).toBeDefined()
   })
 })
