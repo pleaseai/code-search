@@ -1,0 +1,12 @@
+{
+  "track_id": "cspindex-orchestrator-20260617",
+  "type": "feature",
+  "status": "planned",
+  "created_at": "2026-06-17T00:00:00Z",
+  "updated_at": "2026-06-17T00:00:00Z",
+  "issue": "#18",
+  "pr": "",
+  "project": "2",
+  "project_item_id": "",
+  "origin": "pleaseai/code-search#18"
+}
