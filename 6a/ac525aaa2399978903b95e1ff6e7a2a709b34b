@@ -1,0 +1,21 @@
+.claude/agent-memory/please-implement-executor/csp-clear-index-safety-guard.md
+  s_03c2eb254feccd::t_625a7134caac7f 1-16
+.claude/agent-memory/please-implement-executor/MEMORY.md
+  s_03c2eb254feccd::t_60b7c3871106d4 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "6aac525aaa2399978903b95e1ff6e7a2a709b34b",
+  "prompts": {},
+  "sessions": {
+    "s_03c2eb254feccd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bff2e159-8947-40e3-b887-99924257120b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
