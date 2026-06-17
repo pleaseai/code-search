@@ -1,7 +1,8 @@
 // Port of src/semble/stats.py
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
+import process from 'node:process'
 
 /**
  * Call type for token-savings tracking.
@@ -114,6 +115,27 @@ export function saveSearchStats(
   }
 }
 
+/**
+ * Delete the savings stats file if it exists.
+ *
+ * Deletion (not truncation) mirrors semble's `clear` (`path.unlink()`) and
+ * lets `csp savings` fall back to the "No stats yet" message — a truncated,
+ * still-present file would instead render an all-zero report. Best-effort:
+ * a permission error or broken symlink is swallowed and reported as
+ * `cleared: false` rather than crashing the CLI.
+ */
+export function clearSavings(): { path: string, cleared: boolean } {
+  if (!existsSync(_STATS_FILE))
+    return { path: _STATS_FILE, cleared: false }
+  try {
+    rmSync(_STATS_FILE)
+    return { path: _STATS_FILE, cleared: true }
+  }
+  catch {
+    return { path: _STATS_FILE, cleared: false }
+  }
+}
+
 interface StatsRecord {
   ts: number
   call: string
@@ -215,6 +237,33 @@ function padRight(s: string, width: number): string {
   return s + ' '.repeat(width - s.length)
 }
 
+function padLeft(s: string, width: number): string {
+  if (s.length >= width)
+    return s
+  return ' '.repeat(width - s.length) + s
+}
+
+/**
+ * Whether ANSI colors should be emitted. Mirrors semble's `_use_color`:
+ * suppressed under `NO_COLOR`, a `dumb` terminal, or a non-TTY stdout.
+ */
+function useColor(): boolean {
+  return !('NO_COLOR' in process.env)
+    && process.env.TERM !== 'dumb'
+    && Boolean(process.stdout.isTTY)
+}
+
+/** Wrap `text` in an ANSI color `code` when `enabled`. */
+function color(code: string, text: string, enabled: boolean): string {
+  return enabled ? `[${code}m${text}[0m` : text
+}
+
+/** Color a savings percentage by value: green ≥80, yellow ≥50, red below. */
+function colorRatio(pct: number, enabled: boolean): string {
+  const code = pct >= 80 ? '32' : pct >= 50 ? '33' : '31'
+  return color(code, `${pct}%`, enabled)
+}
+
 function formatSavedTokens(savedTokens: number): string {
   if (savedTokens >= 1_000_000)
     return `~${(savedTokens / 1_000_000).toFixed(1)}M`
@@ -235,8 +284,12 @@ export interface FormatSavingsReportOptions {
 /**
  * Return a formatted token-savings report.
  *
- * Output mirrors semble's ASCII bar chart byte-for-byte, with the header
- * swapped from "Semble Token Savings" → "Csp Token Savings".
+ * Adopts semble's redesigned layout (PR #197): a headline summary
+ * (Total saved / Total calls / Efficiency bar) followed by a "By Period"
+ * table, with ANSI color when stdout is a color-capable TTY. Two csp
+ * divergences are preserved: the header reads "Csp Token Savings" (not
+ * "Semble Token Savings"), and the "By Call Type" breakdown stays gated
+ * behind `--verbose` rather than always shown.
  */
 export function formatSavingsReport(options: FormatSavingsReportOptions = {}): string {
   const target = options.path ?? _STATS_FILE
@@ -246,44 +299,84 @@ export function formatSavingsReport(options: FormatSavingsReportOptions = {}): s
     return 'No stats yet. Run a search first.'
 
   const summary = buildSavingsSummary(target)
-  const barWidth = 16
-  const heavyLine = `  ${'═'.repeat(64)}`
-  const lightLine = `  ${'─'.repeat(64)}`
+  const enabled = useColor()
+  const barWidth = 24
+  const borderWidth = 72
+  const heavyLine = `  ${color('38;5;244', '═'.repeat(borderWidth), enabled)}`
+  const lightLine = `  ${color('38;5;244', '─'.repeat(borderWidth), enabled)}`
+
+  const allTime = summary.buckets['All time']!
+  const totalSavedTokens = Math.floor(allTime.savedChars / 4) // ~4 chars/token approximation
+  const overallPct = allTime.fileChars > 0
+    ? Math.round((allTime.savedChars / allTime.fileChars) * 100)
+    : 0
+  const efficiencyFilled = Math.round((overallPct / 100) * barWidth)
+  const efficiencyBar
+    = color('32', '█'.repeat(efficiencyFilled), enabled)
+      + color('38;5;244', '░'.repeat(barWidth - efficiencyFilled), enabled)
 
   const lines: string[] = [
     '',
-    '  Csp Token Savings',
+    `  ${color('1;36', 'Csp Token Savings', enabled)}`,
     heavyLine,
-    `  ${padRight('Period', 12)}  ${padRight('Calls', 6)}  Savings`,
+    '',
+    `  ${color('1', 'Total saved:', enabled)}  ${color('1;33', `${formatSavedTokens(totalSavedTokens)} tokens`, enabled)}  (${colorRatio(overallPct, enabled)})`,
+    `  ${color('1', 'Total calls:', enabled)}  ${color('1;33', formatCalls(allTime.calls), enabled)}`,
+    `  ${color('1', 'Efficiency:', enabled)}  ${efficiencyBar}  ${colorRatio(overallPct, enabled)}`,
+    '',
+    `  ${color('1', 'By Period', enabled)}`,
+    lightLine,
+    `  ${padRight('Period', 14)}  ${padLeft('Calls', 8)}  ${padLeft('Saved', 14)}  Ratio`,
     lightLine,
   ]
 
   for (const [label, bucket] of Object.entries(summary.buckets)) {
-    const savedTokens = Math.floor(bucket.savedChars / 4) // ~4 chars/token approximation
-    const savedStr = formatSavedTokens(savedTokens)
+    const savedTokens = Math.floor(bucket.savedChars / 4)
+    const savedStr = `${formatSavedTokens(savedTokens)} tokens`
     const callsStr = formatCalls(bucket.calls)
+    let rowBar: string
+    let ratioStr: string
     if (bucket.fileChars > 0) {
       const ratio = bucket.savedChars / bucket.fileChars
       const filled = Math.round(ratio * barWidth)
-      const bar = '█'.repeat(filled) + '░'.repeat(barWidth - filled)
-      const pct = Math.round(ratio * 100)
-      lines.push(`  ${padRight(label, 12)}  ${padRight(callsStr, 6)}  [${bar}]  ${savedStr} tokens (${pct}%)`)
+      rowBar = color('32', '█'.repeat(filled), enabled) + color('38;5;244', '░'.repeat(barWidth - filled), enabled)
+      ratioStr = colorRatio(Math.round(ratio * 100), enabled)
     }
     else {
-      lines.push(`  ${padRight(label, 12)}  ${padRight(callsStr, 6)}  [${'░'.repeat(barWidth)}]  ${savedStr} tokens`)
+      rowBar = color('38;5;244', '░'.repeat(barWidth), enabled)
+      ratioStr = color('38;5;244', '–', enabled)
     }
+    lines.push(
+      `  ${color('1', padRight(label, 14), enabled)}  ${color('1;33', padLeft(callsStr, 8), enabled)}  `
+      + `${color('1;33', padLeft(savedStr, 14), enabled)}  ${rowBar}  ${ratioStr}`,
+    )
   }
 
   const callTypeEntries = Object.entries(summary.callTypeCounts)
   if (verbose && callTypeEntries.length > 0) {
-    lines.push('', '  Usage Breakdown', lightLine, `  ${padRight('Call type', 16)}  Calls`)
-    const sorted = callTypeEntries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    for (const [callType, count] of sorted) {
-      const countStr = count >= 1000 ? `${(count / 1000).toFixed(1)}k` : String(count)
-      lines.push(`  ${padRight(callType, 16)}  ${countStr}`)
-    }
-    lines.push(heavyLine)
+    lines.push(
+      '',
+      `  ${color('1', 'By Call Type', enabled)}`,
+      lightLine,
+      `  ${padRight('#', 4)}  ${padRight('Call type', 16)}  ${padLeft('Calls', 8)}  Share`,
+      lightLine,
+    )
+    const total = callTypeEntries.reduce((sum, [, count]) => sum + count, 0)
+    // Sort by call count descending; ties keep insertion order.
+    const sorted = [...callTypeEntries].sort(([, a], [, b]) => b - a)
+    sorted.forEach(([callType, count], i) => {
+      const share = total > 0 ? count / total : 0
+      const filled = Math.max(1, Math.round(share * 16))
+      const bar = color('32', '█'.repeat(filled), enabled) + color('38;5;244', '░'.repeat(16 - filled), enabled)
+      const rank = `${i + 1}.`
+      lines.push(
+        `  ${color('38;5;244', padRight(rank, 4), enabled)}  ${padRight(callType, 16)}  `
+        + `${color('1;33', padLeft(formatCalls(count), 8), enabled)}  ${bar}  `
+        + `${color('38;5;244', padLeft(`${Math.round(share * 100)}%`, 4), enabled)}`,
+      )
+    })
   }
+  lines.push(heavyLine)
   lines.push('')
   return lines.join('\n')
 }

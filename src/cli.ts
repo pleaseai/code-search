@@ -8,17 +8,21 @@ import { fileURLToPath } from 'node:url'
 // TODO(integration): replace stub when sibling modules land
 import { CspIndex } from './indexing/index.ts'
 import { serve } from './mcp/server.ts'
-import { formatSavingsReport } from './stats.ts'
+import { clearSavings, formatSavingsReport } from './stats.ts'
 import { ContentType } from './types.ts'
 import { formatResults, isGitUrl, resolveChunk } from './utils.ts'
 
 export enum Agent {
+  Antigravity = 'antigravity',
   Claude = 'claude',
+  Commandcode = 'commandcode',
   Copilot = 'copilot',
   Cursor = 'cursor',
   Gemini = 'gemini',
   Kiro = 'kiro',
   Opencode = 'opencode',
+  Pi = 'pi',
+  Reasonix = 'reasonix',
 }
 
 const DEFAULT_AGENT = Agent.Claude
@@ -27,11 +31,14 @@ const CLI_DISPATCH_ARGS = new Set([
   'find-related',
   'init',
   'savings',
+  'clear',
   'index',
   'mcp',
   '-h',
   '--help',
 ])
+
+const CLEAR_CHOICES = ['all', 'index', 'savings'] as const
 
 const CONTENT_CHOICES = ['code', 'docs', 'config', 'all'] as const
 
@@ -189,13 +196,14 @@ Commands:
   find-related <file> <line> [path]  Find code similar to a specific location.
   init                          Write a csp sub-agent file for your coding agent.
   savings                       Show token savings and usage stats.
+  clear <all|index|savings>     Clear cached data (savings telemetry).
   mcp [path]                    Start the MCP server (optionally pre-index path).
 
 Common options:
   --top-k <n>, -k <n>           Number of results (default: 5).
   --content <types...>          Content types: code, docs, config, all (default: code).
   --index <path>                Path to a pre-built index.
-  --agent <name>, -a <name>     One of: claude, copilot, cursor, gemini, kiro, opencode.
+  --agent <name>, -a <name>     One of: antigravity, claude, commandcode, copilot, cursor, gemini, kiro, opencode, pi, reasonix.
   --force                       Overwrite if file already exists (init).
   -o, --out <path>              Write the pre-built index to this path (index).
   --ref <ref>                   Branch or tag for git URLs (mcp).
@@ -221,6 +229,7 @@ interface RunOptions {
   writeFileImpl?: (path: string, content: string) => Promise<void>
   readAgentFile?: (agent: Agent) => Promise<string>
   formatSavings?: (opts: { verbose: boolean }) => string
+  clearSavings?: () => { path: string, cleared: boolean }
   cwd?: () => string
 }
 
@@ -277,6 +286,44 @@ async function _runIndex(opts: {
     : await fromPath(path, { content })
   await mkdir(out, { recursive: true })
   await index.save(out)
+}
+
+/**
+ * Run the `clear` subcommand.
+ *
+ * `clear savings` (and `all`) deletes the `~/.csp/savings.jsonl` telemetry
+ * file. `clear index` is currently a no-op note: index persistence is not
+ * wired up yet (the `CspIndex` orchestrator is a stub), and the storage model
+ * — repo-local `.csp/` vs a global cache — is still undecided. For now
+ * `csp index -o <path>` writes only to the path you pass, so delete those
+ * directories yourself.
+ */
+export function _runClear(
+  type: string,
+  clearSavingsImpl: () => { path: string, cleared: boolean } = clearSavings,
+): number {
+  if (!(CLEAR_CHOICES as readonly string[]).includes(type)) {
+    process.stderr.write(`Invalid clear type: ${type}. Choices: ${CLEAR_CHOICES.join(', ')}\n`)
+    return 1
+  }
+
+  if (type === 'index' || type === 'all') {
+    process.stdout.write(
+      'No index cache to clear — index persistence is not wired up yet; '
+      + '`csp index -o <path>` writes only to the path you choose.\n',
+    )
+  }
+
+  if (type === 'savings' || type === 'all') {
+    const { path: statsPath, cleared } = clearSavingsImpl()
+    process.stdout.write(
+      cleared
+        ? `Cleared savings at \`${statsPath}\`\n`
+        : `No savings file found at \`${statsPath}\`\n`,
+    )
+  }
+
+  return 0
 }
 
 export async function runCli(argv: string[], options: RunOptions = {}): Promise<number> {
@@ -338,6 +385,17 @@ export async function runCli(argv: string[], options: RunOptions = {}): Promise<
       const fmt = options.formatSavings ?? formatSavingsReport
       process.stdout.write(fmt({ verbose }))
       return 0
+    }
+
+    if (command === 'clear') {
+      const type = positional[0]
+      if (type === undefined) {
+        process.stderr.write(`clear requires a type. Choices: ${CLEAR_CHOICES.join(', ')}\n`)
+        return 1
+      }
+      return options.clearSavings
+        ? _runClear(type, options.clearSavings)
+        : _runClear(type)
     }
 
     if (command === 'mcp') {
@@ -421,7 +479,18 @@ export async function runCli(argv: string[], options: RunOptions = {}): Promise<
 }
 
 function _coerceAgent(raw: string): Agent {
-  const candidates: Agent[] = [Agent.Claude, Agent.Copilot, Agent.Cursor, Agent.Gemini, Agent.Kiro, Agent.Opencode]
+  const candidates: Agent[] = [
+    Agent.Antigravity,
+    Agent.Claude,
+    Agent.Commandcode,
+    Agent.Copilot,
+    Agent.Cursor,
+    Agent.Gemini,
+    Agent.Kiro,
+    Agent.Opencode,
+    Agent.Pi,
+    Agent.Reasonix,
+  ]
   for (const a of candidates) {
     if (a === raw) return a
   }

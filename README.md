@@ -332,7 +332,7 @@ By default the MCP server indexes only code files. To also index documentation, 
 
 ## Sub-agent setup
 
-Claude Code, Gemini CLI, Cursor, OpenCode, GitHub Copilot CLI, and Kiro all support a dedicated `csp` search sub-agent. Run `csp init` once in your project root:
+Claude Code, Gemini CLI, Cursor, OpenCode, GitHub Copilot CLI, Kiro, Antigravity, Command Code, Pi, and Reasonix all support a dedicated `csp` search sub-agent. Run `csp init` once in your project root:
 
 ```bash
 csp init                      # Claude Code  → .claude/agents/csp-search.md
@@ -341,6 +341,10 @@ csp init --agent cursor       # Cursor       → .cursor/agents/csp-search.md
 csp init --agent opencode     # OpenCode     → .opencode/agents/csp-search.md
 csp init --agent copilot      # Copilot CLI  → .github/agents/csp-search.md
 csp init --agent kiro         # Kiro         → .kiro/agents/csp-search.md
+csp init --agent antigravity  # Antigravity  → .antigravity/agents/csp-search.md
+csp init --agent commandcode  # Command Code → .commandcode/agents/csp-search.md
+csp init --agent pi           # Pi           → .pi/agents/csp-search.md
+csp init --agent reasonix     # Reasonix     → .reasonix/agents/csp-search.md
 ```
 
 If `csp` is not on `$PATH`, prefix the command with `bunx @pleaseai/csp`.
@@ -383,18 +387,42 @@ csp savings --verbose # also show breakdown by call type
 ```
 
 ```
-  csp Token Savings
-  ════════════════════════════════════════════════════════════════
-  Period        Calls   Savings
-  ────────────────────────────────────────────────────────────────
-  Today         42      [███████████████░]  ~58.4k tokens (95%)
-  Last 7 days   287     [██████████████░░]  ~312.4k tokens (90%)
-  All time      1.4k    [██████████████░░]  ~1.2M tokens (89%)
+  Csp Token Savings
+  ════════════════════════════════════════════════════════════════════════
+
+  Total saved:  ~1.2M tokens  (89%)
+  Total calls:  1.4k
+  Efficiency:  █████████████████████░░░  89%
+
+  By Period
+  ────────────────────────────────────────────────────────────────────────
+  Period             Calls           Saved  Ratio
+  ────────────────────────────────────────────────────────────────────────
+  Today                 42    ~58.4k tokens  ███████████████████████░  95%
+  Last 7 days          287   ~312.4k tokens  █████████████████████░░░  90%
+  All time             1.4k     ~1.2M tokens  █████████████████████░░░  89%
 ```
 
 Savings are calculated as follows: for each call, `csp` records the total character count of the unique files containing returned chunks and the character count of the snippets returned. Estimated tokens saved is `(file chars − snippet chars) / 4` (4 chars per token). This is a conservative estimate: the baseline is reading matched files in full, which is how coding agents often explore unfamiliar code.
 
+Output is colorized when stdout is a color-capable TTY (suppressed under `NO_COLOR`, a `dumb` terminal, or when piped). `--verbose` adds a "By Call Type" breakdown.
+
 Stats are stored in `~/.csp/savings.jsonl`.
+
+</details>
+
+<details>
+<summary>Clear</summary>
+
+`csp clear` removes cached data:
+
+```bash
+csp clear savings  # delete ~/.csp/savings.jsonl
+csp clear all      # currently the same as `savings`
+csp clear index    # prints a note (see below)
+```
+
+Index persistence is not wired up yet, and the storage model — repo-local `.csp/` vs a global cache — is still undecided, so `clear index` has nothing to remove for now. `csp index -o <path>` writes only to the path you pass; delete those directories yourself.
 
 </details>
 

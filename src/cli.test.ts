@@ -12,12 +12,16 @@ import { ContentType, type SearchResult } from './types.ts'
 
 describe('Agent enum', () => {
   test('enum values', () => {
+    expect(String(Agent.Antigravity)).toBe('antigravity')
     expect(String(Agent.Claude)).toBe('claude')
+    expect(String(Agent.Commandcode)).toBe('commandcode')
     expect(String(Agent.Copilot)).toBe('copilot')
     expect(String(Agent.Cursor)).toBe('cursor')
     expect(String(Agent.Gemini)).toBe('gemini')
     expect(String(Agent.Kiro)).toBe('kiro')
     expect(String(Agent.Opencode)).toBe('opencode')
+    expect(String(Agent.Pi)).toBe('pi')
+    expect(String(Agent.Reasonix)).toBe('reasonix')
   })
 })
 
@@ -33,6 +37,12 @@ describe('_agentPath', () => {
   })
   test('opencode → .opencode/agents/csp-search.md', () => {
     expect(_agentPath(Agent.Opencode)).toBe('.opencode/agents/csp-search.md')
+  })
+  test('antigravity → .antigravity/agents/csp-search.md', () => {
+    expect(_agentPath(Agent.Antigravity)).toBe('.antigravity/agents/csp-search.md')
+  })
+  test('reasonix → .reasonix/agents/csp-search.md', () => {
+    expect(_agentPath(Agent.Reasonix)).toBe('.reasonix/agents/csp-search.md')
   })
 })
 
@@ -281,6 +291,91 @@ describe('csp savings', () => {
   })
 })
 
+describe('csp clear', () => {
+  function captureStdout(): { writes: string[], restore: () => void } {
+    const writes: string[] = []
+    const origWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stdout.write
+    return { writes, restore: () => { process.stdout.write = origWrite } }
+  }
+
+  test('clear savings deletes the file and reports the path', async () => {
+    const { writes, restore } = captureStdout()
+    let called = 0
+    try {
+      const code = await runCli(['clear', 'savings'], {
+        clearSavings: () => { called++; return { path: '/tmp/x/savings.jsonl', cleared: true } },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      restore()
+    }
+    expect(called).toBe(1)
+    expect(writes.join('')).toContain('Cleared savings at `/tmp/x/savings.jsonl`')
+  })
+
+  test('clear savings reports when no file exists', async () => {
+    const { writes, restore } = captureStdout()
+    try {
+      await runCli(['clear', 'savings'], {
+        clearSavings: () => ({ path: '/tmp/x/savings.jsonl', cleared: false }),
+      })
+    }
+    finally {
+      restore()
+    }
+    expect(writes.join('')).toContain('No savings file found at `/tmp/x/savings.jsonl`')
+  })
+
+  test('clear index notes there is no managed index cache', async () => {
+    const { writes, restore } = captureStdout()
+    let called = 0
+    try {
+      await runCli(['clear', 'index'], {
+        clearSavings: () => { called++; return { path: '/tmp/x/savings.jsonl', cleared: true } },
+      })
+    }
+    finally {
+      restore()
+    }
+    expect(called).toBe(0) // index-only must not touch savings
+    expect(writes.join('')).toContain('No index cache to clear')
+  })
+
+  test('clear all clears savings and notes the index', async () => {
+    const { writes, restore } = captureStdout()
+    try {
+      await runCli(['clear', 'all'], {
+        clearSavings: () => ({ path: '/tmp/x/savings.jsonl', cleared: true }),
+      })
+    }
+    finally {
+      restore()
+    }
+    const out = writes.join('')
+    expect(out).toContain('No index cache to clear')
+    expect(out).toContain('Cleared savings at')
+  })
+
+  test('clear with an invalid type exits 1', async () => {
+    const code = await runCli(['clear', 'bogus'], {
+      clearSavings: () => ({ path: '/tmp/x/savings.jsonl', cleared: true }),
+    })
+    expect(code).toBe(1)
+  })
+
+  test('clear with no type exits 1', async () => {
+    const code = await runCli(['clear'], {
+      clearSavings: () => ({ path: '/tmp/x/savings.jsonl', cleared: true }),
+    })
+    expect(code).toBe(1)
+  })
+})
+
 describe('csp mcp', () => {
   test('dispatches to serve with path and content', async () => {
     let captured: { path?: string | undefined, ref?: string | undefined, content?: ContentType[] } = {}
@@ -333,6 +428,13 @@ describe('_readAgentFile', () => {
     const text = await _readAgentFile(Agent.Claude)
     expect(text.length).toBeGreaterThan(0)
     expect(text).toContain('csp')
+  })
+  test('a bundled template exists for every agent', async () => {
+    for (const agent of Object.values(Agent)) {
+      const text = await _readAgentFile(agent)
+      expect(text).toContain('name: csp-search')
+      expect(text).toContain('csp search')
+    }
   })
 })
 
