@@ -68,3 +68,16 @@ search/findRelated/stats cases. The planner correctly put the cross-file fixes i
   "filters match nothing → []" regression test. `findRelated` re-embeds the seed content,
   calls `semanticIndex.query(emb, topK+1)`, drops the seed chunk. Both kept SYNC (mcp/
   server.ts:370 and cli.ts call without await).
+
+**FULLY RESOLVED in T0A (2026-06-18):** the remaining scaffold-test debt is cleared.
+- `types.test.ts` missing exports → added camelCase round-trip helpers to `types.ts`
+  (`chunkToDict`/`chunkFromDict`/`chunkLocation`/`searchResultToDict`/`ChunkDictInput`),
+  kept SEPARATE from search.ts's snake_case `SearchResult.toDict` (two layers, no reuse).
+- `bm25Index.documents` → added a read-only `documents` getter on `Bm25Index` (sparse.ts)
+  returning per-doc token counts (`#state.docLengths`), so `.length === numDocs`.
+- enum casing in `types.test.ts`/`index.test.ts` → aligned tests to `CODE/DOCS/CONFIG`,
+  `SEARCH/FIND_RELATED` (source enum is the contract per CLAUDE.md).
+- `cli.test.ts` stub lacked `toDict` → added a snake_case `toDict`.
+- the "passes-isolated-fails-full-suite" indexing failures were a leaked `mock.module`,
+  fixed via DI in server.test.ts (see [[csp-bun-mock-module-irreversible]]).
+Full suite now 351 pass / 3 fail / 0 error (3 fails = T006/T007 throwing stubs, expected).

@@ -1,29 +1,27 @@
 ---
 name: csp-worktree-test-env-gotchas
-description: In this csp worktree, full `bun test` is contaminated by a sandbox tmpfs ENOSPC flood and ESLint can't run (missing jiti) — trust isolated runs, skip the lint gate
+description: In this csp worktree, "passes isolated/fails full-suite" was a leaked mock.module (now fixed), and ESLint can't run (missing jiti) — trust isolated runs, skip the lint gate
 metadata:
   type: project
 ---
 
 Two environment gotchas observed in the csp orchestrator worktree (2026-06-18, T004):
 
-1. **Full-suite `bun test` is unreliable due to tmpfs ENOSPC.** Running the whole
-   suite floods the sandbox temp filesystem; commands intermittently die with
-   "the temp filesystem ... is full (0MB free) ... ENOSPC". When this happens,
-   tests that pass in isolation (e.g. `CspIndex.stats`, `public barrel`,
-   `createIndexFromPath`, `csp search formats`) show up as extra `fail`s purely
-   from disk-full, inflating the fail count (observed 12 fail/1 error full-suite
-   vs the true 6 fail when running `bun test src/indexing/` in isolation).
+1. **Full-suite `bun test` showed extra fails — root cause was a leaked
+   `mock.module`, NOT (primarily) tmpfs ENOSPC.** Earlier this was attributed to a
+   sandbox disk-full flood, but on 2026-06-18 (T0A) the disk had 148Gi free and the
+   real cause was identified: `src/mcp/server.test.ts`'s top-level
+   `mock.module('../indexing/index.ts')` leaked a stub CspIndex into
+   `src/indexing/index.test.ts`, which then failed in the full suite while passing
+   in isolation. That leak is now FIXED (DI seam — see
+   [[csp-bun-mock-module-irreversible]]). Full suite is now stable at
+   **351 pass / 3 fail / 0 error** (the 3 fails are T006/T007 throwing stubs).
 
-   **Why:** the harness's task-recording mount and bun's temp output share a small
-   tmpfs that fills mid-run.
-
-   **How to apply:** Trust ISOLATED runs (`bun test <dir>` or `<file>`) for the
-   pass/fail verdict, not the full-suite count. Set `TMPDIR` to a roomy in-repo dir
-   (`mkdir .tmptest; export TMPDIR=$PWD/.tmptest`) and clear it between runs; never
-   commit `.tmptest/`. To prove a failure is pre-existing vs your regression, use
-   `git stash` + isolated run on the affected file. The track baseline is
-   "320 pass / 5 fail / 3 errors" — compare against that, not a flooded full run.
+   **How to apply:** "passes isolated, fails in full suite" → first suspect a leaked
+   `mock.module`, not disk. Still trust isolated runs (`bun test <file>`) for a
+   per-file verdict, and use `git stash` + isolated run to prove a fail is
+   pre-existing vs a regression. (If tmpfs ENOSPC ever does recur, `export
+   TMPDIR=$PWD/.tmptest` to a roomy in-repo dir; never commit `.tmptest/`.)
 
 2. **ESLint cannot run in this worktree — missing `jiti`.** `bunx eslint ...` fails
    with "The 'jiti' library is required for loading TypeScript configuration files."
