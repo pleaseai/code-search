@@ -46,6 +46,17 @@ claude mcp add csp -s user -- bunx @pleaseai/csp mcp
 
 See [MCP Server](#mcp-server) below for other harnesses (Cursor, Codex, OpenCode, etc.).
 
+### Claude Code plugin
+
+The fastest way to set up `csp` in Claude Code is the plugin, which registers the MCP server **and** the `csp-search` sub-agent in one step:
+
+```text
+/plugin marketplace add pleaseai/code-search
+/plugin install csp@pleaseai
+```
+
+It bundles the `csp` MCP server (`search`, `find_related`) and a dedicated `csp-search` sub-agent. Requires [Bun](https://bun.sh) on your `PATH` so `bunx` can launch the server. See [plugins/csp](plugins/csp/README.md) for details.
+
 ### AGENTS.md
 
 Add `csp` usage instructions to your agent's context so it knows when and how to call the CLI. Install the `csp` CLI, then add the snippet below to your `AGENTS.md` or `CLAUDE.md`:

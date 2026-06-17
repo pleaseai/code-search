@@ -1,0 +1,20 @@
+{
+  "name": "pleaseai",
+  "owner": {
+    "name": "Minsu Lee",
+    "email": "minsu.lee@dietfriends.kr",
+    "url": "https://github.com/amondnet"
+  },
+  "description": "PleaseAI developer tools for Claude Code — fast, local, token-efficient code search.",
+  "plugins": [
+    {
+      "name": "csp",
+      "source": "./plugins/csp",
+      "description": "Hybrid (dense + BM25) code search for agents. Bundles the csp MCP server (search, find_related) and a csp-search sub-agent.",
+      "homepage": "https://github.com/pleaseai/code-search",
+      "repository": "https://github.com/pleaseai/code-search",
+      "license": "MIT",
+      "keywords": ["code-search", "hybrid-search", "semantic-search", "bm25", "mcp", "agent"]
+    }
+  ]
+}
