@@ -1,6 +1,7 @@
 // Tests for src/indexing/index.ts (CspIndex)
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
@@ -198,5 +199,69 @@ describe('CspIndex.fromPath', () => {
     expect(idx.stats.totalChunks).toBeGreaterThan(0)
     expect(idx.stats.indexedFiles).toBe(1)
     expect(idx.chunks[0]!.filePath).toBe('sample.ts')
+  })
+})
+
+describe('CspIndex.fromGit', () => {
+  let workdir: string
+  let repoDir: string
+
+  /** Run a git command in `cwd`, throwing with stderr on failure. */
+  function git(cwd: string, ...args: string[]): void {
+    const res = spawnSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    })
+    if (res.status !== 0)
+      throw new Error(`git ${args.join(' ')} failed: ${res.stderr}`)
+  }
+
+  /** Count leftover clone temp dirs so we can assert cleanup. */
+  function cloneTempDirCount(): number {
+    return readdirSync(tmpdir()).filter(name => name.startsWith('csp-git-')).length
+  }
+
+  beforeEach(() => {
+    workdir = mkdtempSync(join(tmpdir(), 'csp-git-src-'))
+    // A real, non-bare local repo with one committed TS file. `git clone` can
+    // shallow-clone this over a file:// URL with no network.
+    repoDir = join(workdir, 'repo')
+    spawnSync('git', ['init', repoDir], { encoding: 'utf8' })
+    git(repoDir, 'config', 'user.email', 'test@example.com')
+    git(repoDir, 'config', 'user.name', 'Test')
+    git(repoDir, 'config', 'commit.gpgsign', 'false')
+    writeFileSync(
+      join(repoDir, 'sample.ts'),
+      'export function greet(name: string) {\n  return `hi ${name}`\n}\n',
+    )
+    git(repoDir, 'add', '.')
+    git(repoDir, 'commit', '-m', 'initial')
+  })
+  afterEach(() => {
+    rmSync(workdir, { recursive: true, force: true })
+  })
+
+  it('shallow-clones the repo and builds a populated index', async () => {
+    const before = cloneTempDirCount()
+    const idx = await CspIndex.fromGit(`file://${repoDir}`, {
+      content: ContentType.CODE,
+    })
+    expect(idx.stats.totalChunks).toBeGreaterThan(0)
+    expect(idx.stats.indexedFiles).toBe(1)
+    expect(idx.chunks[0]!.filePath).toBe('sample.ts')
+    // The temporary checkout must be cleaned up (no leak) after success.
+    expect(cloneTempDirCount()).toBe(before)
+  })
+
+  it('cleans up the temp checkout even when clone fails', async () => {
+    const before = cloneTempDirCount()
+    const bogus = join(workdir, 'does-not-exist.git')
+    expect(existsSync(bogus)).toBe(false)
+    await expect(
+      CspIndex.fromGit(`file://${bogus}`, { content: ContentType.CODE }),
+    ).rejects.toThrow(/clone/i)
+    // Failure path must not leak the temp checkout directory either.
+    expect(cloneTempDirCount()).toBe(before)
   })
 })

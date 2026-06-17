@@ -12,7 +12,10 @@
 //     declared here so the Phase A branch type-checks (cli.ts references
 //     CspIndex.loadFromDisk and index.save).
 
-import { statSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { chmodSync, mkdtempSync, rmSync, statSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { Chunk, ContentType, IndexStats, SearchResult } from '../types.ts'
 import { ContentType as ContentTypeEnum } from '../types.ts'
 import { search as runSearch } from '../search.ts'
@@ -138,11 +141,31 @@ export class CspIndex {
     })
   }
 
+  /**
+   * Build an index from a remote git URL.
+   *
+   * Shallow-clones `url` into a fresh `0700` temp directory (non-interactive —
+   * credential prompts are suppressed), then reuses the {@link CspIndex.fromPath}
+   * pipeline against the clone root so `.cspignore` / `.gitignore` rules at the
+   * checkout root are honored. The temp directory is always removed afterward,
+   * on both the success and failure paths.
+   *
+   * @throws if the clone fails (bad URL, auth required, git missing).
+   */
   static async fromGit(
-    _url: string,
-    _options: CspIndexFromGitOptions = {},
+    url: string,
+    options: CspIndexFromGitOptions = {},
   ): Promise<CspIndex> {
-    throw new Error('CspIndex.fromGit: not yet implemented (T005)')
+    const dir = mkdtempSync(join(tmpdir(), 'csp-git-'))
+    chmodSync(dir, 0o700)
+    try {
+      cloneShallow(url, dir, options.ref)
+      const { ref: _ref, ...fromPathOptions } = options
+      return await CspIndex.fromPath(dir, fromPathOptions)
+    }
+    finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   }
 
   /** Aggregate index statistics: file count, chunk count, language histogram. */
@@ -281,6 +304,30 @@ export interface SearchOptions {
 export async function loadModel(modelPath?: string): Promise<[Model, string]> {
   const { model, modelPath: resolved } = await loadDenseModel(modelPath)
   return [model, resolved]
+}
+
+/**
+ * Shallow-clone `url` into `dir` (already created, empty). Runs git
+ * non-interactively so a missing-credential prompt fails fast instead of
+ * hanging. Throws a clear error (including git's stderr) when the clone fails.
+ */
+function cloneShallow(url: string, dir: string, ref?: string): void {
+  const args = ['clone', '--depth', '1']
+  if (ref !== undefined)
+    args.push('--branch', ref)
+  args.push('--', url, dir)
+
+  const result = spawnSync('git', args, {
+    encoding: 'utf8',
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+  })
+
+  if (result.error !== undefined)
+    throw new Error(`git clone failed for ${url}: ${result.error.message}`)
+  if (result.status !== 0) {
+    const detail = (result.stderr ?? '').trim() || `exit code ${result.status}`
+    throw new Error(`git clone failed for ${url}: ${detail}`)
+  }
 }
 
 function normalizeContent(
