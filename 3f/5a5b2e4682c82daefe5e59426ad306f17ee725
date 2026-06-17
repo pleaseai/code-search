@@ -1,0 +1,37 @@
+src/indexing/index.ts
+  s_03c2eb254feccd::t_27dad5d62f200d 347,350,362
+  s_03c2eb254feccd::t_f61e59bbdecb8f 15,17-18,21
+  s_03c2eb254feccd::t_49196d432ecfb9 388
+  s_03c2eb254feccd::t_41bae06ac5a7ea 399
+  s_03c2eb254feccd::t_0712cc3a0621f2 445,458-467
+  s_03c2eb254feccd::t_e2c8cb6838d1c7 154,156,161
+  s_03c2eb254feccd::t_567adb04bb7891 202,204-216
+  s_03c2eb254feccd::t_e6b71a33f764c4 31-33
+src/indexing/cache.test.ts
+  s_03c2eb254feccd::t_2e8f1332078b98 313-327
+src/indexing/index.test.ts
+  s_03c2eb254feccd::t_add7520d34a345 384-386
+.claude/agent-memory/review-review-type-design-analyzer/serialization-trust-boundaries.md
+  s_03c2eb254feccd::t_92bbd4fa1b5dbe 16,18
+src/indexing/cache.ts
+  s_03c2eb254feccd::t_08338a7e71015d 339
+  s_03c2eb254feccd::t_8c0d5e3ae87d34 245,254
+  s_03c2eb254feccd::t_c08e2612016379 17-18
+  s_03c2eb254feccd::t_808f79425d38f0 166-170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "3f5a5b2e4682c82daefe5e59426ad306f17ee725",
+  "prompts": {},
+  "sessions": {
+    "s_03c2eb254feccd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bff2e159-8947-40e3-b887-99924257120b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
