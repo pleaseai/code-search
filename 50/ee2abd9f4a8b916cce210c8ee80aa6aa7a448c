@@ -1,0 +1,32 @@
+src/indexing/cache.ts
+  s_03c2eb254feccd::t_f0c8c2dad8696e 17,19
+  s_03c2eb254feccd::t_89f3f0b830c046 87-97
+  s_03c2eb254feccd::t_162e60d7dd664d 131-174
+src/cli.test.ts
+  s_03c2eb254feccd::t_8d18cd22131670 346,348-349,352-353,359-363,366,369,371,377-396,398
+  s_03c2eb254feccd::t_859f93d8a48776 402-432
+src/cli.ts
+  s_03c2eb254feccd::t_866f4cd4b45d39 9
+  s_03c2eb254feccd::t_2e5179f01de7e4 240-245
+  s_03c2eb254feccd::t_b30938e6f78c1b 319-336,340-344,349,356-357,359-360
+  s_03c2eb254feccd::t_f990be52adb74d 432-434
+src/indexing/cache.test.ts
+  s_03c2eb254feccd::t_2b2629c12bdc37 224-297
+  s_03c2eb254feccd::t_aa47843210d949 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "50ee2abd9f4a8b916cce210c8ee80aa6aa7a448c",
+  "prompts": {},
+  "sessions": {
+    "s_03c2eb254feccd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bff2e159-8947-40e3-b887-99924257120b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
