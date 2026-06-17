@@ -13,6 +13,7 @@ cli.ts (`runCli`) wires the `~/.csp/index/<key>` auto-cache for `search`/`find-r
 - `_defaultLoadOrBuild` re-narrows `ref` (omit when undefined) because `LoadOrBuildOptions.ref` is `string` under `exactOptionalPropertyTypes` — spreading `ref: undefined` is a type error.
 
 **How to apply:**
-- T012 (mcp ↔ disk-cache alignment, same Phase C PR) must use the same `loadOrBuildIndex(source, {content, ref})` contract and omit `ref` when absent — otherwise cli and mcp compute different `~/.csp/index/<key>` for the same source/content/ref and present divergent cache views.
-- When testing cache-backed cli paths, inject the seam; never let the default hit real `homedir()/.csp`.
+- **DONE (T012, commit 1ac5e7a)**: mcp `IndexCache` now mirrors this exact seam. `IndexCacheOptions.loadOrBuild?` (type `LoadOrBuildSeam`, default `defaultLoadOrBuild`) replaced the in-memory miss's direct `CspIndex.fromGit/fromPath` call. The seam carries `modelPath?` too (mcp forwards its pre-warmed model), but the key-bearing fields (source/content/ref, ref omitted when absent) match cli verbatim → cli↔mcp compute the same `~/.csp/index/<key>`. Watcher stays in-memory-evict only (no disk deletion); content-hash inside `loadOrBuildIndex` owns disk reuse-vs-rebuild → single rebuild.
+- mcp's existing `server.test.ts` IndexCache/getIndex tests assert `fromPathCalls`/`fromGitCalls` (static-reassignment mocks). After routing through the seam they inject a `stubLoadOrBuild` that delegates to those static mocks — keeps counters meaningful while staying off `~/.csp`/network. Apply this pattern if you ever add a layer above an already-static-mocked builder.
+- When testing cache-backed cli/mcp paths, inject the seam; never let the default hit real `homedir()/.csp`.
 - See [[csp-loadorbuild-cache-contract]] for how the key is derived (local=source-file hash via `save(dir,{contentHash})`; git=URL+ref only).
