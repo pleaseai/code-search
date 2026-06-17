@@ -1,0 +1,23 @@
+.please/docs/decisions/0002-index-storage-cache-model.md
+  s_03c2eb254feccd::t_8ab89ded8c992d 1-115
+.please/docs/tracks/active/cspindex-orchestrator-20260617/plan.md
+  s_03c2eb254feccd::t_d223c5b9660d24 117
+.please/docs/decisions/index.md
+  s_03c2eb254feccd::t_5d8041b9c09b43 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "f7a5cae3c282a39ed3554b939c5a389726ef4f23",
+  "prompts": {},
+  "sessions": {
+    "s_03c2eb254feccd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bff2e159-8947-40e3-b887-99924257120b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
