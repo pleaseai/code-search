@@ -312,7 +312,7 @@ args = ["@pleaseai/csp", "mcp"]
 
 ## 서브 에이전트 설정
 
-Claude Code, Gemini CLI, Cursor, OpenCode, GitHub Copilot CLI, Kiro는 모두 전용 `csp` 검색 서브 에이전트를 지원합니다. 프로젝트 루트에서 `csp init`을 한 번 실행하세요.
+Claude Code, Gemini CLI, Cursor, OpenCode, GitHub Copilot CLI, Kiro, Antigravity, Command Code, Pi, Reasonix는 모두 전용 `csp` 검색 서브 에이전트를 지원합니다. 프로젝트 루트에서 `csp init`을 한 번 실행하세요.
 
 ```bash
 csp init                      # Claude Code  → .claude/agents/csp-search.md
@@ -321,6 +321,10 @@ csp init --agent cursor       # Cursor       → .cursor/agents/csp-search.md
 csp init --agent opencode     # OpenCode     → .opencode/agents/csp-search.md
 csp init --agent copilot      # Copilot CLI  → .github/agents/csp-search.md
 csp init --agent kiro         # Kiro         → .kiro/agents/csp-search.md
+csp init --agent antigravity  # Antigravity  → .antigravity/agents/csp-search.md
+csp init --agent commandcode  # Command Code → .commandcode/agents/csp-search.md
+csp init --agent pi           # Pi           → .pi/agents/csp-search.md
+csp init --agent reasonix     # Reasonix     → .reasonix/agents/csp-search.md
 ```
 
 `csp`가 `$PATH`에 없다면 명령 앞에 `bunx @pleaseai/csp`를 붙이세요.
@@ -363,18 +367,42 @@ csp savings --verbose # 호출 유형별 분해 포함
 ```
 
 ```
-  csp Token Savings
-  ════════════════════════════════════════════════════════════════
-  Period        Calls   Savings
-  ────────────────────────────────────────────────────────────────
-  Today         42      [███████████████░]  ~58.4k tokens (95%)
-  Last 7 days   287     [██████████████░░]  ~312.4k tokens (90%)
-  All time      1.4k    [██████████████░░]  ~1.2M tokens (89%)
+  Csp Token Savings
+  ════════════════════════════════════════════════════════════════════════
+
+  Total saved:  ~1.2M tokens  (89%)
+  Total calls:  1.4k
+  Efficiency:  █████████████████████░░░  89%
+
+  By Period
+  ────────────────────────────────────────────────────────────────────────
+  Period             Calls           Saved  Ratio
+  ────────────────────────────────────────────────────────────────────────
+  Today                 42    ~58.4k tokens  ███████████████████████░  95%
+  Last 7 days          287   ~312.4k tokens  █████████████████████░░░  90%
+  All time             1.4k     ~1.2M tokens  █████████████████████░░░  89%
 ```
 
 절약량 계산: 각 호출마다 반환된 청크가 속한 파일들의 총 문자 수와 반환된 스니펫의 문자 수를 기록합니다. 절약된 토큰 추정치는 `(파일 문자 수 − 스니펫 문자 수) / 4` (1토큰 ≈ 4문자). 이는 보수적인 추정으로, 기준선은 "에이전트가 매칭된 파일을 통째로 읽는다"는 일반적인 코딩 에이전트 동작입니다.
 
+stdout이 컬러를 지원하는 TTY일 때 출력에 색이 입혀집니다(`NO_COLOR`, `dumb` 터미널, 파이프 연결 시에는 비활성화). `--verbose`를 주면 "By Call Type" 분해가 추가됩니다.
+
 통계는 `~/.csp/savings.jsonl`에 저장됩니다.
+
+</details>
+
+<details>
+<summary>캐시 비우기</summary>
+
+`csp clear`는 캐시된 데이터를 삭제합니다.
+
+```bash
+csp clear savings  # ~/.csp/savings.jsonl 삭제
+csp clear all      # 현재는 savings와 동일
+csp clear index    # 안내만 출력 (아래 참고)
+```
+
+인덱스 영속화는 아직 연결되지 않았고, 저장 모델(repo-local `.csp/` vs 글로벌 캐시)도 미결이라 현재 `clear index`는 비울 대상이 없습니다. `csp index -o <경로>`는 지정한 경로에만 기록하므로 해당 디렉토리는 직접 삭제하세요.
 
 </details>
 

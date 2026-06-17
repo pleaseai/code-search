@@ -6,6 +6,7 @@ import path from 'node:path'
 import {
   BucketStats,
   buildSavingsSummary,
+  clearSavings,
   formatSavingsReport,
   resetStatsFile,
   saveSearchStats,
@@ -209,6 +210,21 @@ describe('buildSavingsSummary', () => {
   })
 })
 
+describe('clearSavings', () => {
+  test('deletes an existing stats file and reports cleared=true', () => {
+    appendFileSync(statsFile, `${JSON.stringify({ ts: 1, call: 'search', results: 1, snippet_chars: 1, file_chars: 2 })}\n`)
+    expect(existsSync(statsFile)).toBe(true)
+    const result = clearSavings()
+    expect(result).toEqual({ path: statsFile, cleared: true })
+    expect(existsSync(statsFile)).toBe(false)
+  })
+
+  test('reports cleared=false when no stats file exists', () => {
+    expect(existsSync(statsFile)).toBe(false)
+    expect(clearSavings()).toEqual({ path: statsFile, cleared: false })
+  })
+})
+
 describe('formatSavingsReport', () => {
   test('shows "Csp Token Savings" header and bucket labels', () => {
     const now = Date.now() / 1000
@@ -242,8 +258,13 @@ describe('formatSavingsReport', () => {
     expect(report).toContain('~1.5k')
   })
 
-  test('verbose appends Usage Breakdown section with sorted call types', () => {
+  test('verbose appends By Call Type section sorted by call count descending', () => {
     const now = Date.now() / 1000
+    // search appears 2×, find_related 1× ⇒ search ranks first by count.
+    appendFileSync(
+      statsFile,
+      `${JSON.stringify({ ts: now, call: 'search', results: 1, snippet_chars: 100, file_chars: 400 })}\n`,
+    )
     appendFileSync(
       statsFile,
       `${JSON.stringify({ ts: now, call: 'search', results: 1, snippet_chars: 100, file_chars: 400 })}\n`,
@@ -254,26 +275,35 @@ describe('formatSavingsReport', () => {
     )
 
     const report = formatSavingsReport({ verbose: true })
-    expect(report).toContain('Usage Breakdown')
+    expect(report).toContain('By Call Type')
     expect(report).toContain('Call type')
     expect(report).toContain('search')
     expect(report).toContain('find_related')
-    // Sorted alphabetically — find_related should appear before search.
-    const findIdx = report.indexOf('find_related')
-    const searchHeadingsStripped = report.replace('Csp Token Savings', '')
-    const searchIdx = searchHeadingsStripped.indexOf('search')
-    expect(findIdx).toBeLessThan(searchIdx + 'Csp Token Savings'.length)
+    // Sorted by count descending — the more frequent `search` precedes `find_related`.
+    const searchIdx = report.indexOf('By Call Type')
+    const breakdown = report.slice(searchIdx)
+    expect(breakdown.indexOf('search')).toBeLessThan(breakdown.indexOf('find_related'))
   })
 
-  test('renders bar with filled blocks proportional to ratio', () => {
+  test('By Call Type section is hidden without --verbose', () => {
     const now = Date.now() / 1000
-    // ratio = 0.75 ⇒ 12 filled / 4 empty out of 16.
+    appendFileSync(
+      statsFile,
+      `${JSON.stringify({ ts: now, call: 'search', results: 1, snippet_chars: 100, file_chars: 400 })}\n`,
+    )
+    expect(formatSavingsReport()).not.toContain('By Call Type')
+  })
+
+  test('renders By Period bar with filled blocks proportional to ratio', () => {
+    const now = Date.now() / 1000
+    // ratio = 0.75 over a 24-wide bar ⇒ 18 filled / 6 empty.
     appendFileSync(
       statsFile,
       `${JSON.stringify({ ts: now, call: 'search', results: 1, snippet_chars: 100, file_chars: 400 })}\n`,
     )
     const report = formatSavingsReport()
-    expect(report).toContain('[████████████░░░░]')
+    expect(report).toContain(`${'█'.repeat(18)}${'░'.repeat(6)}`)
+    // Overall ratio is surfaced in the headline summary as "(75%)".
     expect(report).toContain('(75%)')
   })
 
