@@ -50,3 +50,21 @@ fix your scoped target, verify "no new errors / suite unchanged at baseline", an
 the cross-scope blocker in the plan's `## Surprises & Discoveries` for the owning task
 (usually T003, which depends on T002). See [[csp-typecheck-baseline-red]] for the
 typecheck gate ("no new errors", not "green tsc").
+
+**RESOLVED in T004 (2026-06-18, commit ba30228):** `index.test.ts` went green for its
+search/findRelated/stats cases. The planner correctly put the cross-file fixes in T004's
+`Files:` (index.ts, index.test.ts, dense.ts). Key correction to the T003 prediction above:
+- Only `makeStubModel` export (dense.ts) was actually needed. The scaffold test's GUESSES
+  `new Bm25Index([['x']])` and `new SelectableBasicBackend(vecs, 4)` were simply WRONG —
+  the real APIs `Bm25Index.build(docs)` and `new SelectableBasicBackend(vecs)` (dim derived
+  from vectors) already existed. So **sparse.ts needed NO change**; the fix was correcting
+  the TEST setup to the real API, not changing the impl. That is why T004's Files had
+  index.test.ts + dense.ts but not sparse.ts.
+- Wiring pattern that avoided the STOP("search.ts API structurally incompatible"): put the
+  blank-query / `topK<=0` / empty-index / empty-selector guards in the CspIndex.search
+  LAYER, then delegate to `search.ts search(query, model, semanticIndex, bm25Index, chunks,
+  topK, {selector?})`. search.ts already returns `[]` for an empty selector (effectiveK→0),
+  so passing the empty `Uint32Array` through (no unfiltered fallback) satisfies the
+  "filters match nothing → []" regression test. `findRelated` re-embeds the seed content,
+  calls `semanticIndex.query(emb, topK+1)`, drops the seed chunk. Both kept SYNC (mcp/
+  server.ts:370 and cli.ts call without await).
