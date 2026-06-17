@@ -41,8 +41,8 @@ describe('public barrel', () => {
     // The string values are part of the on-disk / CLI contract (`--content code`,
     // persisted indices). They must NOT be tweaked without coordinating with
     // the semble compatibility story documented in CLAUDE.md.
-    expect(csp.ContentType.Code).toBe('code')
-    expect(csp.ContentType.Docs).toBe('docs')
-    expect(csp.ContentType.Config).toBe('config')
+    expect(csp.ContentType.CODE).toBe('code')
+    expect(csp.ContentType.DOCS).toBe('docs')
+    expect(csp.ContentType.CONFIG).toBe('config')
   })
 })
