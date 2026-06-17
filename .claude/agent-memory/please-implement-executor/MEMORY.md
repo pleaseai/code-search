@@ -8,3 +8,4 @@
 - [csp loadFromDisk model dim alignment](csp-loadfromdisk-model-dim-alignment.md) — reloaded stub model is fixed 256-dim; align to persisted backend dim or query() throws dim mismatch
 - [csp upstream has no disk cache](csp-upstream-no-disk-cache.md) — semble has no cache.py; global ~/.csp/index cache is csp-original (#162, unported); cache-key STOP gates won't fire
 - [csp loadOrBuildIndex cache contract](csp-loadorbuild-cache-contract.md) — local reuse gated by source-file hash via save(dir,{contentHash}); git keyed by URL+ref only
+- [csp cli cache DI seam](csp-cli-cache-di-seam.md) — cli auto-cache via injectable loadOrBuild seam, build-branch only; mcp (T012) must mirror same key contract
