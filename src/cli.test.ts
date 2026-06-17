@@ -227,6 +227,18 @@ describe('csp search (stub-mocked)', () => {
         {
           chunk: { content: 'def foo()', filePath: 'a.py', startLine: 1, endLine: 3, language: 'python' },
           score: 0.9,
+          // Mirrors search.ts's snake_case wire format that utils.formatResults consumes.
+          toDict: () => ({
+            chunk: {
+              content: 'def foo()',
+              file_path: 'a.py',
+              start_line: 1,
+              end_line: 3,
+              language: 'python',
+              location: 'a.py:1-3',
+            },
+            score: 0.9,
+          }),
         },
       ],
     }
