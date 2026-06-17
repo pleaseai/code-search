@@ -13,6 +13,6 @@ csp has two distinct chunk serializations that must not be conflated:
 
 **How to apply:** When reviewing serialization in this repo, check which audience a `toDict` targets before flagging a casing mismatch — both casings are intentional.
 
-Deserialization trust-boundary status (as of PR #21 review):
+Deserialization trust-boundary status (resolved in PR #21):
 - `chunkFromDict` (types.ts) is a **proper runtime guard** (throws TypeError on malformed input) — the model to follow.
-- `IndexManifest` is **NOT validated** — `loadFromDisk` (index.ts) and `tryReuse` (cache.ts) both `JSON.parse(...) as IndexManifest`. Only `schemaVersion` is checked; `content`/`modelId`/`sourceId` flow in unvalidated. Recurring review flag: recommend a `parseManifest()` guard mirroring `chunkFromDict`. See [[serialization-trust-boundaries]].
+- `IndexManifest` is now **runtime-validated** by `parseManifest()` (`index.ts`), which checks `schemaVersion`/`contentHash`/`sourceId`/`modelId`/`content` (every field) and throws `Invalid manifest: …` on a bad value — mirroring `chunkFromDict`. `loadFromDisk` (version-check-first, then `parseManifest`) and `tryReuse` (cache.ts) both route through it; no remaining `JSON.parse(...) as IndexManifest` on the load path.

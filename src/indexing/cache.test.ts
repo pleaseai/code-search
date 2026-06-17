@@ -310,4 +310,19 @@ describe('clearIndexCache', () => {
     expect(() => clearIndexCache({ baseDir: base })).toThrow(/Refusing to clear unsafe/)
     expect(existsSync(join(victim, 'precious.txt'))).toBe(true)
   })
+
+  it('refuses a symlinked index resolving to another `index` dir outside home', () => {
+    const { mkdirSync, writeFileSync: write, symlinkSync } = require('node:fs') as typeof import('node:fs')
+    // A directory literally named `index` but OUTSIDE the cache home — the
+    // basename check alone would pass, so the direct-child (parent === home)
+    // check must catch it.
+    const outsideIndex = join(tmpHome, 'elsewhere', 'index')
+    mkdirSync(outsideIndex, { recursive: true })
+    write(join(outsideIndex, 'precious.txt'), 'do not delete')
+    mkdirSync(base, { recursive: true })
+    symlinkSync(outsideIndex, resolveIndexRoot({ baseDir: base }))
+
+    expect(() => clearIndexCache({ baseDir: base })).toThrow(/Refusing to clear unsafe/)
+    expect(existsSync(join(outsideIndex, 'precious.txt'))).toBe(true)
+  })
 })

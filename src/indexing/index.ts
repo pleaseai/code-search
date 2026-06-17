@@ -12,11 +12,13 @@
 //   - loadFromDisk: throwing stub (real persistence in T007); declared here so
 //     the Phase A/B branch type-checks (cli.ts references CspIndex.loadFromDisk).
 
-import { spawnSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 import type { Chunk, ContentType, IndexStats, SearchResult } from '../types.ts'
 import { chunkFromDict, chunkToDict, ContentType as ContentTypeEnum } from '../types.ts'
 import { search as runSearch } from '../search.ts'
@@ -25,6 +27,9 @@ import { loadModel as loadDenseModel, makeStubModel } from './dense.ts'
 import type { Model } from './dense.ts'
 import { SelectableBasicBackend } from './dense.ts'
 import { Bm25Index } from './sparse.ts'
+
+/** Promisified `git` runner — keeps the network-bound clone off the event loop. */
+const execFileAsync = promisify(execFile)
 
 /**
  * On-disk index schema version. Bumped when the persisted artifact layout or
@@ -146,14 +151,14 @@ export class CspIndex {
     path: string,
     options: CspIndexLoadOptions = {},
   ): Promise<CspIndex> {
-    let stat: ReturnType<typeof statSync>
+    let pathStats: Awaited<ReturnType<typeof stat>>
     try {
-      stat = statSync(path)
+      pathStats = await stat(path)
     }
     catch {
       throw new Error(`Path does not exist: ${path}`)
     }
-    if (!stat.isDirectory())
+    if (!pathStats.isDirectory())
       throw new Error(`Path is not a directory: ${path}`)
 
     const { model, modelPath } = await loadDenseModel(options.modelPath)
@@ -194,9 +199,21 @@ export class CspIndex {
     const dir = mkdtempSync(join(tmpdir(), 'csp-git-'))
     chmodSync(dir, 0o700)
     try {
-      cloneShallow(url, dir, options.ref)
+      await cloneShallow(url, dir, options.ref)
       const { ref: _ref, ...fromPathOptions } = options
-      return await CspIndex.fromPath(dir, fromPathOptions)
+      const index = await CspIndex.fromPath(dir, fromPathOptions)
+      // fromPath roots the index at the temp checkout, which we delete in the
+      // `finally` below — re-root at the git URL so a persisted manifest records
+      // a stable, meaningful sourceId (not a vanished temp path).
+      return new CspIndex({
+        model: index.model,
+        bm25Index: index.bm25Index,
+        semanticIndex: index.semanticIndex,
+        chunks: index.chunks,
+        modelPath: index.modelPath,
+        root: url,
+        content: index.content,
+      })
     }
     finally {
       rmSync(dir, { recursive: true, force: true })
@@ -327,10 +344,10 @@ export class CspIndex {
    * the serialized chunks (T006 behavior — backward compatible).
    */
   async save(dir: string, options: CspIndexSaveOptions = {}): Promise<void> {
-    mkdirSync(dir, { recursive: true })
+    await mkdir(dir, { recursive: true })
 
     const serializedChunks = this.chunks.map(chunkToDict)
-    writeFileSync(join(dir, 'chunks.json'), JSON.stringify(serializedChunks))
+    await writeFile(join(dir, 'chunks.json'), JSON.stringify(serializedChunks))
 
     await this.bm25Index.save(dir)
     await this.semanticIndex.save(dir)
@@ -342,7 +359,7 @@ export class CspIndex {
       content: [...this.content],
       modelId: this.modelPath,
     }
-    writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest))
+    await writeFile(join(dir, 'manifest.json'), JSON.stringify(manifest))
   }
 
   /**
@@ -368,7 +385,7 @@ export class CspIndex {
         throw new Error(`Missing: ${join(dir, name)}`)
     }
 
-    const rawManifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as unknown
+    const rawManifest = JSON.parse(await readFile(join(dir, 'manifest.json'), 'utf8')) as unknown
     // Version check first so a stale index gets the precise mismatch error even
     // if its (older) shape would fail full validation below.
     const rawVersion = (rawManifest as { schemaVersion?: unknown } | null)?.schemaVersion
@@ -379,7 +396,7 @@ export class CspIndex {
     }
     const manifest = parseManifest(rawManifest)
 
-    const serializedChunks = JSON.parse(readFileSync(join(dir, 'chunks.json'), 'utf8')) as unknown[]
+    const serializedChunks = JSON.parse(await readFile(join(dir, 'chunks.json'), 'utf8')) as unknown[]
     const chunks = serializedChunks.map(c => chunkFromDict(c as Parameters<typeof chunkFromDict>[0]))
 
     const bm25Index = await Bm25Index.load(dir)
@@ -425,7 +442,7 @@ export async function loadModel(modelPath?: string): Promise<[Model, string]> {
  * non-interactively so a missing-credential prompt fails fast instead of
  * hanging. Throws a clear error (including git's stderr) when the clone fails.
  */
-function cloneShallow(url: string, dir: string, ref?: string): void {
+async function cloneShallow(url: string, dir: string, ref?: string): Promise<void> {
   // A ref beginning with `-` would be parsed by git as a flag (e.g.
   // `--upload-pack=…`, `--config=…`) rather than a branch name — the `--`
   // separator below only shields the trailing url/dir, not `--branch <ref>`.
@@ -438,15 +455,16 @@ function cloneShallow(url: string, dir: string, ref?: string): void {
     args.push('--branch', ref)
   args.push('--', url, dir)
 
-  const result = spawnSync('git', args, {
-    encoding: 'utf8',
-    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-  })
-
-  if (result.error !== undefined)
-    throw new Error(`git clone failed for ${url}: ${result.error.message}`)
-  if (result.status !== 0) {
-    const detail = (result.stderr ?? '').trim() || `exit code ${result.status}`
+  // Async clone: a network-bound git clone must not block the event loop (an
+  // MCP server may be serving other requests concurrently).
+  try {
+    await execFileAsync('git', args, {
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    })
+  }
+  catch (err) {
+    const e = err as { stderr?: string, message?: string }
+    const detail = (e.stderr ?? '').trim() || e.message || 'unknown error'
     throw new Error(`git clone failed for ${url}: ${detail}`)
   }
 }

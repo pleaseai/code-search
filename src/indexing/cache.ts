@@ -14,7 +14,8 @@
 // composes these primitives.
 
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readdirSync, realpathSync, rmSync } from 'node:fs'
+import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join, normalize, relative } from 'node:path'
 import { ContentType } from '../types.ts'
@@ -162,9 +163,11 @@ export function clearIndexCache(options: CacheLocationOptions = {}): ClearIndexR
   const realIndexRoot = realpathSync(indexRoot)
   const realHome = existsSync(home) ? realpathSync(home) : normalize(home)
 
-  // Guard: the (resolved) deletion target must be the `index` child of the
-  // home, never the home itself. If either invariant fails we delete nothing.
-  if (basename(realIndexRoot) !== 'index' || normalize(realIndexRoot) === normalize(realHome))
+  // Guard: the (resolved) deletion target must be the **direct** `index` child
+  // of the resolved home. Checking the parent (not just `basename === 'index'`)
+  // also rejects a symlinked `index` that resolves to some *other* `.../index`
+  // directory outside the cache home. If the invariant fails we delete nothing.
+  if (basename(realIndexRoot) !== 'index' || normalize(dirname(realIndexRoot)) !== normalize(realHome))
     throw new Error(`Refusing to clear unsafe index path: ${realIndexRoot}`)
 
   let entries = 0
@@ -239,7 +242,7 @@ async function collectSourceFiles(
   for await (const filePath of walkFiles(root, extensions)) {
     let size: number
     try {
-      size = statSync(filePath).size
+      size = (await stat(filePath)).size
     }
     catch {
       continue
@@ -248,7 +251,7 @@ async function collectSourceFiles(
       continue
     let raw: string
     try {
-      raw = readFileSync(filePath, 'utf8')
+      raw = await readFile(filePath, 'utf8')
     }
     catch {
       continue
@@ -333,7 +336,7 @@ async function tryReuse(
   if (!isGit) {
     let manifest
     try {
-      manifest = parseManifest(JSON.parse(readFileSync(manifestPath, 'utf8')))
+      manifest = parseManifest(JSON.parse(await readFile(manifestPath, 'utf8')))
     }
     catch {
       // Corrupt/partial manifest — treat as a miss and rebuild.

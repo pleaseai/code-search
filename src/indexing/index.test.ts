@@ -381,6 +381,9 @@ describe('CspIndex.fromGit', () => {
     expect(idx.stats.totalChunks).toBeGreaterThan(0)
     expect(idx.stats.indexedFiles).toBe(1)
     expect(idx.chunks[0]!.filePath).toBe('sample.ts')
+    // The index is rooted at the git URL, not the (deleted) temp checkout, so a
+    // persisted manifest records a stable sourceId.
+    expect(idx.root).toBe(`file://${repoDir}`)
     // The temporary checkout must be cleaned up (no leak) after success.
     expect(cloneTempDirCount()).toBe(before)
   })
