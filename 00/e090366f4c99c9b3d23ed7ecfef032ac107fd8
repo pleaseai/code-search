@@ -1,0 +1,21 @@
+.claude/agent-memory/please-implement-executor/MEMORY.md
+  s_03c2eb254feccd::t_d81464b95ed7c7 1-3
+.claude/agent-memory/please-implement-executor/csp-typecheck-baseline-red.md
+  s_03c2eb254feccd::t_8b14fa7258bc60 1-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "00e090366f4c99c9b3d23ed7ecfef032ac107fd8",
+  "prompts": {},
+  "sessions": {
+    "s_03c2eb254feccd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bff2e159-8947-40e3-b887-99924257120b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
