@@ -43,10 +43,10 @@ bun test --watch                # watch mode
 
 These names are **load-bearing** — they appear in the README's MCP configs, CLI examples, and library usage block, and external users will install against them. Don't rename without updating both READMEs.
 
-- **Library**: `CspIndex` (parallels `SembleIndex`) with `.fromPath()`, `.fromGit()`, `.search()`, `.findRelated()`, `.save()`, `.load()`. Enum `ContentType` with `CODE | DOCS | CONFIG`. Camel-cased fields: `chunk.filePath`, `chunk.startLine`, `chunk.endLine`.
+- **Library**: `CspIndex` (parallels `SembleIndex`) with `.fromPath()`, `.fromGit()`, `.search()`, `.findRelated()`, `.save()`, `.loadFromDisk()`. Enum `ContentType` with `CODE | DOCS | CONFIG`. Camel-cased fields: `chunk.filePath`, `chunk.startLine`, `chunk.endLine`.
 - **CLI** (`csp`): `search`, `index`, `find-related`, `mcp`, `init`, `savings`. Flags: `--top-k`, `--content {code|docs|config|all}`, `--index <path>`, `--agent <claude|cursor|codex|opencode|copilot|kiro|gemini>`.
 - **MCP tools**: `search`, `find_related`. Server launched via `bunx @pleaseai/csp mcp` (note `mcp` subcommand — semble uses the bare binary).
-- **Stats path**: `~/.csp/savings.jsonl` (semble uses `~/.semble/`).
+- **Stats path**: `~/.csp/savings.jsonl` (semble uses `~/.semble/`). The global index cache lives alongside it at `~/.csp/index/` (per [ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md)); `csp clear index` removes only that directory.
 
 ## Conventions to preserve from semble
 
@@ -57,7 +57,7 @@ These names are **load-bearing** — they appear in the README's MCP configs, CL
 - **Chunking**: tree-sitter AST-based with line-fallback when language is unsupported. Target chunk length is 1500 chars; `_MIN_CHUNK_SIZE=50` prevents recursion into tiny nodes; `_RECURSION_DEPTH=500` guards pathological ASTs.
 - **Ranking pipeline order** (in `search.search`): semantic + BM25 → RRF → multi-chunk file boost → query-type boost (definition / stem / embedded-symbol) → top-k rerank with path penalties + file-saturation decay (`_FILE_SATURATION_DECAY=0.5` per extra chunk beyond 1 per file).
 - **Path penalties**: test files (`_STRONG_PENALTY=0.3`), `__init__.py`/barrels (`_MODERATE_PENALTY=0.5`), `.d.ts` (`_MILD_PENALTY=0.7`), compat/examples dirs (`_STRONG_PENALTY`). Apply only when `alpha_weight < 1.0` (i.e., BM25 contributing).
-- **File walking**: respect `.gitignore` *and* `.sembleignore` (port as `.cspignore`). Default-ignored dirs include `.git`, `node_modules`, `dist`, `build`, `.next`, plus add `.csp/` (replacement for `.semble/`).
+- **File walking**: respect `.gitignore` *and* `.sembleignore` (port as `.cspignore`). Default-ignored dirs include `.git`, `node_modules`, `dist`, `build`, `.next`, plus add `.csp/` (replacement for `.semble/`). Note: the canonical **index cache** is no longer repo-local — per [ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md) it moved to the global `~/.csp/index/`. The repo-local `.csp/` entry stays in the default-ignore list for any local artifacts, but the index cache itself is global.
 
 ## README is bilingual
 

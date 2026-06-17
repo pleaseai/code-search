@@ -169,7 +169,7 @@ pnpm update -g @pleaseai/csp    # pnpm
 
 ## MCP 서버
 
-`csp`는 MCP 서버로 동작할 수 있어 에이전트가 어떤 코드베이스든 직접 검색할 수 있습니다. 리포지토리는 필요할 때 클론되어 인덱싱되며, 인덱스는 세션 동안 캐시됩니다. 로컬 경로는 파일 변경을 감시해 자동으로 재인덱싱합니다.
+`csp`는 MCP 서버로 동작할 수 있어 에이전트가 어떤 코드베이스든 직접 검색할 수 있습니다. 리포지토리는 필요할 때 클론되어 인덱싱됩니다. 서버는 세션 동안 인메모리 핫 캐시를 유지하며, CLI와 동일한 디스크 캐시 `~/.csp/index/`를 공유하므로 한 번 만든 인덱스는 양쪽에서 재사용됩니다. 로컬 경로는 파일 변경을 감시해 자동으로 재인덱싱하며, 디스크 캐시 재사용은 소스 콘텐츠 해시로 무효화됩니다.
 
 ### 설정
 
@@ -376,6 +376,8 @@ csp find-related src/auth.ts 42 ./my-project
 
 `--content`는 `code` (기본), `docs`, `config`, `all`을 받습니다. `path`를 생략하면 현재 디렉터리를 사용합니다. git URL도 받습니다. `csp`가 `$PATH`에 없다면 `bunx @pleaseai/csp`로 대체하세요.
 
+`csp search`나 `csp find-related`를 `--index` 없이 실행하면, `csp`는 소스와 콘텐츠 선택을 키로 하여 글로벌 캐시 `~/.csp/index/`에 자동으로 인덱싱·캐시합니다. 다음 실행 때 캐시를 재사용하며, 소스 파일이 바뀌면 콘텐츠 해시로 자동 무효화되므로 수동으로 다시 인덱싱할 필요가 없습니다. `--index <경로>`를 지정하면 그 경로를 그대로 사용하고 자동 캐시를 우회합니다. `csp index -o <경로>`는 명시적 영속화 전용(`-o` 필수)이며 자동 캐시와는 독립적입니다.
+
 <details>
 <summary>토큰 절약량 보기</summary>
 
@@ -418,11 +420,13 @@ stdout이 컬러를 지원하는 TTY일 때 출력에 색이 입혀집니다(`NO
 
 ```bash
 csp clear savings  # ~/.csp/savings.jsonl 삭제
-csp clear all      # 현재는 savings와 동일
-csp clear index    # 안내만 출력 (아래 참고)
+csp clear index    # 글로벌 인덱스 캐시 ~/.csp/index/ 삭제
+csp clear all      # 인덱스 캐시와 savings 모두 삭제
 ```
 
-인덱스 영속화는 아직 연결되지 않았고, 저장 모델(repo-local `.csp/` vs 글로벌 캐시)도 미결이라 현재 `clear index`는 비울 대상이 없습니다. `csp index -o <경로>`는 지정한 경로에만 기록하므로 해당 디렉토리는 직접 삭제하세요.
+`clear index`는 글로벌 인덱스 캐시 `~/.csp/index/`(여기에 `csp search`/`find-related`가 인덱스를 자동 캐시합니다)를 삭제하고 제거된 캐시 엔트리 수를 보고합니다. `~/.csp/savings.jsonl`은 보존됩니다. `clear all`은 `~/.csp/index/`와 `~/.csp/savings.jsonl`을 각각 독립적으로 삭제합니다.
+
+`csp index -o <경로>`로 명시적으로 기록한 인덱스 경로는 자동 캐시 대상이 아니므로 `clear`가 건드리지 않습니다. 해당 디렉터리는 직접 삭제하세요.
 
 </details>
 
