@@ -12,6 +12,7 @@
 //     declared here so the Phase A branch type-checks (cli.ts references
 //     CspIndex.loadFromDisk and index.save).
 
+import { statSync } from 'node:fs'
 import type { Chunk, ContentType, IndexStats, SearchResult } from '../types.ts'
 import { ContentType as ContentTypeEnum } from '../types.ts'
 import { search as runSearch } from '../search.ts'
@@ -107,6 +108,16 @@ export class CspIndex {
     path: string,
     options: CspIndexLoadOptions = {},
   ): Promise<CspIndex> {
+    let stat: ReturnType<typeof statSync>
+    try {
+      stat = statSync(path)
+    }
+    catch {
+      throw new Error(`Path does not exist: ${path}`)
+    }
+    if (!stat.isDirectory())
+      throw new Error(`Path is not a directory: ${path}`)
+
     const { model, modelPath } = await loadDenseModel(options.modelPath)
     const content = normalizeContent(options.content)
 
