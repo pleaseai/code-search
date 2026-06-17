@@ -5,3 +5,4 @@
 - [csp worktree test env gotchas](csp-worktree-test-env-gotchas.md) — full `bun test` is flooded by tmpfs ENOSPC and ESLint can't run (no jiti); trust isolated runs
 - [csp bun mock.module is irreversible](csp-bun-mock-module-irreversible.md) — top-level mock.module leaks process-wide across files; use DI/static reassignment instead
 - [csp dense roundtrip has no float drift](csp-dense-roundtrip-no-drift.md) — SelectableBasicBackend save→load is bit-stable; re-normalizing unit vectors is idempotent; NFR-002 safe, T007 can reuse .load
+- [csp loadFromDisk model dim alignment](csp-loadfromdisk-model-dim-alignment.md) — reloaded stub model is fixed 256-dim; align to persisted backend dim or query() throws dim mismatch
