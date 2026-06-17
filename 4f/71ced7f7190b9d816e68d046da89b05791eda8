@@ -1,0 +1,20 @@
+src/indexing/index.ts
+  s_03c2eb254feccd::t_c459b3768071ad 189-190
+  s_03c2eb254feccd::t_6f82e60d788135 191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "4f71ced7f7190b9d816e68d046da89b05791eda8",
+  "prompts": {},
+  "sessions": {
+    "s_03c2eb254feccd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bff2e159-8947-40e3-b887-99924257120b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    }
+  }
+}
