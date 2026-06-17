@@ -46,7 +46,7 @@ export async function createIndexFromPath(
   const resolvedExtensions = getExtensions(normalized, extensions)
 
   const chunks: Chunk[] = []
-  for (const filePath of walkFiles(path, resolvedExtensions)) {
+  for await (const filePath of walkFiles(path, resolvedExtensions)) {
     const language = detectLanguage(filePath)
     let size: number
     try {
@@ -64,7 +64,7 @@ export async function createIndexFromPath(
       continue
     }
     const chunkPath = displayRoot ? relative(displayRoot, filePath) : filePath
-    chunks.push(...chunkSource(source, chunkPath, language))
+    chunks.push(...(await chunkSource(source, chunkPath, language ?? null)))
   }
 
   if (chunks.length === 0) {
