@@ -32,6 +32,21 @@ function makeIndex(chunks: CspIndex['chunks'] = []): CspIndex {
   })
 }
 
+// IndexCache now routes every in-memory miss through a `loadOrBuild` seam
+// (the shared `~/.csp` disk cache in production). These tests don't want to
+// touch the real ~/.csp home or the network, so they inject a seam that
+// delegates to the static-mocked CspIndex.fromGit/fromPath — preserving the
+// fromGitCalls/fromPathCalls counters the existing assertions rely on while
+// proving the IndexCache → loadOrBuild → (git vs path) routing.
+const stubLoadOrBuild = (
+  source: string,
+  _opts: { content: ContentType[], ref?: string | undefined, modelPath?: string | undefined },
+): Promise<CspIndex> => {
+  return source.startsWith('http://') || source.startsWith('https://')
+    ? CspIndex.fromGit(source, {})
+    : CspIndex.fromPath(source, { content: [ContentType.CODE] })
+}
+
 const realFromPath = CspIndex.fromPath
 const realFromGit = CspIndex.fromGit
 
@@ -59,7 +74,7 @@ beforeEach(() => {
 
 describe('IndexCache', () => {
   it('caches results — second call returns the cached value', async () => {
-    const cache = new IndexCache({ content: [ContentType.CODE] })
+    const cache = new IndexCache({ content: [ContentType.CODE], loadOrBuild: stubLoadOrBuild })
     const first = await cache.get('/tmp/some-repo')
     const second = await cache.get('/tmp/some-repo')
     expect(second).toBe(first)
@@ -67,7 +82,7 @@ describe('IndexCache', () => {
   })
 
   it('deduplicates concurrent get() for the same source', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     const [a, b] = await Promise.all([
       cache.get('/tmp/dedup-repo'),
       cache.get('/tmp/dedup-repo'),
@@ -77,7 +92,7 @@ describe('IndexCache', () => {
   })
 
   it('evict() removes the cached entry so the next get() rebuilds', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     await cache.get('/tmp/repo-to-evict')
     expect(fromPathCalls).toBe(1)
 
@@ -88,7 +103,7 @@ describe('IndexCache', () => {
   })
 
   it('LRU: the 11th distinct source evicts the oldest', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     for (let i = 0; i < 10; i++)
       await cache.get(`/tmp/lru-${i}`)
     expect(cache.size).toBe(10)
@@ -103,7 +118,7 @@ describe('IndexCache', () => {
   })
 
   it('treats git URLs differently from local paths', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     await cache.get('https://github.com/org/repo')
     expect(fromGitCalls).toBe(1)
     expect(fromPathCalls).toBe(0)
@@ -113,7 +128,7 @@ describe('IndexCache', () => {
   })
 
   it('evict() awaitably blocks until the cache entry is gone', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     await cache.get('/tmp/await-evict')
     expect(cache.size).toBe(1)
     await cache.evict('/tmp/await-evict')
@@ -125,7 +140,7 @@ describe('IndexCache', () => {
       throw new Error('boom')
     }
 
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     await expect(cache.get('/tmp/will-fail')).rejects.toThrow('boom')
 
     // After failure, the next call retries.
@@ -134,44 +149,126 @@ describe('IndexCache', () => {
   })
 })
 
+describe('IndexCache ↔ disk cache (loadOrBuildIndex routing)', () => {
+  // A spy seam standing in for loadOrBuildIndex so these tests assert routing
+  // without touching the real ~/.csp home or the network. Mirrors the cli DI
+  // seam contract: (source, { content, ref? }) → Promise<CspIndex>.
+  interface LoadOrBuildCall {
+    source: string
+    content: ContentType[]
+    ref: string | undefined
+  }
+
+  function makeLoadOrBuildSpy(): {
+    seam: (source: string, opts: { content: ContentType[], ref?: string | undefined }) => Promise<CspIndex>
+    calls: LoadOrBuildCall[]
+  } {
+    const calls: LoadOrBuildCall[] = []
+    const seam = async (
+      source: string,
+      opts: { content: ContentType[], ref?: string | undefined },
+    ): Promise<CspIndex> => {
+      calls.push({ source, content: opts.content, ref: opts.ref })
+      return makeIndex()
+    }
+    return { seam, calls }
+  }
+
+  it('get() miss routes the build through the injected loadOrBuild seam', async () => {
+    const { seam, calls } = makeLoadOrBuildSpy()
+    const cache = new IndexCache({ content: [ContentType.CODE], loadOrBuild: seam })
+
+    await cache.get('/tmp/disk-cache-repo')
+
+    // Build went through the disk-cache seam, not the raw fromPath/fromGit path.
+    expect(calls.length).toBe(1)
+    expect(calls[0]!.source).toBe('/tmp/disk-cache-repo')
+    expect(calls[0]!.content).toEqual([ContentType.CODE])
+    expect(fromPathCalls).toBe(0)
+  })
+
+  it('omits ref when absent and forwards it when present (matches cli key contract)', async () => {
+    const { seam, calls } = makeLoadOrBuildSpy()
+    const cache = new IndexCache({ loadOrBuild: seam })
+
+    await cache.get('https://github.com/org/repo')
+    expect(calls[0]!.ref).toBeUndefined()
+
+    await cache.get('https://github.com/org/repo', 'v1.2.3')
+    expect(calls[1]!.ref).toBe('v1.2.3')
+  })
+
+  it('cache hit reuses the in-memory entry — seam called once for two gets', async () => {
+    const { seam, calls } = makeLoadOrBuildSpy()
+    const cache = new IndexCache({ loadOrBuild: seam })
+
+    const first = await cache.get('/tmp/hot-repo')
+    const second = await cache.get('/tmp/hot-repo')
+
+    expect(second).toBe(first)
+    // In-memory LRU absorbs the second get; the disk seam is not re-consulted.
+    expect(calls.length).toBe(1)
+  })
+
+  it('watcher-style evict invalidates in-memory only — re-get re-routes through seam, no disk deletion', async () => {
+    const { seam, calls } = makeLoadOrBuildSpy()
+    const cache = new IndexCache({ loadOrBuild: seam })
+
+    await cache.get('/tmp/watched-repo')
+    expect(calls.length).toBe(1)
+
+    // The watcher's job is in-memory eviction only. evict() must NOT delete the
+    // disk cache entry — content-hash invalidation inside loadOrBuildIndex owns
+    // that. Proving evict touches only the in-memory slot guards against the
+    // double-rebuild the STOP condition warns about.
+    await cache.evict('/tmp/watched-repo')
+    expect(cache.size).toBe(0)
+
+    await cache.get('/tmp/watched-repo')
+    // Re-get re-consults the disk seam exactly once; loadOrBuildIndex's own
+    // content-hash check decides reuse-vs-rebuild on disk (single rebuild).
+    expect(calls.length).toBe(2)
+  })
+})
+
 describe('getIndex (safety layer)', () => {
   it('rejects ssh:// git URLs', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     await expect(
       _internal.getIndex('ssh://git@github.com/org/repo.git', undefined, cache),
     ).rejects.toThrow(/Only https:\/\/, http:\/\//)
   })
 
   it('rejects git:// git URLs', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     await expect(
       _internal.getIndex('git://github.com/org/repo.git', undefined, cache),
     ).rejects.toThrow(/Only https:\/\/, http:\/\//)
   })
 
   it('rejects file:// pseudo-URLs', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     await expect(
       _internal.getIndex('file:///tmp/whatever', undefined, cache),
     ).rejects.toThrow(/Only https:\/\/, http:\/\//)
   })
 
   it('rejects when repo and defaultSource are both undefined', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     await expect(_internal.getIndex(undefined, undefined, cache)).rejects.toThrow(
       /No repo specified/,
     )
   })
 
   it('falls back to defaultSource when repo is undefined', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     const result = await _internal.getIndex(undefined, '/tmp/default-repo', cache)
     expect(result).toBeInstanceOf(indexing.CspIndex)
     expect(fromPathCalls).toBe(1)
   })
 
   it('accepts https:// git URLs', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     const result = await _internal.getIndex(
       'https://github.com/org/repo',
       undefined,
@@ -185,7 +282,7 @@ describe('getIndex (safety layer)', () => {
     fromPathImpl = async () => {
       throw new Error('disk full')
     }
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     await expect(_internal.getIndex('/tmp/bad', undefined, cache)).rejects.toThrow(
       /Failed to index .*disk full/,
     )
@@ -194,7 +291,7 @@ describe('getIndex (safety layer)', () => {
 
 describe('createServer', () => {
   it('returns a server object exposing `search` and `find_related` tools', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     const server = await createServer(cache, '/tmp/default')
 
     expect(server.tools.has('search')).toBe(true)
@@ -212,7 +309,7 @@ describe('createServer', () => {
   })
 
   it('`search` handler returns "No results" JSON when the index yields nothing', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     const server = await createServer(cache, '/tmp/default')
     const searchTool = server.tools.get('search')!
     const out = await searchTool.handler({ query: 'foo' })
@@ -220,7 +317,7 @@ describe('createServer', () => {
   })
 
   it('`search` handler surfaces safety errors as plain strings', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     const server = await createServer(cache) // no defaultSource
     const searchTool = server.tools.get('search')!
     const out = await searchTool.handler({ query: 'foo' }) // no repo either
@@ -228,7 +325,7 @@ describe('createServer', () => {
   })
 
   it('`search` handler rejects ssh:// git URLs as a plain-string error', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     const server = await createServer(cache)
     const searchTool = server.tools.get('search')!
     const out = await searchTool.handler({
@@ -239,7 +336,7 @@ describe('createServer', () => {
   })
 
   it('`find_related` handler returns a helpful message when the chunk is missing', async () => {
-    const cache = new IndexCache()
+    const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
     const server = await createServer(cache, '/tmp/default')
     const tool = server.tools.get('find_related')!
     const out = await tool.handler({ file_path: 'nope.ts', line: 42 })
