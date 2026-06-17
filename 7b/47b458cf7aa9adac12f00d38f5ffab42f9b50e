@@ -1,0 +1,21 @@
+.claude/agent-memory/please-implement-executor/csp-loadorbuild-cache-contract.md
+  s_03c2eb254feccd::t_b58f82523af4f7 1-17
+.claude/agent-memory/please-implement-executor/MEMORY.md
+  s_03c2eb254feccd::t_2e5be2d00e625e 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "7b47b458cf7aa9adac12f00d38f5ffab42f9b50e",
+  "prompts": {},
+  "sessions": {
+    "s_03c2eb254feccd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bff2e159-8947-40e3-b887-99924257120b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
