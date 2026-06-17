@@ -309,3 +309,52 @@ describe('search() — auto-alpha for symbol queries', () => {
     expect(ranked[0]!.chunk).toBe(chunks[2]!)
   })
 })
+
+// ---------- SearchResult.toDict (integration with ../types.ts) ---------------
+
+describe('SearchResult.toDict', () => {
+  it('search() results carry a toDict producing the formatResults-compatible shape', () => {
+    const chunks = makeChunks()
+    const idx = mockSemanticIndex([[2, 0.0]]) // chunks[2]: src/gamma.ts, lines 1-5
+    const bm = mockBm25([0, 0, 0, 0, 0])
+    const results = search('q', mockModel(), idx, bm, chunks, 5, { alpha: 1.0, rerank: false })
+    expect(results.length).toBe(1)
+    const r = results[0]!
+    expect(typeof r.toDict).toBe('function')
+    expect(r.toDict()).toEqual({
+      chunk: {
+        content: 'export const gamma = 1',
+        file_path: 'src/gamma.ts',
+        start_line: 1,
+        end_line: 5,
+        language: 'ts',
+        location: 'src/gamma.ts:1-5',
+      },
+      score: r.score,
+    })
+  })
+
+  it('_searchSemantic results carry a toDict', () => {
+    const chunks = makeChunks()
+    const idx = mockSemanticIndex([[0, 0.2]])
+    const results = _searchSemantic('q', mockModel(), idx, chunks, 5, undefined)
+    expect(typeof results[0]!.toDict).toBe('function')
+  })
+
+  it('_searchBm25 results carry a toDict', () => {
+    const chunks = makeChunks()
+    const bm = mockBm25([0.5, 0, 0.9, 0.2, 0])
+    const results = _searchBm25('alpha beta', bm, chunks, 5, undefined)
+    expect(typeof results[0]!.toDict).toBe('function')
+  })
+
+  it('toDict renders a null language as null (no string coercion)', () => {
+    const chunks = [makeChunk({ filePath: 'src/n.ts', startLine: 3, endLine: 8, language: null })]
+    const idx = mockSemanticIndex([[0, 0.0]])
+    const bm = mockBm25([0])
+    const results = search('q', mockModel(), idx, bm, chunks, 5, { alpha: 1.0, rerank: false })
+    const dict = results[0]!.toDict() as { chunk: Record<string, unknown> }
+    expect(dict.chunk.language).toBeNull()
+    expect(dict.chunk.location).toBe('src/n.ts:3-8')
+  })
+})
