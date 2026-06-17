@@ -23,6 +23,19 @@ Two environment gotchas observed in the csp orchestrator worktree (2026-06-18, T
    pre-existing vs a regression. (If tmpfs ENOSPC ever does recur, `export
    TMPDIR=$PWD/.tmptest` to a roomy in-repo dir; never commit `.tmptest/`.)
 
+   **Update (2026-06-18, T009): tmpfs ENOSPC DID recur** — `/private/tmp/claude-501/.../tasks`
+   reported 0MB free and killed `bun`/`ask`/`find` with ENOSPC (real Data volume had 148Gi).
+   Fix that worked: prefix every command with
+   `CLAUDE_CODE_TMPDIR=/Users/lms/.cache/csp-tmp` (mkdir -p once). With that, the **full
+   `bun test` ran completely clean (384 pass / 0 fail / 0 error)** — no flooding. So redirect
+   the harness tmpdir rather than distrusting full-suite counts.
+
+3. **`ask` CLI is not on the non-interactive shell PATH** (and MCP `ask_question`/
+   `ask_public_library` tools are not directly invokable from this agent). To read upstream
+   semble source, the `ask` cache on disk works: checkouts live under
+   `~/.ask/github/github.com/<org>/<repo>/<ref>/` (e.g.
+   `~/.ask/github/github.com/MinishLab/semble/main`). `find`/`grep`/`Read` that path directly.
+
 2. **ESLint cannot run in this worktree — missing `jiti`.** `bunx eslint ...` fails
    with "The 'jiti' library is required for loading TypeScript configuration files."
    The flat config is `eslint.config.ts` (TS), which needs jiti. This is a
