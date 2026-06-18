@@ -8,6 +8,18 @@ export default pleaseai({
     'dist',
     'node_modules',
     '.csp',
+    // Rust build artifacts.
+    'target',
+    // Rust manifests are governed by `cargo fmt` / the Rust toolchain, not
+    // eslint's JS-project TOML style rules (which conflict with Cargo conventions).
+    'Cargo.toml',
+    'Cargo.lock',
+    'crates/**',
+    'rust-toolchain.toml',
+    'rustfmt.toml',
+    // npm distribution wrapper: a hand-written CommonJS Node launcher + a
+    // release-time package generator (not part of the linted TS app source).
+    'npm',
   ],
 }, {
   // Relax a handful of type-aware rules for test files, where common testing

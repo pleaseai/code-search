@@ -6,19 +6,19 @@ on:
       - main
     paths:
       - 'crates/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'rust-toolchain.toml'
-      - 'rustfmt.toml'
-      - '.github/workflows/rust.yml'
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - rustfmt.toml
+      - .github/workflows/rust.yml
   pull_request:
     paths:
       - 'crates/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'rust-toolchain.toml'
-      - 'rustfmt.toml'
-      - '.github/workflows/rust.yml'
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - rustfmt.toml
+      - .github/workflows/rust.yml
 
 permissions:
   contents: read
