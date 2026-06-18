@@ -1,0 +1,28 @@
+crates/csp/src/indexing/mod.rs
+  s_4fc351d6f8f5f5::t_e0e6a58dd3342f 8
+crates/csp/src/indexing/dense.rs
+  s_4fc351d6f8f5f5::t_4ceb5ce37b3e2c 75
+  s_4fc351d6f8f5f5::t_648159fd8efae1 295,384-388,445-447,541-544
+  s_4fc351d6f8f5f5::t_80bf8b1ab367e6 171
+  s_4fc351d6f8f5f5::t_e28f205a348829 352-362,364-367,369-374,376-378
+  s_4fc351d6f8f5f5::t_ded6a75437ab86 1-74,76-170,172-294,296-351,363,368,375,379-383,389-444,448-540,545-562
+.please/docs/tracks/active/rust-rewrite-20260618/plan.md
+  s_4fc351d6f8f5f5::t_7f1d5c88210a7d 59
+  s_4fc351d6f8f5f5::t_be91c34044e0d4 193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "2e9b37d7ca23059da9eb49b203583cbaac57c5cb",
+  "prompts": {},
+  "sessions": {
+    "s_4fc351d6f8f5f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d716d4e4-e51c-4bb2-8e56-af1ec7a37a38",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
