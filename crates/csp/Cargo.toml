@@ -9,3 +9,6 @@ authors.workspace = true
 
 [dependencies]
 # Populated per the ADR-0003 migration phases.
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

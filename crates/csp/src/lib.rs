@@ -4,23 +4,15 @@
 //! seam**: the Rust-native successor of the former TypeScript `CspIndex`, and
 //! the future napi-rs binding surface should the JS library contract return.
 //!
-//! Phase 0 scaffold — modules land incrementally per the ADR-0003 roadmap:
-//!
-//! - Phase 1: `tokens`, `ranking` (weighting / boosting / penalties), BM25 math
-//! - Phase 2: `chunking` (tree-sitter AST + line fallback)
-//! - Phase 3: `indexing` (file walking, dense, sparse, cache)
-//! - Phase 4: `search` + the `CspIndex` orchestrator
+//! Phase 1 (pure core) modules land first; later phases add chunking, indexing,
+//! and search per the ADR-0003 roadmap.
 
-// pub mod tokens;
-// pub mod ranking;
-// pub mod chunking;
-// pub mod indexing;
-// pub mod search;
+pub mod tokens;
+pub mod types;
+pub mod utils;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn scaffold_compiles() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+// Upcoming phases:
+// pub mod ranking;    // Phase 1 (weighting / boosting / penalties / bm25)
+// pub mod chunking;   // Phase 2
+// pub mod indexing;   // Phase 3
+// pub mod search;     // Phase 4
