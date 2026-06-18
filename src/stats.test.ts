@@ -1,8 +1,9 @@
-// Tests for src/stats.ts — port of src/semble/stats.py
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import type { StatsSearchResult } from './stats.ts'
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+// Tests for src/stats.ts — port of src/semble/stats.py
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import {
   BucketStats,
   buildSavingsSummary,
@@ -11,7 +12,7 @@ import {
   resetStatsFile,
   saveSearchStats,
   setStatsFile,
-  type StatsSearchResult,
+
 } from './stats.ts'
 
 function makeResult(content: string, filePath: string): StatsSearchResult {
@@ -149,7 +150,7 @@ describe('buildSavingsSummary', () => {
     expect(all.savedChars).toBe(600)
     expect(all.savedChars / all.fileChars).toBe(0.75)
 
-    expect(summary.buckets['Today']!.calls).toBe(2)
+    expect(summary.buckets.Today!.calls).toBe(2)
     expect(summary.buckets['Last 7 days']!.calls).toBe(2)
   })
 
@@ -165,7 +166,7 @@ describe('buildSavingsSummary', () => {
     const summary = buildSavingsSummary()
     expect(summary.buckets['All time']!.calls).toBe(2)
     expect(summary.buckets['Last 7 days']!.calls).toBe(1)
-    expect(summary.buckets['Today']!.calls).toBe(1)
+    expect(summary.buckets.Today!.calls).toBe(1)
   })
 
   test('missing stats file returns empty summary', () => {

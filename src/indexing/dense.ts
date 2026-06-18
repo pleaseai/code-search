@@ -9,9 +9,10 @@
 // contract is exercised by tests without requiring network I/O.
 // TODO(dense): integrate real Model2Vec model loading.
 
+import type { Chunk } from '../types.ts'
+import { Buffer } from 'node:buffer'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Chunk } from '../types.ts'
 
 // Re-exported so existing importers (e.g. dense.test.ts) keep resolving
 // `Chunk` from this module after the type was unified into ../types.ts.
@@ -84,7 +85,9 @@ function stubEmbed(text: string, dim: number): Float32Array {
     norm += g * g
   }
   norm = Math.sqrt(norm) || 1
-  for (let i = 0; i < dim; i++) v[i] = v[i]! / norm
+  for (let i = 0; i < dim; i++) {
+    v[i] = v[i]! / norm
+  }
   return v
 }
 
@@ -121,7 +124,9 @@ export async function loadModel(
  * the empty list maps to an empty result (matching semble).
  */
 export function embedChunks(model: Model, chunks: Chunk[]): Float32Array[] {
-  if (chunks.length === 0) return []
+  if (chunks.length === 0) {
+    return []
+  }
   return model.encode(chunks.map(c => c.content))
 }
 
@@ -139,16 +144,24 @@ export interface BasicArgs {
  */
 function normalizeInPlace(v: Float32Array): void {
   let n = 0
-  for (let i = 0; i < v.length; i++) n += v[i]! * v[i]!
+  for (let i = 0; i < v.length; i++) {
+    n += v[i]! * v[i]!
+  }
   n = Math.sqrt(n)
-  if (n === 0) return
-  for (let i = 0; i < v.length; i++) v[i] = v[i]! / n
+  if (n === 0) {
+    return
+  }
+  for (let i = 0; i < v.length; i++) {
+    v[i] = v[i]! / n
+  }
 }
 
 function dot(a: Float32Array, b: Float32Array): number {
   let s = 0
   const n = a.length
-  for (let i = 0; i < n; i++) s += a[i]! * b[i]!
+  for (let i = 0; i < n; i++) {
+    s += a[i]! * b[i]!
+  }
   return s
 }
 
@@ -195,7 +208,9 @@ export class SelectableBasicBackend {
     k: number,
     selector?: Uint32Array,
   ): Array<Array<[number, number]>> {
-    if (k < 1) throw new Error(`k should be >= 1, is now ${k}`)
+    if (k < 1) {
+      throw new Error(`k should be >= 1, is now ${k}`)
+    }
 
     const numVectors = this.vectors.length
     let effectiveK = Math.min(k, numVectors)
@@ -215,7 +230,9 @@ export class SelectableBasicBackend {
 
     const out: Array<Array<[number, number]>> = []
     if (effectiveK === 0) {
-      for (let i = 0; i < queryVectors.length; i++) out.push([])
+      for (let i = 0; i < queryVectors.length; i++) {
+        out.push([])
+      }
       return out
     }
 
@@ -265,7 +282,9 @@ export class SelectableBasicBackend {
     const rows = this.vectors.length
     const dim = this.dim
     const buf = new Float32Array(rows * dim)
-    for (let r = 0; r < rows; r++) buf.set(this.vectors[r]!, r * dim)
+    for (let r = 0; r < rows; r++) {
+      buf.set(this.vectors[r]!, r * dim)
+    }
     const meta = { rows, dim, arguments: this.arguments }
     await writeFile(join(dir, 'vectors.bin'), Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength))
     await writeFile(join(dir, 'args.json'), JSON.stringify(meta))

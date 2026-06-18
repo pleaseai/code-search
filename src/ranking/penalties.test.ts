@@ -10,7 +10,7 @@ import {
   STRONG_PENALTY,
 } from './penalties.ts'
 
-type Chunk = {
+interface Chunk {
   content: string
   filePath: string
   startLine: number

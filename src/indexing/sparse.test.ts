@@ -1,9 +1,10 @@
+import type { Chunk } from './sparse.ts'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { Bm25Index, type Chunk, enrichForBm25, selectorToMask } from './sparse.ts'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { Bm25Index, enrichForBm25, selectorToMask } from './sparse.ts'
 
 function makeChunk(overrides: Partial<Chunk> & { filePath: string, content?: string }): Chunk {
   return {

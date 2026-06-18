@@ -1,6 +1,6 @@
-schema_version: 5          # Config schema version (do not edit manually)
+schema_version: 5 # Config schema version (do not edit manually)
 
-language: en               # Output language (ko | en)
+language: en # Output language (ko | en)
 
 # GitHub integration
 github:
@@ -12,7 +12,7 @@ github:
   status_options:
     todo: 7b57aadf
     in_progress: 538085b7
-    human_review: 3c1bd18c       # mapped to "In Review" in this project
+    human_review: 3c1bd18c # mapped to "In Review" in this project
     done: e190f53f
     cancelled: 21ef92a0
   # Note: Work Please #2 uses a 5-state model (Todo/In Progress/In Review/Done/Cancelled).
@@ -23,9 +23,9 @@ github:
 workflow:
   stacked_pr:
     enabled: true
-    tool: graphite          # graphite | git-spice | none
-    split_phases: true      # plan.md ### Phase N: 헤딩 기준 자동 분리
-    branch_prefix: tracks/  # 모든 트랙 branch 접두사
+    tool: graphite # graphite | git-spice | none
+    split_phases: true # plan.md ### Phase N: 헤딩 기준 자동 분리
+    branch_prefix: tracks/ # 모든 트랙 branch 접두사
 
 # Document path overrides (defaults shown)
 docs:

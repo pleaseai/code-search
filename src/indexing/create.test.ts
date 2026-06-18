@@ -24,7 +24,7 @@ describe('createIndexFromPath', () => {
       src,
       'export function greet(name: string) {\n  return `hi ${name}`\n}\n',
     )
-    const model = makeStubModel('test-model', 4)
+    const model = makeStubModel(4)
     const result = await createIndexFromPath(dir, { model, displayRoot: dir })
     expect(result.chunks.length).toBeGreaterThan(0)
     // Path is stored relative to displayRoot.
@@ -36,7 +36,7 @@ describe('createIndexFromPath', () => {
   it('throws when no supported files are found', async () => {
     // Only an unsupported binary extension present.
     writeFileSync(join(dir, 'data.bin'), 'binary')
-    const model = makeStubModel()
+    const model = makeStubModel(4)
     await expect(createIndexFromPath(dir, { model })).rejects.toThrow(
       /No supported files found/,
     )
@@ -44,11 +44,11 @@ describe('createIndexFromPath', () => {
 
   it('respects an explicit extensions override', async () => {
     writeFileSync(join(dir, 'a.txt'), 'hello world')
-    const model = makeStubModel()
+    const model = makeStubModel(4)
     const result = await createIndexFromPath(dir, {
       model,
       extensions: ['.txt'],
-      content: ContentType.Docs,
+      content: ContentType.DOCS,
       displayRoot: dir,
     })
     expect(result.chunks.length).toBe(1)
@@ -60,7 +60,7 @@ describe('createIndexFromPath', () => {
     const big = 'a'.repeat(2_000_000)
     writeFileSync(join(dir, 'big.ts'), big)
     writeFileSync(join(dir, 'small.ts'), 'export const x = 1\n')
-    const model = makeStubModel()
+    const model = makeStubModel(4)
     const result = await createIndexFromPath(dir, { model, displayRoot: dir })
     const paths = result.chunks.map(c => c.filePath)
     expect(paths).toContain('small.ts')
@@ -71,7 +71,7 @@ describe('createIndexFromPath', () => {
     const sub = join(dir, 'sub')
     mkdirSync(sub)
     writeFileSync(join(sub, 'nested.ts'), 'const a = 1\n')
-    const model = makeStubModel()
+    const model = makeStubModel(4)
     const result = await createIndexFromPath(dir, { model, displayRoot: dir })
     const paths = result.chunks.map(c => c.filePath)
     expect(paths.some(p => p.endsWith('nested.ts'))).toBe(true)

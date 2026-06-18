@@ -7,8 +7,8 @@ import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { ContentType } from '../types.ts'
-import { CspIndex } from './index.ts'
 import { clearIndexCache, computeContentHash, ensureCacheDir, loadOrBuildIndex, resolveCacheDir, resolveIndexRoot } from './cache.ts'
+import { CspIndex } from './index.ts'
 
 describe('resolveCacheDir', () => {
   it('returns a path under <base>/index/', () => {

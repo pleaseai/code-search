@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'bun:test'
+import type { ChunkBoundary } from './core.ts'
 
+import { describe, expect, it } from 'bun:test'
 import {
   _mergeAdjacentChunks,
   _mergeNode,
@@ -10,7 +11,6 @@ import {
   MIN_CHUNK_SIZE,
   RECURSION_DEPTH,
 } from './core.ts'
-import type { ChunkBoundary } from './core.ts'
 
 describe('constants', () => {
   it('matches semble defaults', () => {
@@ -112,8 +112,9 @@ describe('chunkLines', () => {
     const chunks = chunkLines(src, 500)
     expect(chunks[0]!.start).toBe(0)
     expect(chunks[chunks.length - 1]!.end).toBe(src.length)
-    for (let i = 1; i < chunks.length; i++)
+    for (let i = 1; i < chunks.length; i++) {
       expect(chunks[i]!.start).toBe(chunks[i - 1]!.end)
+    }
   })
 
   it('preserves CRLF line endings in offsets', () => {

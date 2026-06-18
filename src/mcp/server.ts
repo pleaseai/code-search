@@ -1,10 +1,12 @@
 // Port of src/semble/mcp.py
 
+import type { CspIndex } from '../indexing/index.ts'
 import * as fs from 'node:fs/promises'
-import * as path from 'node:path'
 
+import * as path from 'node:path'
+import process from 'node:process'
 import { loadOrBuildIndex } from '../indexing/cache.ts'
-import { CspIndex, loadModel } from '../indexing/index.ts'
+import { loadModel } from '../indexing/index.ts'
 import { ContentType } from '../types.ts'
 import { formatResults, isGitUrl, resolveChunk } from '../utils.ts'
 import { version } from '../version.ts'
@@ -80,7 +82,7 @@ export interface IndexCacheOptions {
  * (required under `exactOptionalPropertyTypes`). Identical to cli's
  * `_defaultLoadOrBuild` so both layers key the cache the same way.
  */
-function defaultLoadOrBuild(
+async function defaultLoadOrBuild(
   source: string,
   opts: { content: ContentType[], ref?: string | undefined, modelPath?: string | undefined },
 ): Promise<CspIndex> {
@@ -123,8 +125,9 @@ export class IndexCache {
    * explicitly, the first `get()` will trigger it.
    */
   ensureModelLoading(): void {
-    if (this.modelLoadStarted)
+    if (this.modelLoadStarted) {
       return
+    }
     this.modelLoadStarted = true
     void (async () => {
       try {
@@ -141,14 +144,16 @@ export class IndexCache {
 
   private async awaitModel(): Promise<string> {
     this.ensureModelLoading()
-    if (this.modelError !== null)
+    if (this.modelError !== null) {
       throw this.modelError
+    }
     return this.modelReady.promise
   }
 
   private async computeCacheKey(source: string, ref?: string): Promise<string> {
-    if (isGitUrl(source))
+    if (isGitUrl(source)) {
       return ref !== undefined && ref !== '' ? `${source}@${ref}` : source
+    }
     return resolvePath(source)
   }
 
@@ -169,8 +174,9 @@ export class IndexCache {
       }
       catch (err) {
         // Only evict if this task hasn't already been replaced.
-        if (this.tasks.get(cacheKey) === existing)
+        if (this.tasks.get(cacheKey) === existing) {
           this.tasks.delete(cacheKey)
+        }
         throw err
       }
     }
@@ -188,8 +194,9 @@ export class IndexCache {
     // LRU eviction: drop oldest entry (first inserted).
     if (this.tasks.size >= CACHE_MAX_SIZE) {
       const oldestKey = this.tasks.keys().next().value
-      if (oldestKey !== undefined)
+      if (oldestKey !== undefined) {
         this.tasks.delete(oldestKey)
+      }
     }
 
     // Route the in-memory miss through the shared disk cache. The seam owns the
@@ -210,8 +217,9 @@ export class IndexCache {
     }
     catch (err) {
       // Only evict if this task hasn't already been replaced.
-      if (this.tasks.get(cacheKey) === buildPromise)
+      if (this.tasks.get(cacheKey) === buildPromise) {
         this.tasks.delete(cacheKey)
+      }
       throw err
     }
   }
@@ -253,9 +261,7 @@ export class IndexCache {
     }
     let chokidar: ChokidarModule
     try {
-      // chokidar isn't a declared dep yet (Unit 0); resolve lazily so the
-      // module loads even when it's absent.
-      // @ts-expect-error chokidar may not be installed yet
+      // Resolve lazily so the module loads even when chokidar is absent.
       const mod = (await import('chokidar')) as { default?: ChokidarModule } & ChokidarModule
       chokidar = mod.default ?? mod
     }
@@ -276,8 +282,9 @@ export class IndexCache {
 
     let debounce: ReturnType<typeof setTimeout> | null = null
     const onChange = (): void => {
-      if (debounce !== null)
+      if (debounce !== null) {
         clearTimeout(debounce)
+      }
       debounce = setTimeout(() => {
         debounce = null
         // Await evict before get so the rebuild sees a fresh cache slot.
@@ -300,8 +307,9 @@ export class IndexCache {
     watcher.on('unlinkDir', onChange)
 
     this.watcherClose = async () => {
-      if (debounce !== null)
+      if (debounce !== null) {
         clearTimeout(debounce)
+      }
       await watcher.close()
     }
   }
@@ -402,8 +410,9 @@ export async function createServer(
 
         const index = await getIndex(repo, defaultSource, cache)
         const results = index.search(query, { topK })
-        if (results.length === 0)
+        if (results.length === 0) {
           return JSON.stringify({ error: 'No results found.' })
+        }
         return JSON.stringify(formatResults(query, results))
       }
       catch (err) {
@@ -467,14 +476,13 @@ export async function createServer(
   interface McpServerInstance {
     registerTool: (
       name: string,
-      config: { title: string, description: string, inputSchema: unknown },
+      config: { title: string, description: string, inputSchema?: unknown },
       handler: (args: Record<string, unknown>) => Promise<unknown>,
     ) => void
     connect: (transport: unknown) => Promise<void>
   }
   let McpServer: McpServerCtor | null = null
   try {
-    // @ts-expect-error @modelcontextprotocol/sdk may not be installed yet (Unit 0)
     const mod = (await import('@modelcontextprotocol/sdk/server/mcp.js')) as {
       McpServer: McpServerCtor
     }
@@ -518,7 +526,6 @@ export async function createServer(
   }
   let z: ZodLikeModule | null = null
   try {
-    // @ts-expect-error zod is a transitive dep of @modelcontextprotocol/sdk
     const zmod = (await import('zod')) as { z?: ZodLikeModule } & ZodLikeModule
     z = zmod.z ?? zmod
   }
@@ -555,7 +562,7 @@ export async function createServer(
       ...(searchSchema !== undefined ? { inputSchema: searchSchema } : {}),
     },
     async args => ({
-      content: [{ type: 'text', text: await searchTool.handler(args as Record<string, unknown>) }],
+      content: [{ type: 'text', text: await searchTool.handler(args) }],
     }),
   )
 
@@ -568,7 +575,7 @@ export async function createServer(
     },
     async args => ({
       content: [
-        { type: 'text', text: await findRelatedTool.handler(args as Record<string, unknown>) },
+        { type: 'text', text: await findRelatedTool.handler(args) },
       ],
     }),
   )
@@ -576,13 +583,13 @@ export async function createServer(
   return {
     tools,
     isPlaceholder: false,
-    connect: transport => underlying.connect(transport),
+    connect: async transport => underlying.connect(transport),
     underlying,
   }
 }
 
 export interface ServeOptions {
-  ref?: string
+  ref?: string | undefined
   content?: ContentType[]
 }
 
@@ -631,7 +638,6 @@ export async function serve(path?: string, options: ServeOptions = {}): Promise<
     | (new () => { close?: () => Promise<void> | void })
     | null = null
   try {
-    // @ts-expect-error @modelcontextprotocol/sdk may not be installed yet (Unit 0)
     const mod = (await import('@modelcontextprotocol/sdk/server/stdio.js')) as {
       StdioServerTransport: new () => { close?: () => Promise<void> | void }
     }
@@ -682,8 +688,9 @@ export async function serve(path?: string, options: ServeOptions = {}): Promise<
     await prewarm
   }
   finally {
-    if (typeof transport.close === 'function')
+    if (typeof transport.close === 'function') {
       await transport.close()
+    }
     await cache.stopWatcher()
   }
 }

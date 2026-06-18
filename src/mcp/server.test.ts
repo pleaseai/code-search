@@ -1,10 +1,10 @@
 import { afterAll, beforeEach, describe, expect, it } from 'bun:test'
-import { _internal, createServer, IndexCache } from './server.ts'
-import { ContentType } from '../types.ts'
+import { makeStubModel, SelectableBasicBackend } from '../indexing/dense.ts'
 import * as indexing from '../indexing/index.ts'
 import { CspIndex } from '../indexing/index.ts'
-import { makeStubModel, SelectableBasicBackend } from '../indexing/dense.ts'
 import { Bm25Index } from '../indexing/sparse.ts'
+import { ContentType } from '../types.ts'
+import { _internal, createServer, IndexCache } from './server.ts'
 
 // We intercept CspIndex.fromPath/fromGit by reassigning the static methods on
 // the *real* class object (the same reference server.ts imports) rather than
@@ -38,10 +38,7 @@ function makeIndex(chunks: CspIndex['chunks'] = []): CspIndex {
 // delegates to the static-mocked CspIndex.fromGit/fromPath — preserving the
 // fromGitCalls/fromPathCalls counters the existing assertions rely on while
 // proving the IndexCache → loadOrBuild → (git vs path) routing.
-const stubLoadOrBuild = (
-  source: string,
-  _opts: { content: ContentType[], ref?: string | undefined, modelPath?: string | undefined },
-): Promise<CspIndex> => {
+async function stubLoadOrBuild(source: string, _opts: { content: ContentType[], ref?: string | undefined, modelPath?: string | undefined }): Promise<CspIndex> {
   return source.startsWith('http://') || source.startsWith('https://')
     ? CspIndex.fromGit(source, {})
     : CspIndex.fromPath(source, { content: [ContentType.CODE] })
@@ -104,8 +101,9 @@ describe('IndexCache', () => {
 
   it('LRU: the 11th distinct source evicts the oldest', async () => {
     const cache = new IndexCache({ loadOrBuild: stubLoadOrBuild })
-    for (let i = 0; i < 10; i++)
+    for (let i = 0; i < 10; i++) {
       await cache.get(`/tmp/lru-${i}`)
+    }
     expect(cache.size).toBe(10)
 
     await cache.get('/tmp/lru-10')

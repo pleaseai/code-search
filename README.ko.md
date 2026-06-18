@@ -214,7 +214,10 @@ claude mcp add csp -s user -- bunx @pleaseai/csp mcp
 ```toml
 [mcp_servers.csp]
 command = "bunx"
-args = ["@pleaseai/csp", "mcp"]
+args = [
+  "@pleaseai/csp",
+  "mcp"
+]
 ```
 
 </details>
@@ -475,10 +478,10 @@ const related = await index.findRelated(results[0], { topK: 3 })
 
 // 각 결과는 매칭된 청크를 노출합니다
 const result = results[0]
-result.chunk.filePath   // "src/model.ts"
-result.chunk.startLine  // 127
-result.chunk.endLine    // 150
-result.chunk.content    // "export function saveCheckpoint(path: string, ..."
+result.chunk.filePath // "src/model.ts"
+result.chunk.startLine // 127
+result.chunk.endLine // 150
+result.chunk.content // "export function saveCheckpoint(path: string, ..."
 ```
 
 </details>

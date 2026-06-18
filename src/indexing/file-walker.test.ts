@@ -1,13 +1,13 @@
-// Port of src/semble/index/file_walker.py — tests
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+// Port of src/semble/index/file_walker.py — tests
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import {
-  DEFAULT_IGNORED_DIRS,
   _isIgnored,
   _loadIgnoreForDir,
+  DEFAULT_IGNORED_DIRS,
   walkFiles,
 } from './file-walker.ts'
 
@@ -23,7 +23,9 @@ const describeWithIgnore = ignoreAvailable ? describe : describe.skip
 
 async function collect(iter: AsyncIterable<string>): Promise<string[]> {
   const out: string[] = []
-  for await (const item of iter) out.push(item)
+  for await (const item of iter) {
+    out.push(item)
+  }
   return out
 }
 

@@ -1,12 +1,12 @@
 // Port of src/semble/tokens.py
 
-const TOKEN_RE = /[a-zA-Z_][a-zA-Z0-9_]*/g
+const TOKEN_RE = /[a-z_]\w*/gi
 
 // Split on camelCase/PascalCase boundaries:
 //   "HandlerStack" -> ["Handler", "Stack"]
 //   "getHTTPResponse" -> ["get", "HTTP", "Response"]
 //   "XMLParser" -> ["XML", "Parser"]
-const CAMEL_RE = /[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[0-9]+/g
+const CAMEL_RE = /[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+/g
 
 /**
  * Split a single identifier into sub-tokens via camelCase/snake_case.

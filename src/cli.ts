@@ -69,7 +69,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
   while (i < argv.length) {
     const token = argv[i]!
     if (token === '--') {
-      for (let j = i + 1; j < argv.length; j++) positional.push(argv[j]!)
+      for (let j = i + 1; j < argv.length; j++) {
+        positional.push(argv[j]!)
+      }
       break
     }
     if (token.startsWith('--')) {
@@ -135,22 +137,30 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
 function _getFlag(flags: Record<string, string | boolean | string[]>, ...names: string[]): string | boolean | string[] | undefined {
   for (const name of names) {
-    if (name in flags) return flags[name]
+    if (name in flags) {
+      return flags[name]
+    }
   }
   return undefined
 }
 
 function _getStringFlag(flags: Record<string, string | boolean | string[]>, ...names: string[]): string | undefined {
   const v = _getFlag(flags, ...names)
-  if (typeof v === 'string') return v
+  if (typeof v === 'string') {
+    return v
+  }
   return undefined
 }
 
 function _getNumberFlag(flags: Record<string, string | boolean | string[]>, ...names: string[]): number | undefined {
   const s = _getStringFlag(flags, ...names)
-  if (s === undefined) return undefined
+  if (s === undefined) {
+    return undefined
+  }
   const n = Number(s)
-  if (Number.isNaN(n)) return undefined
+  if (Number.isNaN(n)) {
+    return undefined
+  }
   return n
 }
 
@@ -160,9 +170,13 @@ function _getBoolFlag(flags: Record<string, string | boolean | string[]>, ...nam
 }
 
 function _getContentFlag(flags: Record<string, string | boolean | string[]>): string[] {
-  const v = flags['content']
-  if (Array.isArray(v)) return v
-  if (typeof v === 'string') return [v]
+  const v = flags.content
+  if (Array.isArray(v)) {
+    return v
+  }
+  if (typeof v === 'string') {
+    return [v]
+  }
   return ['code']
 }
 
@@ -178,10 +192,16 @@ export function _resolveContent(content: string[], includeTextFiles: boolean): C
   }
   const result: ContentType[] = []
   for (const c of content) {
-    if (c === 'code') result.push(ContentType.CODE)
-    else if (c === 'docs') result.push(ContentType.DOCS)
-    else if (c === 'config') result.push(ContentType.CONFIG)
-    else throw new Error(`Invalid content type: ${c}. Choices: ${CONTENT_CHOICES.join(', ')}`)
+    if (c === 'code') {
+      result.push(ContentType.CODE)
+    }
+    else if (c === 'docs') {
+      result.push(ContentType.DOCS)
+    }
+    else if (c === 'config') {
+      result.push(ContentType.CONFIG)
+    }
+    else { throw new Error(`Invalid content type: ${c}. Choices: ${CONTENT_CHOICES.join(', ')}`) }
   }
   return result
 }
@@ -249,7 +269,7 @@ interface RunOptions {
 
 export async function _readAgentFile(agent: Agent): Promise<string> {
   const url = new URL(`./agents/${agent}.md`, import.meta.url)
-  return await readFile(fileURLToPath(url), 'utf8')
+  return readFile(fileURLToPath(url), 'utf8')
 }
 
 export async function _runInit(opts: {
@@ -280,7 +300,7 @@ export async function _runInit(opts: {
   await mkdir(dirname(dest), { recursive: true })
   const readAgent = opts.readAgentFile ?? _readAgentFile
   const content = await readAgent(agent)
-  const write = opts.writeFileImpl ?? ((p: string, c: string) => writeFile(p, c, 'utf8'))
+  const write = opts.writeFileImpl ?? (async (p: string, c: string) => writeFile(p, c, 'utf8'))
   await write(dest, content)
   process.stdout.write(`Created ${relDest}\n`)
 }
@@ -290,7 +310,7 @@ export async function _runInit(opts: {
  * `ref` so an absent ref is omitted rather than passed as explicit `undefined`
  * (required under `exactOptionalPropertyTypes`).
  */
-function _defaultLoadOrBuild(
+async function _defaultLoadOrBuild(
   source: string,
   opts: { content: ContentType[], ref?: string | undefined },
 ): Promise<CspIndex> {
@@ -308,8 +328,8 @@ async function _runIndex(opts: {
   fromGit?: (path: string, opts: { content: ContentType[] }) => Promise<CspIndex>
 }): Promise<void> {
   const { path, out, content } = opts
-  const fromPath = opts.fromPath ?? ((p: string, o: { content: ContentType[] }) => CspIndex.fromPath(p, o))
-  const fromGit = opts.fromGit ?? ((p: string, o: { content: ContentType[] }) => CspIndex.fromGit(p, o))
+  const fromPath = opts.fromPath ?? (async (p: string, o: { content: ContentType[] }) => CspIndex.fromPath(p, o))
+  const fromGit = opts.fromGit ?? (async (p: string, o: { content: ContentType[] }) => CspIndex.fromGit(p, o))
   const index = isGitUrl(path)
     ? await fromGit(path, { content })
     : await fromPath(path, { content })
@@ -354,11 +374,13 @@ export function _runClear(
     return 1
   }
 
-  if (type === 'index' || type === 'all')
+  if (type === 'index' || type === 'all') {
     _reportIndexClear(clearIndexImpl())
+  }
 
-  if (type === 'savings' || type === 'all')
+  if (type === 'savings' || type === 'all') {
     _reportSavingsClear(clearSavingsImpl())
+  }
 
   return 0
 }
@@ -444,7 +466,7 @@ export async function runCli(argv: string[], options: RunOptions = {}): Promise<
       const path = positional[0]
       const ref = _getStringFlag(flags, 'ref')
       const content = _resolveContent(_getContentFlag(flags), _getBoolFlag(flags, 'include-text-files'))
-      const serveImpl = options.serveMcp ?? ((p, o) => serve(p, o))
+      const serveImpl = options.serveMcp ?? (async (p, o) => serve(p, o))
       await serveImpl(path, { ref, content })
       return 0
     }
@@ -456,7 +478,7 @@ export async function runCli(argv: string[], options: RunOptions = {}): Promise<
       if (indexPath !== undefined) {
         // Explicit `--index`: load the pre-built index verbatim. The auto-cache
         // is intentionally bypassed so an explicit path is always honored.
-        const loadImpl = options.readIndex ?? ((p: string) => CspIndex.loadFromDisk(p))
+        const loadImpl = options.readIndex ?? (async (p: string) => CspIndex.loadFromDisk(p))
         index = await loadImpl(indexPath)
       }
       else {
@@ -478,8 +500,8 @@ export async function runCli(argv: string[], options: RunOptions = {}): Promise<
           process.stderr.write('search requires a <query>.\n')
           return 1
         }
-        const results = await index.search(query, { topK })
-        const out = (!results || results.length === 0)
+        const results = index.search(query, { topK })
+        const out = results.length === 0
           ? { error: 'No results found.' }
           : formatResults(query, results)
         process.stdout.write(`${JSON.stringify(out)}\n`)
@@ -503,8 +525,8 @@ export async function runCli(argv: string[], options: RunOptions = {}): Promise<
         process.stderr.write(`No chunk found at ${filePath}:${line}.\n`)
         return 1
       }
-      const related = await index.findRelated(chunk, { topK })
-      const out = (!related || related.length === 0)
+      const related = index.findRelated(chunk, { topK })
+      const out = related.length === 0
         ? { error: `No related chunks found for ${filePath}:${line}.` }
         : formatResults(`Chunks related to ${filePath}:${line}`, related)
       process.stdout.write(`${JSON.stringify(out)}\n`)
@@ -537,7 +559,9 @@ function _coerceAgent(raw: string): Agent {
     Agent.Reasonix,
   ]
   for (const a of candidates) {
-    if (a === raw) return a
+    if (a === raw) {
+      return a
+    }
   }
   throw new Error(`Invalid agent: ${raw}. Choices: ${candidates.join(', ')}`)
 }
@@ -545,15 +569,21 @@ function _coerceAgent(raw: string): Agent {
 async function main(): Promise<void> {
   const argv = process.argv.slice(2)
   const code = await runCli(argv)
-  if (code !== 0) process.exit(code)
+  if (code !== 0) {
+    process.exit(code)
+  }
 }
 
 // Run main only when invoked directly (not when imported as a module / under bun:test)
 const invokedDirectly = (() => {
-  if (typeof process === 'undefined') return false
+  if (typeof process === 'undefined') {
+    return false
+  }
   // process.argv[1] points at the entrypoint script — match against this module's URL
   const entry = process.argv[1]
-  if (entry === undefined) return false
+  if (entry === undefined) {
+    return false
+  }
   try {
     const here = fileURLToPath(import.meta.url)
     return entry === here || entry.endsWith('/cli.ts') || entry.endsWith('/cli.mjs') || entry.endsWith('/cli.js')

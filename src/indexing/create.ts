@@ -1,13 +1,13 @@
 // Port of src/semble/index/create.py
 
+import type { Chunk } from '../types.ts'
+import type { Model } from './dense.ts'
 import { readFileSync, statSync } from 'node:fs'
 import { relative } from 'node:path'
-import type { Chunk } from '../types.ts'
-import { ContentType } from '../types.ts'
 import { chunkSource } from '../chunking/chunk-source.ts'
 import { tokenize } from '../tokens.ts'
-import type { Model } from './dense.ts'
-import { SelectableBasicBackend, embedChunks } from './dense.ts'
+import { ContentType } from '../types.ts'
+import { embedChunks, SelectableBasicBackend } from './dense.ts'
 import { walkFiles } from './file-walker.ts'
 import { detectLanguage, getExtensions } from './files.ts'
 import { Bm25Index, enrichForBm25 } from './sparse.ts'
@@ -55,7 +55,9 @@ export async function createIndexFromPath(
     catch {
       continue
     }
-    if (size > MAX_FILE_BYTES) continue
+    if (size > MAX_FILE_BYTES) {
+      continue
+    }
     let source: string
     try {
       source = readFileSync(filePath, 'utf8')
@@ -63,7 +65,7 @@ export async function createIndexFromPath(
     catch {
       continue
     }
-    const chunkPath = displayRoot ? relative(displayRoot, filePath) : filePath
+    const chunkPath = displayRoot !== undefined ? relative(displayRoot, filePath) : filePath
     chunks.push(...(await chunkSource(source, chunkPath, language ?? null)))
   }
 
@@ -85,6 +87,8 @@ function normalizeContent(
     // Default: code-only. Mirrors _DEFAULT_CONTENT in semble.
     return [ContentType.CODE]
   }
-  if (Array.isArray(content)) return content
+  if (Array.isArray(content)) {
+    return content as readonly ContentType[]
+  }
   return [content as ContentType]
 }

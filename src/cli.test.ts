@@ -1,14 +1,16 @@
-// Port of (none) — unit tests for src/cli.ts
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import type { CspIndex } from './indexing/index.ts'
+import type { SearchResult } from './types.ts'
+import { Buffer } from 'node:buffer'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import process from 'node:process'
 
+import process from 'node:process'
+// Port of (none) — unit tests for src/cli.ts
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { _agentPath, _readAgentFile, _resolveContent, _runInit, Agent, parseArgs, runCli } from './cli.ts'
-import type { CspIndex } from './indexing/index.ts'
-import { ContentType, type SearchResult } from './types.ts'
+import { ContentType } from './types.ts'
 
 describe('Agent enum', () => {
   test('enum values', () => {
@@ -54,7 +56,7 @@ describe('parseArgs', () => {
   })
   test('--flag value', () => {
     const r = parseArgs(['index', '.', '--out', 'idx'])
-    expect(r.flags['out']).toBe('idx')
+    expect(r.flags.out).toBe('idx')
   })
   test('--flag=value', () => {
     const r = parseArgs(['search', 'q', '--top-k=10'])
@@ -62,15 +64,15 @@ describe('parseArgs', () => {
   })
   test('boolean flag', () => {
     const r = parseArgs(['savings', '--verbose'])
-    expect(r.flags['verbose']).toBe(true)
+    expect(r.flags.verbose).toBe(true)
   })
   test('multi-value --content', () => {
     const r = parseArgs(['search', 'q', '--content', 'code', 'docs'])
-    expect(r.flags['content']).toEqual(['code', 'docs'])
+    expect(r.flags.content).toEqual(['code', 'docs'])
   })
   test('short -k', () => {
     const r = parseArgs(['search', 'q', '-k', '20'])
-    expect(r.flags['k']).toBe('20')
+    expect(r.flags.k).toBe('20')
   })
 })
 
@@ -96,10 +98,10 @@ describe('runCli --help', () => {
   test('help mentions all subcommands', async () => {
     const writes: string[] = []
     const origWrite = process.stdout.write.bind(process.stdout)
-    process.stdout.write = ((chunk: string | Uint8Array) => {
+    process.stdout.write = (chunk: string | Uint8Array) => {
       writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stdout.write
+    }
     try {
       const code = await runCli(['--help'])
       expect(code).toBe(0)
@@ -194,17 +196,17 @@ describe('csp search (stub-mocked)', () => {
     let captured: { query?: string, topK?: number } = {}
     const fakeIndex: Partial<CspIndex> = {
       chunks: [],
-      search: async (query: string, opts?: { topK?: number }): Promise<SearchResult[]> => {
+      search: (query: string, opts?: { topK?: number }): SearchResult[] => {
         captured = { query, ...(opts ?? {}) }
         return []
       },
     }
     const writes: string[] = []
     const origWrite = process.stdout.write.bind(process.stdout)
-    process.stdout.write = ((chunk: string | Uint8Array) => {
+    process.stdout.write = (chunk: string | Uint8Array) => {
       writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stdout.write
+    }
     try {
       const code = await runCli(['search', 'foo', '.', '-k', '7'], {
         loadOrBuild: async () => fakeIndex as CspIndex,
@@ -223,7 +225,7 @@ describe('csp search (stub-mocked)', () => {
   test('formats non-empty results as JSON', async () => {
     const fakeIndex: Partial<CspIndex> = {
       chunks: [],
-      search: async () => [
+      search: (): SearchResult[] => [
         {
           chunk: { content: 'def foo()', filePath: 'a.py', startLine: 1, endLine: 3, language: 'python' },
           score: 0.9,
@@ -244,10 +246,10 @@ describe('csp search (stub-mocked)', () => {
     }
     const writes: string[] = []
     const origWrite = process.stdout.write.bind(process.stdout)
-    process.stdout.write = ((chunk: string | Uint8Array) => {
+    process.stdout.write = (chunk: string | Uint8Array) => {
       writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stdout.write
+    }
     try {
       await runCli(['search', 'foo', '.'], {
         loadOrBuild: async () => fakeIndex as CspIndex,
@@ -256,11 +258,14 @@ describe('csp search (stub-mocked)', () => {
     finally {
       process.stdout.write = origWrite
     }
-    const out = JSON.parse(writes.join('').trim())
+    const out = JSON.parse(writes.join('').trim()) as {
+      query: string
+      results: { chunk: { file_path: string, location: string } }[]
+    }
     expect(out.query).toBe('foo')
     expect(out.results).toHaveLength(1)
-    expect(out.results[0].chunk.file_path).toBe('a.py')
-    expect(out.results[0].chunk.location).toBe('a.py:1-3')
+    expect(out.results[0]!.chunk.file_path).toBe('a.py')
+    expect(out.results[0]!.chunk.location).toBe('a.py:1-3')
   })
 })
 
@@ -268,10 +273,10 @@ describe('csp savings', () => {
   test('prints the report', async () => {
     const writes: string[] = []
     const origWrite = process.stdout.write.bind(process.stdout)
-    process.stdout.write = ((chunk: string | Uint8Array) => {
+    process.stdout.write = (chunk: string | Uint8Array) => {
       writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stdout.write
+    }
     try {
       const code = await runCli(['savings'], {
         formatSavings: ({ verbose }) => `SAVINGS verbose=${verbose ? '1' : '0'}`,
@@ -287,10 +292,10 @@ describe('csp savings', () => {
   test('--verbose is forwarded', async () => {
     const writes: string[] = []
     const origWrite = process.stdout.write.bind(process.stdout)
-    process.stdout.write = ((chunk: string | Uint8Array) => {
+    process.stdout.write = (chunk: string | Uint8Array) => {
       writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stdout.write
+    }
     try {
       await runCli(['savings', '--verbose'], {
         formatSavings: ({ verbose }) => `SAVINGS verbose=${verbose ? '1' : '0'}`,
@@ -307,11 +312,13 @@ describe('csp clear', () => {
   function captureStdout(): { writes: string[], restore: () => void } {
     const writes: string[] = []
     const origWrite = process.stdout.write.bind(process.stdout)
-    process.stdout.write = ((chunk: string | Uint8Array) => {
+    process.stdout.write = (chunk: string | Uint8Array) => {
       writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stdout.write
-    return { writes, restore: () => { process.stdout.write = origWrite } }
+    }
+    return { writes, restore: () => {
+      process.stdout.write = origWrite
+    } }
   }
 
   test('clear savings deletes the file and reports the path', async () => {
@@ -319,7 +326,10 @@ describe('csp clear', () => {
     let called = 0
     try {
       const code = await runCli(['clear', 'savings'], {
-        clearSavings: () => { called++; return { path: '/tmp/x/savings.jsonl', cleared: true } },
+        clearSavings: () => {
+          called++
+          return { path: '/tmp/x/savings.jsonl', cleared: true }
+        },
       })
       expect(code).toBe(0)
     }
@@ -349,8 +359,14 @@ describe('csp clear', () => {
     let indexCalled = 0
     try {
       await runCli(['clear', 'index'], {
-        clearSavings: () => { savingsCalled++; return { path: '/tmp/x/savings.jsonl', cleared: true } },
-        clearIndex: () => { indexCalled++; return { path: '/tmp/x/index', cleared: true, entries: 3 } },
+        clearSavings: () => {
+          savingsCalled++
+          return { path: '/tmp/x/savings.jsonl', cleared: true }
+        },
+        clearIndex: () => {
+          indexCalled++
+          return { path: '/tmp/x/index', cleared: true, entries: 3 }
+        },
       })
     }
     finally {
@@ -383,8 +399,14 @@ describe('csp clear', () => {
     let indexCalled = 0
     try {
       await runCli(['clear', 'all'], {
-        clearSavings: () => { savingsCalled++; return { path: '/tmp/x/savings.jsonl', cleared: true } },
-        clearIndex: () => { indexCalled++; return { path: '/tmp/x/index', cleared: true, entries: 2 } },
+        clearSavings: () => {
+          savingsCalled++
+          return { path: '/tmp/x/savings.jsonl', cleared: true }
+        },
+        clearIndex: () => {
+          indexCalled++
+          return { path: '/tmp/x/index', cleared: true, entries: 2 }
+        },
       })
     }
     finally {
@@ -475,10 +497,10 @@ describe('csp find-related validates line', () => {
   test('non-integer line errors with code 1', async () => {
     const errs: string[] = []
     const origStderr = process.stderr.write.bind(process.stderr)
-    process.stderr.write = ((chunk: string | Uint8Array) => {
+    process.stderr.write = (chunk: string | Uint8Array) => {
       errs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stderr.write
+    }
     try {
       const code = await runCli(['find-related', 'src/auth.ts', '42abc', '.'], {
         loadOrBuild: async () => ({ chunks: [] }) as unknown as CspIndex,
@@ -513,14 +535,14 @@ describe('runCli error handling', () => {
     const outs: string[] = []
     const origErr = process.stderr.write.bind(process.stderr)
     const origOut = process.stdout.write.bind(process.stdout)
-    process.stderr.write = ((chunk: string | Uint8Array) => {
+    process.stderr.write = (chunk: string | Uint8Array) => {
       errs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stderr.write
-    process.stdout.write = ((chunk: string | Uint8Array) => {
+    }
+    process.stdout.write = (chunk: string | Uint8Array) => {
       outs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stdout.write
+    }
     try {
       const code = await runCli(['bogus-cmd'])
       expect(code).toBe(1)
@@ -535,10 +557,10 @@ describe('runCli error handling', () => {
   test('invalid --agent returns exit 1 with stderr message', async () => {
     const errs: string[] = []
     const origErr = process.stderr.write.bind(process.stderr)
-    process.stderr.write = ((chunk: string | Uint8Array) => {
+    process.stderr.write = (chunk: string | Uint8Array) => {
       errs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stderr.write
+    }
     try {
       const code = await runCli(['init', '--agent', 'bogus'])
       expect(code).toBe(1)
@@ -552,10 +574,10 @@ describe('runCli error handling', () => {
   test('invalid --content returns exit 1 with stderr message', async () => {
     const errs: string[] = []
     const origErr = process.stderr.write.bind(process.stderr)
-    process.stderr.write = ((chunk: string | Uint8Array) => {
+    process.stderr.write = (chunk: string | Uint8Array) => {
       errs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stderr.write
+    }
     try {
       const code = await runCli(['search', 'foo', '--content', 'bogus'], {
         loadOrBuild: async () => ({ chunks: [] }) as unknown as CspIndex,
@@ -574,14 +596,14 @@ describe('runCli error handling', () => {
     const outs: string[] = []
     const origErr = process.stderr.write.bind(process.stderr)
     const origOut = process.stdout.write.bind(process.stdout)
-    process.stderr.write = ((chunk: string | Uint8Array) => {
+    process.stderr.write = (chunk: string | Uint8Array) => {
       errs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stderr.write
-    process.stdout.write = ((chunk: string | Uint8Array) => {
+    }
+    process.stdout.write = (chunk: string | Uint8Array) => {
       outs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stdout.write
+    }
     try {
       // First run: succeeds.
       const code1 = await runCli(['init', '--agent', 'claude'], {
@@ -657,10 +679,10 @@ describe('csp index -o (explicit path persistence)', () => {
   test('without -o keeps the required-flag error and exits 1', async () => {
     const errs: string[] = []
     const origErr = process.stderr.write.bind(process.stderr)
-    process.stderr.write = ((chunk: string | Uint8Array) => {
+    process.stderr.write = (chunk: string | Uint8Array) => {
       errs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stderr.write
+    }
     try {
       const code = await runCli(['index', '.'], {
         fromPath: async () => ({ chunks: [], save: async () => {} }) as unknown as CspIndex,
@@ -683,13 +705,16 @@ describe('csp search/find-related --index (explicit path respected)', () => {
     }
     const writes: string[] = []
     const origWrite = process.stdout.write.bind(process.stdout)
-    process.stdout.write = ((chunk: string | Uint8Array) => {
+    process.stdout.write = (chunk: string | Uint8Array) => {
       writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stdout.write
+    }
     try {
       const code = await runCli(['search', 'foo', '--index', '/some/explicit/idx'], {
-        readIndex: async (p: string) => { loadedFrom = p; return fakeIndex as CspIndex },
+        readIndex: async (p: string) => {
+          loadedFrom = p
+          return fakeIndex as CspIndex
+        },
         // fromPath provided to prove it is NOT used when --index is set.
         fromPath: async () => { throw new Error('fromPath must not run when --index is given') },
       })
@@ -711,13 +736,16 @@ describe('csp search/find-related --index (explicit path respected)', () => {
     }
     const writes: string[] = []
     const origWrite = process.stdout.write.bind(process.stdout)
-    process.stdout.write = ((chunk: string | Uint8Array) => {
+    process.stdout.write = (chunk: string | Uint8Array) => {
       writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stdout.write
+    }
     try {
       const code = await runCli(['find-related', 'a.ts', '2', '--index', '/explicit/idx2'], {
-        readIndex: async (p: string) => { loadedFrom = p; return fakeIndex as CspIndex },
+        readIndex: async (p: string) => {
+          loadedFrom = p
+          return fakeIndex as CspIndex
+        },
         fromPath: async () => { throw new Error('fromPath must not run when --index is given') },
       })
       expect(code).toBe(0)
@@ -731,10 +759,10 @@ describe('csp search/find-related --index (explicit path respected)', () => {
   test('search --index with a missing path surfaces a clear error and exits 1', async () => {
     const errs: string[] = []
     const origErr = process.stderr.write.bind(process.stderr)
-    process.stderr.write = ((chunk: string | Uint8Array) => {
+    process.stderr.write = (chunk: string | Uint8Array) => {
       errs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stderr.write
+    }
     const missing = join(tmpdir(), `csp-no-such-index-${Date.now()}`)
     try {
       // No readIndex seam → real CspIndex.loadFromDisk runs and must throw a clear error.
@@ -755,10 +783,10 @@ describe('csp index -o → search --index (real roundtrip, no seams)', () => {
     const out = join(tmp, 'idx')
     const writes: string[] = []
     const origWrite = process.stdout.write.bind(process.stdout)
-    process.stdout.write = ((chunk: string | Uint8Array) => {
+    process.stdout.write = (chunk: string | Uint8Array) => {
       writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stdout.write
+    }
     try {
       // Build a real CspIndex from a tiny source dir, persist via `csp index -o`.
       const src = join(tmp, 'src')
@@ -778,7 +806,7 @@ describe('csp index -o → search --index (real roundtrip, no seams)', () => {
       await rm(tmp, { recursive: true, force: true })
     }
     // A non-empty result set (or an explicit "No results") must be valid JSON.
-    const out2 = JSON.parse(writes.join('').trim().split('\n').pop() ?? '{}')
+    const out2 = JSON.parse(writes.join('').trim().split('\n').pop() ?? '{}') as unknown
     expect(out2).toBeDefined()
   })
 })
@@ -787,11 +815,13 @@ describe('csp search/find-related (no --index) auto-caches via loadOrBuildIndex 
   function captureStdout(): { writes: string[], restore: () => void } {
     const writes: string[] = []
     const origWrite = process.stdout.write.bind(process.stdout)
-    process.stdout.write = ((chunk: string | Uint8Array) => {
+    process.stdout.write = (chunk: string | Uint8Array) => {
       writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
-    }) as typeof process.stdout.write
-    return { writes, restore: () => { process.stdout.write = origWrite } }
+    }
+    return { writes, restore: () => {
+      process.stdout.write = origWrite
+    } }
   }
 
   test('search without --index routes through the loadOrBuild seam with source + content + topK', async () => {
@@ -826,7 +856,10 @@ describe('csp search/find-related (no --index) auto-caches via loadOrBuildIndex 
     const { restore } = captureStdout()
     try {
       const code = await runCli(['search', 'foo'], {
-        loadOrBuild: async (source) => { capturedSource = source; return fakeIndex as CspIndex },
+        loadOrBuild: async (source) => {
+          capturedSource = source
+          return fakeIndex as CspIndex
+        },
       })
       expect(code).toBe(0)
     }
@@ -846,7 +879,10 @@ describe('csp search/find-related (no --index) auto-caches via loadOrBuildIndex 
     const { restore } = captureStdout()
     try {
       const code = await runCli(['find-related', 'a.ts', '2', './repo'], {
-        loadOrBuild: async (source) => { capturedSource = source; return fakeIndex as CspIndex },
+        loadOrBuild: async (source) => {
+          capturedSource = source
+          return fakeIndex as CspIndex
+        },
         fromPath: async () => { throw new Error('fromPath must not run when auto-cache is wired') },
       })
       expect(code).toBe(0)
@@ -864,8 +900,14 @@ describe('csp search/find-related (no --index) auto-caches via loadOrBuildIndex 
     const { restore } = captureStdout()
     try {
       const code = await runCli(['search', 'foo', '--index', '/explicit/idx'], {
-        readIndex: async (p: string) => { loadedFrom = p; return fakeIndex as CspIndex },
-        loadOrBuild: async () => { autoCacheCalled = true; return fakeIndex as CspIndex },
+        readIndex: async (p: string) => {
+          loadedFrom = p
+          return fakeIndex as CspIndex
+        },
+        loadOrBuild: async () => {
+          autoCacheCalled = true
+          return fakeIndex as CspIndex
+        },
       })
       expect(code).toBe(0)
     }
@@ -882,7 +924,10 @@ describe('csp search/find-related (no --index) auto-caches via loadOrBuildIndex 
     const { restore } = captureStdout()
     try {
       const code = await runCli(['search', 'foo', 'https://github.com/o/r', '--ref', 'v1.2.3'], {
-        loadOrBuild: async (_source, opts) => { capturedRef = opts.ref; return fakeIndex as CspIndex },
+        loadOrBuild: async (_source, opts) => {
+          capturedRef = opts.ref
+          return fakeIndex as CspIndex
+        },
       })
       expect(code).toBe(0)
     }

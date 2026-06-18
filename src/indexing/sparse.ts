@@ -14,9 +14,9 @@
 //     - Replacing this backend later is a localized change because all
 //       callers go through the Bm25Index class.
 
+import type { Chunk } from '../types.ts'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import type { Chunk } from '../types.ts'
 
 // Re-exported so existing importers (e.g. sparse.test.ts) keep resolving
 // `Chunk` from this module after the type was unified into ../types.ts.
@@ -56,12 +56,14 @@ export function selectorToMask(
   selector: Uint32Array | null | undefined,
   size: number,
 ): Uint8Array | null {
-  if (selector === null || selector === undefined)
+  if (selector === null || selector === undefined) {
     return null
+  }
   const mask = new Uint8Array(size)
   for (const idx of selector) {
-    if (idx < size)
+    if (idx < size) {
       mask[idx] = 1
+    }
   }
   return mask
 }
@@ -126,8 +128,9 @@ export class Bm25Index {
 
       // Term frequencies for this document.
       const tf = new Map<string, number>()
-      for (const token of tokens)
+      for (const token of tokens) {
         tf.set(token, (tf.get(token) ?? 0) + 1)
+      }
 
       for (const [term, freq] of tf) {
         let list = postings.get(term)
@@ -155,16 +158,18 @@ export class Bm25Index {
   getScores(queryTokens: string[], weightMask?: Uint8Array | null): Float32Array {
     const { numDocs, docLengths, avgDocLength, postings, docFreq } = this.#state
     const scores = new Float32Array(numDocs)
-    if (queryTokens.length === 0 || numDocs === 0)
+    if (queryTokens.length === 0 || numDocs === 0) {
       return scores
+    }
 
     // De-duplicate query tokens — repeated terms shouldn't compound BM25 scores.
     const uniqueTerms = new Set(queryTokens)
 
     for (const term of uniqueTerms) {
       const list = postings.get(term)
-      if (list === undefined)
+      if (list === undefined) {
         continue
+      }
       const df = docFreq.get(term) ?? 0
       // Lucene/Robertson IDF: log(1 + (N - df + 0.5) / (df + 0.5)).
       const idf = Math.log(1 + (numDocs - df + 0.5) / (df + 0.5))
@@ -173,8 +178,9 @@ export class Bm25Index {
         // Skip masked-out documents inside the posting-list iteration so we
         // avoid the work entirely; Float32Array entries default to 0 so the
         // final scores match the post-loop zeroing approach.
-        if (weightMask && !weightMask[docId])
+        if (weightMask && (weightMask[docId] ?? 0) === 0) {
           continue
+        }
         const dl = docLengths[docId] ?? 0
         const denom = freq + K1 * (1 - B + (B * dl) / (avgDocLength || 1))
         const contrib = (idf * (freq * (K1 + 1))) / (denom || 1)

@@ -18,8 +18,9 @@ const SCP_GIT_URL_RE = /^[\w.-]+@[\w.-]+:(?!\/)/
 /** Return true if path looks like a remote git URL rather than a local path. */
 export function isGitUrl(path: string): boolean {
   for (const scheme of GIT_URL_SCHEMES) {
-    if (path.startsWith(scheme))
+    if (path.startsWith(scheme)) {
       return true
+    }
   }
   return SCP_GIT_URL_RE.test(path)
 }
@@ -43,10 +44,12 @@ export function resolveChunk(
       && chunk.startLine <= line
       && line <= chunk.endLine
     ) {
-      if (line < chunk.endLine)
+      if (line < chunk.endLine) {
         return chunk
-      if (fallback === null)
+      }
+      if (fallback === null) {
         fallback = chunk
+      }
     }
   }
   return fallback

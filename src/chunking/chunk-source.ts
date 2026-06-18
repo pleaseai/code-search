@@ -4,8 +4,8 @@
 // returns concrete `Chunk` values with line numbers. Uses the AST chunker
 // when the language is supported, line fallback otherwise.
 
-import { chunk, chunkLines, isSupportedLanguage } from './core.ts'
 import type { ChunkBoundary } from './core.ts'
+import { chunk, chunkLines, isSupportedLanguage } from './core.ts'
 
 // Inline Chunk type until Unit 1 (types) lands.
 // Once `src/types.ts` exists, replace this with:
@@ -27,17 +27,20 @@ export async function chunkSource(
   filePath: string,
   language: string | null,
 ): Promise<Chunk[]> {
-  if (source.trim().length === 0)
+  if (source.trim().length === 0) {
     return []
+  }
 
   let chunkBoundaries: ChunkBoundary[] | null = null
-  if (language !== null && isSupportedLanguage(language))
+  if (language !== null && isSupportedLanguage(language)) {
     chunkBoundaries = await chunk(source, language, DESIRED_CHUNK_LENGTH_CHARS)
+  }
 
   // This is an `if` (not `else`) because the error state of the parser
   // above is `null` — fall through and use the line chunker.
-  if (chunkBoundaries === null)
+  if (chunkBoundaries === null) {
     chunkBoundaries = chunkLines(source, DESIRED_CHUNK_LENGTH_CHARS)
+  }
 
   // Resolve 1-indexed line numbers in a single pass. Boundaries are sorted by
   // their start offset, so we can advance a cursor through `source` once
@@ -49,8 +52,9 @@ export async function chunkSource(
   const advanceTo = (target: number): number => {
     const limit = Math.min(target, source.length)
     while (cursor < limit) {
-      if (source[cursor] === '\n')
+      if (source[cursor] === '\n') {
         line += 1
+      }
       cursor += 1
     }
     return line
