@@ -405,7 +405,15 @@ fn run() -> ExitCode {
             }
         }
         Command::Mcp { .. } => {
-            eprintln!("`csp mcp` is not implemented yet (Rust rewrite in progress — see ADR-0003)");
+            // The MCP tool core (IndexCache + get_index + search/find_related
+            // handlers) is implemented and tested in `csp::mcp`. The rmcp stdio
+            // transport that exposes it over the live MCP protocol is pending
+            // on-the-wire verification against an MCP client (ADR-0003 / T021 STOP).
+            eprintln!(
+                "`csp mcp` stdio transport is not wired yet. The MCP tool core is \
+                 implemented in csp::mcp; the rmcp transport awaits protocol verification \
+                 (see ADR-0003)."
+            );
             ExitCode::FAILURE
         }
     }

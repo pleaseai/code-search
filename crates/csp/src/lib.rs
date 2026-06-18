@@ -9,6 +9,7 @@
 
 pub mod chunking;
 pub mod indexing;
+pub mod mcp;
 pub mod ranking;
 pub mod search;
 pub mod stats;
