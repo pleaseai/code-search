@@ -1,0 +1,31 @@
+.please/docs/tracks/tech-debt-tracker.md
+  s_4fc351d6f8f5f5::t_0ba31eb8aa2a79 9-12
+.please/docs/tracks/completed/rust-rewrite-20260618/metadata.json
+  s_4fc351d6f8f5f5::t_53ef4de89ea473 4,6,8-9
+.please/docs/product-specs/rewrite-csp-in-rust/spec.json
+  s_4fc351d6f8f5f5::t_763b62122d88b0 1-15
+.please/docs/product-specs/index.json
+  s_4fc351d6f8f5f5::t_763b62122d88b0 15-26
+.please/docs/product-specs/index.md
+  s_4fc351d6f8f5f5::t_763b62122d88b0 8
+.please/docs/product-specs/rewrite-csp-in-rust/spec.md
+  s_4fc351d6f8f5f5::t_763b62122d88b0 1-20
+CLAUDE.md
+  s_4fc351d6f8f5f5::t_aaab0e6db116ac 9-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "fd9dc86e97a9676277fd788840b80878f2dfdd03",
+  "prompts": {},
+  "sessions": {
+    "s_4fc351d6f8f5f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d716d4e4-e51c-4bb2-8e56-af1ec7a37a38",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
