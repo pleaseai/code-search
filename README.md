@@ -80,7 +80,7 @@ npm install -g @pleaseai/csp # Or with npm
 pnpm add -g @pleaseai/csp    # Or with pnpm
 ```
 
-> The Homebrew formula ships a self-contained binary built with `bun build --compile` (tree-sitter and embedding runtimes are bundled). The embedding model is downloaded on first search and cached under `~/.cache`.
+> The Homebrew formula ships a self-contained binary built with `bun build --compile` (tree-sitter and embedding runtimes are bundled). Indexes are cached under `~/.csp/` (see [ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md)).
 
 <details>
 <summary>AGENTS.md / CLAUDE.md snippet</summary>

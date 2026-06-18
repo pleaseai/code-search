@@ -80,7 +80,7 @@ npm install -g @pleaseai/csp # 또는 npm
 pnpm add -g @pleaseai/csp    # 또는 pnpm
 ```
 
-> Homebrew formula는 `bun build --compile`로 만든 자체 완결형 바이너리를 제공합니다(tree-sitter·임베딩 런타임 내장). 임베딩 모델은 첫 검색 시 내려받아 `~/.cache`에 캐시됩니다.
+> Homebrew formula는 `bun build --compile`로 만든 자체 완결형 바이너리를 제공합니다(tree-sitter·임베딩 런타임 내장). 인덱스는 `~/.csp/`에 캐시됩니다([ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md) 참고).
 
 <details>
 <summary>AGENTS.md / CLAUDE.md 스니펫</summary>
