@@ -2,7 +2,7 @@
   "name": "@pleaseai/csp",
   "type": "module",
   "version": "0.0.0",
-  "packageManager": "bun@1.3.10",
+  "packageManager": "bun@1.3.14",
   "description": "Fast and Accurate Code Search for Agents — TypeScript port of MinishLab/semble",
   "author": "Minsu Lee <minsu.lee@dietfriends.kr>",
   "license": "MIT",
