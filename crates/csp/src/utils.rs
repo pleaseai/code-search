@@ -1,9 +1,36 @@
 //! Misc utilities. Port of `src/utils.ts` (← semble `utils.py`).
-//!
-//! `format_results` (which depends on the wire-format `SearchResult.toDict`
-//! closure) lands with the search pipeline in a later phase.
 
-use crate::types::Chunk;
+use serde_json::{json, Value};
+
+use crate::search::SearchResult;
+use crate::types::{chunk_location, Chunk};
+
+/// Serialize a search result to the CLI/MCP wire dict — **snake_case** chunk
+/// fields plus a derived `location` (matching the TS `SearchResult.toDict`, which
+/// differs from the camelCase `ChunkDict` used for on-disk persistence).
+pub fn result_to_dict(result: &SearchResult) -> Value {
+    let c = &result.chunk;
+    json!({
+        "chunk": {
+            "content": c.content,
+            "file_path": c.file_path,
+            "start_line": c.start_line,
+            "end_line": c.end_line,
+            "language": c.language,
+            "location": chunk_location(c),
+        },
+        "score": result.score,
+    })
+}
+
+/// Build the `{ query, results }` payload the CLI prints and the MCP server
+/// returns. Port of `utils.formatResults`.
+pub fn format_results(query: &str, results: &[SearchResult]) -> Value {
+    json!({
+        "query": query,
+        "results": results.iter().map(result_to_dict).collect::<Vec<_>>(),
+    })
+}
 
 const GIT_URL_SCHEMES: [&str; 6] = [
     "https://",
