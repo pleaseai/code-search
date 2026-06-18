@@ -12,20 +12,20 @@
 //   - loadFromDisk: throwing stub (real persistence in T007); declared here so
 //     the Phase A/B branch type-checks (cli.ts references CspIndex.loadFromDisk).
 
+import type { Chunk, ContentType, IndexStats, SearchResult } from '../types.ts'
+import type { Model } from './dense.ts'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { chmodSync, existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import process from 'node:process'
 import { promisify } from 'node:util'
-import type { Chunk, ContentType, IndexStats, SearchResult } from '../types.ts'
-import { chunkFromDict, chunkToDict, ContentType as ContentTypeEnum } from '../types.ts'
 import { search as runSearch } from '../search.ts'
+import { chunkFromDict, chunkToDict, ContentType as ContentTypeEnum } from '../types.ts'
 import { createIndexFromPath } from './create.ts'
-import { loadModel as loadDenseModel, makeStubModel } from './dense.ts'
-import type { Model } from './dense.ts'
-import { SelectableBasicBackend } from './dense.ts'
+import { loadModel as loadDenseModel, makeStubModel, SelectableBasicBackend } from './dense.ts'
 import { Bm25Index } from './sparse.ts'
 
 /** Promisified `git` runner — keeps the network-bound clone off the event loop. */
@@ -158,8 +158,9 @@ export class CspIndex {
     catch {
       throw new Error(`Path does not exist: ${path}`)
     }
-    if (!pathStats.isDirectory())
+    if (!pathStats.isDirectory()) {
       throw new Error(`Path is not a directory: ${path}`)
+    }
 
     const { model, modelPath } = await loadDenseModel(options.modelPath)
     const content = normalizeContent(options.content)
@@ -227,8 +228,9 @@ export class CspIndex {
     for (const chunk of this.chunks) {
       files.add(chunk.filePath)
       const lang = chunk.language
-      if (lang !== null && lang !== undefined)
+      if (lang !== null && lang !== undefined) {
         languages[lang] = (languages[lang] ?? 0) + 1
+      }
     }
     return {
       indexedFiles: files.size,
@@ -248,12 +250,14 @@ export class CspIndex {
    */
   search(query: string, options: SearchOptions = {}): SearchResult[] {
     const topK = options.topK ?? DEFAULT_TOP_K
-    if (query.trim().length === 0 || topK <= 0 || this.chunks.length === 0)
+    if (query.trim().length === 0 || topK <= 0 || this.chunks.length === 0) {
       return []
+    }
 
     const selector = this.buildSelector(options)
-    if (selector !== undefined && selector.length === 0)
+    if (selector !== undefined && selector.length === 0) {
       return []
+    }
 
     return runSearch(
       query,
@@ -279,24 +283,28 @@ export class CspIndex {
   ): SearchResult[] {
     const seedChunk = 'chunk' in seed ? seed.chunk : seed
     const topK = options.topK ?? DEFAULT_TOP_K
-    if (topK <= 0 || this.chunks.length === 0)
+    if (topK <= 0 || this.chunks.length === 0) {
       return []
+    }
 
     // Over-fetch by one so we can drop the seed and still return up to topK.
     const queryEmbedding = this.model.encode([seedChunk.content])
     const batch = this.semanticIndex.query(queryEmbedding, topK + 1)
     const first = batch[0]
-    if (first === undefined)
+    if (first === undefined) {
       return []
+    }
 
     const results: SearchResult[] = []
     for (const [index, distance] of first) {
       const chunk = this.chunks[index]
-      if (chunk === undefined || chunk === seedChunk)
+      if (chunk === undefined || chunk === seedChunk) {
         continue
+      }
       results.push(makeRelatedResult(chunk, 1.0 - distance))
-      if (results.length >= topK)
+      if (results.length >= topK) {
         break
+      }
     }
     return results
   }
@@ -310,16 +318,19 @@ export class CspIndex {
     const { filterLanguages, filterPaths } = options
     const hasLangFilter = filterLanguages !== undefined && filterLanguages.length > 0
     const hasPathFilter = filterPaths !== undefined && filterPaths.length > 0
-    if (!hasLangFilter && !hasPathFilter)
+    if (!hasLangFilter && !hasPathFilter) {
       return undefined
+    }
 
     const indices: number[] = []
     for (let i = 0; i < this.chunks.length; i++) {
       const chunk = this.chunks[i]!
-      if (hasLangFilter && !filterLanguages.includes(chunk.language ?? ''))
+      if (hasLangFilter && !filterLanguages.includes(chunk.language ?? '')) {
         continue
-      if (hasPathFilter && !filterPaths.some(p => chunk.filePath.includes(p)))
+      }
+      if (hasPathFilter && !filterPaths.some(p => chunk.filePath.includes(p))) {
         continue
+      }
       indices.push(i)
     }
     return Uint32Array.from(indices)
@@ -376,13 +387,15 @@ export class CspIndex {
    *   manifest schema version does not match.
    */
   static async loadFromDisk(dir: string): Promise<CspIndex> {
-    if (!existsSync(dir))
+    if (!existsSync(dir)) {
       throw new Error(`Index not found: ${dir}`)
+    }
 
     const artifacts = ['manifest.json', 'chunks.json', 'bm25.json', 'vectors.bin', 'args.json']
     for (const name of artifacts) {
-      if (!existsSync(join(dir, name)))
+      if (!existsSync(join(dir, name))) {
         throw new Error(`Missing: ${join(dir, name)}`)
+      }
     }
 
     const rawManifest = JSON.parse(await readFile(join(dir, 'manifest.json'), 'utf8')) as unknown
@@ -447,12 +460,14 @@ async function cloneShallow(url: string, dir: string, ref?: string): Promise<voi
   // `--upload-pack=…`, `--config=…`) rather than a branch name — the `--`
   // separator below only shields the trailing url/dir, not `--branch <ref>`.
   // Reject it so a hostile ref can't inject git options (CWE-88).
-  if (ref !== undefined && ref.startsWith('-'))
+  if (ref !== undefined && ref.startsWith('-')) {
     throw new Error(`Invalid git ref (must not start with '-'): ${ref}`)
+  }
 
   const args = ['clone', '--depth', '1']
-  if (ref !== undefined)
+  if (ref !== undefined) {
     args.push('--branch', ref)
+  }
   args.push('--', url, dir)
 
   // Async clone: a network-bound git clone must not block the event loop (an
@@ -464,7 +479,8 @@ async function cloneShallow(url: string, dir: string, ref?: string): Promise<voi
   }
   catch (err) {
     const e = err as { stderr?: string, message?: string }
-    const detail = (e.stderr ?? '').trim() || e.message || 'unknown error'
+    const stderr = (e.stderr ?? '').trim()
+    const detail = stderr !== '' ? stderr : (e.message ?? 'unknown error')
     throw new Error(`git clone failed for ${url}: ${detail}`)
   }
 }
@@ -492,19 +508,25 @@ function isContentType(value: unknown): value is ContentType {
  * `modelId`) silently lie about the persisted data.
  */
 export function parseManifest(raw: unknown): IndexManifest {
-  if (raw === null || typeof raw !== 'object')
+  if (raw === null || typeof raw !== 'object') {
     throw new Error('Invalid manifest: not an object')
+  }
   const m = raw as Record<string, unknown>
-  if (typeof m.schemaVersion !== 'number')
-    throw new Error('Invalid manifest: schemaVersion must be a number')
-  if (typeof m.contentHash !== 'string')
-    throw new Error('Invalid manifest: contentHash must be a string')
-  if (!(m.sourceId === null || typeof m.sourceId === 'string'))
+  if (typeof m.schemaVersion !== 'number') {
+    throw new TypeError('Invalid manifest: schemaVersion must be a number')
+  }
+  if (typeof m.contentHash !== 'string') {
+    throw new TypeError('Invalid manifest: contentHash must be a string')
+  }
+  if (!(m.sourceId === null || typeof m.sourceId === 'string')) {
     throw new Error('Invalid manifest: sourceId must be a string or null')
-  if (typeof m.modelId !== 'string')
-    throw new Error('Invalid manifest: modelId must be a string')
-  if (!Array.isArray(m.content) || !m.content.every(isContentType))
+  }
+  if (typeof m.modelId !== 'string') {
+    throw new TypeError('Invalid manifest: modelId must be a string')
+  }
+  if (!Array.isArray(m.content) || !m.content.every(isContentType)) {
     throw new Error('Invalid manifest: content must be an array of ContentType')
+  }
   return {
     schemaVersion: m.schemaVersion,
     contentHash: m.contentHash,
@@ -517,9 +539,11 @@ export function parseManifest(raw: unknown): IndexManifest {
 function normalizeContent(
   content: ContentType | readonly ContentType[] | undefined,
 ): readonly ContentType[] {
-  if (content === undefined)
+  if (content === undefined) {
     return DEFAULT_CONTENT
-  if (Array.isArray(content))
-    return content
+  }
+  if (Array.isArray(content)) {
+    return content as readonly ContentType[]
+  }
   return [content as ContentType]
 }

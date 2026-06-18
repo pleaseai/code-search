@@ -1,31 +1,30 @@
 // Tests for src/types.ts — port-parity with src/semble/tests/test_types.py.
 
+import type { Chunk, ChunkDictInput } from './types'
 import { describe, expect, test } from 'bun:test'
 import {
   CallType,
-  type Chunk,
-  type ChunkDictInput,
+
   chunkFromDict,
   chunkLocation,
   chunkToDict,
   ContentType,
-  type SearchResult,
   searchResultToDict,
 } from './types'
 
 describe('ContentType', () => {
   test('enum values match the Python str enum', () => {
-    expect(ContentType.CODE).toBe('code')
-    expect(ContentType.DOCS).toBe('docs')
-    expect(ContentType.CONFIG).toBe('config')
+    expect<string>(ContentType.CODE).toBe('code')
+    expect<string>(ContentType.DOCS).toBe('docs')
+    expect<string>(ContentType.CONFIG).toBe('config')
   })
 })
 
 describe('CallType', () => {
   test('enum values match the Python str enum', () => {
-    expect(CallType.SEARCH).toBe('search')
+    expect<string>(CallType.SEARCH).toBe('search')
     // Python uses `find_related` (snake_case) — telemetry compatibility.
-    expect(CallType.FIND_RELATED).toBe('find_related')
+    expect<string>(CallType.FIND_RELATED).toBe('find_related')
   })
 })
 
@@ -154,7 +153,7 @@ describe('chunkToDict / chunkFromDict roundtrip', () => {
         filePath: 'a.ts',
         startLine: Number.NaN,
         endLine: 2,
-      } as unknown as ChunkDictInput),
+      }),
     ).toThrow(TypeError)
     expect(() =>
       chunkFromDict({
@@ -162,7 +161,7 @@ describe('chunkToDict / chunkFromDict roundtrip', () => {
         filePath: 'a.ts',
         startLine: 1,
         endLine: Number.POSITIVE_INFINITY,
-      } as unknown as ChunkDictInput),
+      }),
     ).toThrow(TypeError)
     expect(() =>
       chunkFromDict({
@@ -170,7 +169,7 @@ describe('chunkToDict / chunkFromDict roundtrip', () => {
         filePath: 'a.ts',
         startLine: Number.NEGATIVE_INFINITY,
         endLine: 2,
-      } as unknown as ChunkDictInput),
+      }),
     ).toThrow(TypeError)
   })
 
@@ -196,7 +195,7 @@ describe('searchResultToDict', () => {
       endLine: 2,
       language: 'python',
     }
-    const result: SearchResult = { chunk, score: 0.87 }
+    const result = { chunk, score: 0.87 }
     expect(searchResultToDict(result)).toEqual({
       chunk: {
         content: 'def foo():\n    pass',

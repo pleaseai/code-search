@@ -38,39 +38,45 @@ function makeResult(chunk: Chunk, score: number): SearchResult {
 // TODO(integration): replace with import from './ranking/weighting.ts'
 const _ALPHA_SYMBOL = 0.3
 const _ALPHA_NL = 0.5
-const _SYMBOL_QUERY_RE = /^(?:[A-Za-z_][A-Za-z0-9_]*(?:(?:::|\\|->|\.)[A-Za-z_][A-Za-z0-9_]*)+|_[A-Za-z0-9_]*|[A-Za-z][A-Za-z0-9]*[A-Z_][A-Za-z0-9_]*|[A-Z][A-Za-z0-9]*)$/
+const _SYMBOL_QUERY_RE = /^(?:[A-Za-z_]\w*(?:(?:::|\\|->|\.)[A-Za-z_]\w*)+|_\w*|[A-Za-z][\da-z]*[A-Z_]\w*|[A-Z][A-Za-z0-9]*)$/
 function isSymbolQuery(query: string): boolean {
   return _SYMBOL_QUERY_RE.test(query.trim())
 }
 function resolveAlpha(query: string, alpha: number | undefined): number {
-  if (alpha !== undefined)
+  if (alpha !== undefined) {
     return alpha
+  }
   return isSymbolQuery(query) ? _ALPHA_SYMBOL : _ALPHA_NL
 }
 
 // TODO(integration): replace with import from './ranking/boosting.ts'
 function boostMultiChunkFiles(scores: Map<Chunk, number>): void {
-  if (scores.size === 0)
+  if (scores.size === 0) {
     return
+  }
   let maxScore = -Infinity
   for (const v of scores.values()) {
-    if (v > maxScore)
+    if (v > maxScore) {
       maxScore = v
+    }
   }
-  if (maxScore === 0)
+  if (maxScore === 0) {
     return
+  }
   const fileSum = new Map<string, number>()
   const bestChunk = new Map<string, Chunk>()
   for (const [chunk, score] of scores) {
     fileSum.set(chunk.filePath, (fileSum.get(chunk.filePath) ?? 0) + score)
     const existing = bestChunk.get(chunk.filePath)
-    if (existing === undefined || score > (scores.get(existing) ?? -Infinity))
+    if (existing === undefined || score > (scores.get(existing) ?? -Infinity)) {
       bestChunk.set(chunk.filePath, chunk)
+    }
   }
   let maxFileSum = -Infinity
   for (const v of fileSum.values()) {
-    if (v > maxFileSum)
+    if (v > maxFileSum) {
       maxFileSum = v
+    }
   }
   const boostUnit = maxScore * 0.2
   for (const [filePath, chunk] of bestChunk) {
@@ -97,8 +103,9 @@ function rerankTopK(
 ): Array<[Chunk, number]> {
   // Minimal stub mirroring the Python file-saturation logic without path penalties.
   void options
-  if (scores.size === 0)
+  if (scores.size === 0) {
     return []
+  }
   const ranked = [...scores.entries()].sort((a, b) => b[1] - a[1])
   const FILE_SATURATION_THRESHOLD = 1
   const FILE_SATURATION_DECAY = 0.5
@@ -107,8 +114,9 @@ function rerankTopK(
   let minSelected = Number.POSITIVE_INFINITY
 
   for (const [chunk, penScore] of ranked) {
-    if (selected.length >= topK && penScore <= minSelected)
+    if (selected.length >= topK && penScore <= minSelected) {
       break
+    }
     const alreadySelected = fileSelected.get(chunk.filePath) ?? 0
     let effScore = penScore
     if (alreadySelected >= FILE_SATURATION_THRESHOLD) {
@@ -120,8 +128,9 @@ function rerankTopK(
     if (selected.length >= topK) {
       minSelected = Number.POSITIVE_INFINITY
       for (const [s] of selected) {
-        if (s < minSelected)
+        if (s < minSelected) {
           minSelected = s
+        }
       }
     }
   }
@@ -160,12 +169,14 @@ export interface Bm25Index {
 
 /** Build a boolean weight mask from a chunk-index selector, or `undefined` if no selector. */
 function selectorToMask(selector: Uint32Array | undefined, size: number): Uint8Array | undefined {
-  if (selector === undefined)
+  if (selector === undefined) {
     return undefined
+  }
   const mask = new Uint8Array(size)
   for (const idx of selector) {
-    if (idx < size)
+    if (idx < size) {
       mask[idx] = 1
+    }
   }
   return mask
 }
@@ -176,14 +187,16 @@ function selectorToMask(selector: Uint32Array | undefined, size: number): Uint8A
  * Ties in the raw scores are broken by insertion order (the underlying sort is stable).
  */
 export function _rrfScores(scores: Map<Chunk, number>): Map<Chunk, number> {
-  if (scores.size === 0)
+  if (scores.size === 0) {
     return scores
+  }
   const ranked = [...scores.entries()].sort((a, b) => b[1] - a[1])
   const out = new Map<Chunk, number>()
   for (let i = 0; i < ranked.length; i++) {
     const entry = ranked[i]
-    if (entry === undefined)
+    if (entry === undefined) {
       continue
+    }
     const rank = i + 1
     out.set(entry[0], 1.0 / (RRF_K + rank))
   }
@@ -193,9 +206,7 @@ export function _rrfScores(scores: Map<Chunk, number>): Map<Chunk, number> {
 /** Partial sort: return indices of the top-k largest entries of `arr`, in descending-score order. */
 export function _sortTopK(arr: Float32Array, topK: number): Uint32Array {
   const n = arr.length
-  const indices = new Array<number>(n)
-  for (let i = 0; i < n; i++)
-    indices[i] = i
+  const indices = Array.from({ length: n }, (_, i) => i)
   indices.sort((a, b) => {
     const av = arr[a] as number
     const bv = arr[b] as number
@@ -203,8 +214,9 @@ export function _sortTopK(arr: Float32Array, topK: number): Uint32Array {
   })
   const k = Math.min(topK, n)
   const out = new Uint32Array(k)
-  for (let i = 0; i < k; i++)
+  for (let i = 0; i < k; i++) {
     out[i] = indices[i] as number
+  }
   return out
 }
 
@@ -220,13 +232,15 @@ export function _searchSemantic(
   const queryEmbedding = model.encode([query])
   const batch = semanticIndex.query(queryEmbedding, topK, selector)
   const first = batch[0]
-  if (first === undefined)
+  if (first === undefined) {
     return []
+  }
   const results: SearchResult[] = []
   for (const [index, distance] of first) {
     const chunk = chunks[index]
-    if (chunk === undefined)
+    if (chunk === undefined) {
       continue
+    }
     results.push(makeResult(chunk, 1.0 - distance))
   }
   return results
@@ -241,19 +255,22 @@ export function _searchBm25(
   selector: Uint32Array | undefined,
 ): SearchResult[] {
   const tokens = tokenize(query)
-  if (tokens.length === 0)
+  if (tokens.length === 0) {
     return []
+  }
   const mask = selectorToMask(selector, chunks.length)
   const scores = bm25Index.getScores(tokens, mask)
   const indices = _sortTopK(scores, topK)
   const results: SearchResult[] = []
   for (const i of indices) {
     const score = scores[i]
-    if (score === undefined || score <= 0)
+    if (score === undefined || score <= 0) {
       continue
+    }
     const chunk = chunks[i]
-    if (chunk === undefined)
+    if (chunk === undefined) {
       continue
+    }
     results.push(makeResult(chunk, score))
   }
   return results
@@ -291,13 +308,15 @@ export function search(
 
   const semantic = _searchSemantic(query, model, semanticIndex, chunks, candidateCount, selector)
   const semanticScores = new Map<Chunk, number>()
-  for (const r of semantic)
+  for (const r of semantic) {
     semanticScores.set(r.chunk, r.score)
+  }
 
   const bm25Scores = new Map<Chunk, number>()
   for (const r of _searchBm25(query, bm25Index, chunks, candidateCount, selector)) {
-    if (r.score)
+    if (r.score) {
       bm25Scores.set(r.chunk, r.score)
+    }
   }
 
   const normalizedSemantic = _rrfScores(semanticScores)

@@ -13,7 +13,6 @@ export { CspIndex } from './indexing/index.ts'
 
 export type {
   Chunk,
-  EmbeddingMatrix,
   IndexStats,
   SearchResult,
 } from './types.ts'

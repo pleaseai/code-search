@@ -1,6 +1,6 @@
+import type { Chunk, SearchResult } from './types.ts'
 // Port of src/semble/utils.py tests
 import { describe, expect, it } from 'bun:test'
-import type { Chunk, SearchResult } from './utils.ts'
 import { formatResults, isGitUrl, resolveChunk } from './utils.ts'
 
 function makeChunk(overrides: Partial<Chunk> = {}): Chunk {

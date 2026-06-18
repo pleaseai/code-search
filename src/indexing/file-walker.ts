@@ -11,8 +11,11 @@ import path from 'node:path'
 // TODO(integration): use 'ignore' package once Unit 0 lands. Until then,
 // the package is referenced via dynamic import below so the rest of the
 // surface compiles even when the dep is missing from the lockfile.
-type IgnoreModule = typeof import('ignore')
-type IgnoreInstance = ReturnType<IgnoreModule['default']>
+// The `ignore` package is published as CommonJS with `export = ignore`, so
+// `typeof import('ignore')` is the factory function itself (not a module object
+// with a `.default`). Treat the imported type as the callable factory.
+type IgnoreFactory = typeof import('ignore')
+type IgnoreInstance = ReturnType<IgnoreFactory>
 
 interface ParsedPattern {
   /** Pattern string as written in the gitignore file, without the leading "!" if any. */
@@ -70,18 +73,20 @@ export const DEFAULT_IGNORED_DIRS: ReadonlySet<string> = new Set([
   '.eggs/',
 ])
 
-let cachedIgnoreFactory: IgnoreModule['default'] | undefined
+let cachedIgnoreFactory: IgnoreFactory | undefined
 
 /**
  * Resolve the `ignore` package factory lazily so this file can be imported even
  * when the dep is not yet installed in the worktree.
  */
-async function getIgnoreFactory(): Promise<IgnoreModule['default']> {
-  if (cachedIgnoreFactory) return cachedIgnoreFactory
-  const mod = (await import('ignore')) as unknown as IgnoreModule | { default: IgnoreModule['default'] }
+async function getIgnoreFactory(): Promise<IgnoreFactory> {
+  if (cachedIgnoreFactory) {
+    return cachedIgnoreFactory
+  }
+  const mod = await import('ignore')
   // The CJS package exports the factory as the default export under ESM interop.
-  const factory = (mod as { default?: IgnoreModule['default'] }).default
-    ?? (mod as unknown as IgnoreModule['default'])
+  const factory = ((mod as { default?: IgnoreFactory }).default
+    ?? mod) as unknown as IgnoreFactory
   cachedIgnoreFactory = factory
   return factory
 }
@@ -99,13 +104,17 @@ async function buildSpec(base: string, lines: readonly string[]): Promise<Ignore
   for (const rawLine of lines) {
     const line = rawLine.replace(/\r$/, '')
     const trimmed = line.trim()
-    if (trimmed === '' || trimmed.startsWith('#')) continue
+    if (trimmed === '' || trimmed.startsWith('#')) {
+      continue
+    }
 
     aggregate.add(line)
 
     const negated = trimmed.startsWith('!')
     const pattern = negated ? trimmed.slice(1) : trimmed
-    if (pattern === '') continue
+    if (pattern === '') {
+      continue
+    }
 
     const matcher = factory({ allowRelativePaths: true }).add(pattern)
     patterns.push({
@@ -133,7 +142,9 @@ export async function _loadIgnoreForDir(directory: string): Promise<IgnoreSpec |
   for (const file of [gitignorePath, cspignorePath]) {
     try {
       const stat = await fs.stat(file)
-      if (!stat.isFile()) continue
+      if (!stat.isFile()) {
+        continue
+      }
       const text = await fs.readFile(file, 'utf8')
       lines.push(...text.split(/\r?\n/))
     }
@@ -142,7 +153,9 @@ export async function _loadIgnoreForDir(directory: string): Promise<IgnoreSpec |
     }
   }
 
-  if (lines.length === 0) return null
+  if (lines.length === 0) {
+    return null
+  }
   return buildSpec(directory, lines)
 }
 
@@ -235,7 +248,9 @@ export function _isIgnored(
         matched = false
       }
 
-      if (!matched) continue
+      if (!matched) {
+        continue
+      }
 
       // Last winning pattern wins.
       ignored = !pattern.negated
@@ -272,14 +287,18 @@ export async function* _walk(
   entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
 
   for (const entry of entries) {
-    if (entry.isSymbolicLink()) continue
+    if (entry.isSymbolicLink()) {
+      continue
+    }
     const full = path.join(directory, entry.name)
     const isDir = entry.isDirectory()
     const { ignored, found } = _isIgnored(full, isDir, specs)
-    if (ignored) continue
+    if (ignored) {
+      continue
+    }
 
     if (isDir) {
-      yield * _walk(full, specs, extensions)
+      yield* _walk(full, specs, extensions)
     }
     else if (entry.isFile()) {
       if (found || extensions.has(path.extname(entry.name).toLowerCase())) {
@@ -310,5 +329,5 @@ export async function* walkFiles(
     ...(ignore ?? []),
   ]
   const baseSpec = await buildSpec(root, dirPatterns)
-  yield * _walk(root, [baseSpec], extensionsSet)
+  yield* _walk(root, [baseSpec], extensionsSet)
 }
