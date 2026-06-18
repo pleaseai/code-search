@@ -1,0 +1,19 @@
+.please/docs/tracks/active/rust-rewrite-20260618/metadata.json
+  s_4fc351d6f8f5f5::t_d562b13d379fa4 6,8-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "8e86106930c3b1bd89695e8c9ee3df5f8d02d79f",
+  "prompts": {},
+  "sessions": {
+    "s_4fc351d6f8f5f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d716d4e4-e51c-4bb2-8e56-af1ec7a37a38",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
