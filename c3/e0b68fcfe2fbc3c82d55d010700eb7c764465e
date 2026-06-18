@@ -1,0 +1,22 @@
+codecov.yml
+  s_e355b67d122fc3::t_c591791532e05f 1-4,6-18,20-23
+  s_e355b67d122fc3::t_928b1690831b16 5,19
+.github/workflows/ci.yml
+  s_e355b67d122fc3::t_62a2639e90183e 1-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "c3e0b68fcfe2fbc3c82d55d010700eb7c764465e",
+  "prompts": {},
+  "sessions": {
+    "s_e355b67d122fc3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ac0a2162-839f-4a91-a76b-1cccb8e047f2",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
