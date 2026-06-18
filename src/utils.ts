@@ -1,5 +1,4 @@
 // Port of src/semble/utils.py
-// Minimal stub — full implementation lands in Unit 3.
 
 import type { Chunk, SearchResult } from './types.ts'
 

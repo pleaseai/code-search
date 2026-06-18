@@ -1,5 +1,4 @@
 // Port of src/semble/types.py
-// Minimal stub — full implementation lands in Unit 1.
 
 /** Call type for token-savings tracking. */
 export enum CallType {
