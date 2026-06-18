@@ -21,7 +21,9 @@ csp = { path = "crates/csp" }
 model2vec-rs = "0.2"   # Phase 3 — dense embeddings (official MinishLab port)
 tree-sitter = "0.26"   # Phase 2 — AST chunking
 ignore = "0.4"         # Phase 3 — .gitignore / .cspignore file walking
-rmcp = "1.7"           # Phase 6 — MCP server
+rmcp = { version = "1.7", features = ["server", "macros", "transport-io"] }  # Phase 6 — MCP server
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std"] }  # Phase 6 — async runtime for rmcp
+schemars = "1.0"       # Phase 6 — MCP tool parameter JSON schemas
 clap = { version = "4", features = ["derive"] }  # Phase 5 — CLI
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

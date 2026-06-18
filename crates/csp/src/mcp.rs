@@ -3,12 +3,12 @@
 //! `src/mcp/server.ts` (← semble `mcp.py`).
 //!
 //! The handlers and [`IndexCache`] are transport-agnostic and fully tested here.
-//! Wiring them onto an rmcp stdio server (the live MCP protocol) is the
-//! transport layer in `csp-cli`; per ADR-0003/plan T021 its on-the-wire schema
-//! and stdio behavior must be verified against an MCP client before declaring
-//! protocol parity, so that wiring is kept thin and separate from this core.
+//! The rmcp stdio server in `csp-cli` (`mcp_server.rs`) wires these handlers onto
+//! the live MCP protocol; this core is kept transport-free so it stays unit-
+//! testable. [`IndexCache`] holds `Arc<CspIndex>` so it can be shared across the
+//! async server's tokio tasks.
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use indexmap::IndexMap;
 use serde_json::json;
@@ -62,7 +62,7 @@ impl LoadOrBuild for DiskLoadOrBuild {
 /// Session cache of indexed repos/paths, keyed by source (git URL `@ref`, or the
 /// absolutized local path). LRU-bounded to [`CACHE_MAX_SIZE`].
 pub struct IndexCache<S: LoadOrBuild = DiskLoadOrBuild> {
-    tasks: IndexMap<String, Rc<CspIndex>>,
+    tasks: IndexMap<String, Arc<CspIndex>>,
     content: Vec<ContentType>,
     seam: S,
 }
@@ -99,7 +99,7 @@ impl<S: LoadOrBuild> IndexCache<S> {
 
     /// Return an index for `source`, building and caching it on first access.
     /// A build failure is not cached (the next call retries).
-    pub fn get(&mut self, source: &str, git_ref: Option<&str>) -> Result<Rc<CspIndex>, String> {
+    pub fn get(&mut self, source: &str, git_ref: Option<&str>) -> Result<Arc<CspIndex>, String> {
         let key = self.compute_key(source, git_ref);
 
         if let Some(existing) = self.tasks.shift_remove(&key) {
@@ -113,7 +113,7 @@ impl<S: LoadOrBuild> IndexCache<S> {
             self.tasks.shift_remove_index(0);
         }
 
-        let index = Rc::new(self.seam.load_or_build(source, &self.content, git_ref)?);
+        let index = Arc::new(self.seam.load_or_build(source, &self.content, git_ref)?);
         self.tasks.insert(key, index.clone());
         Ok(index)
     }
@@ -136,7 +136,7 @@ pub fn get_index<S: LoadOrBuild>(
     repo: Option<&str>,
     default_source: Option<&str>,
     cache: &mut IndexCache<S>,
-) -> Result<Rc<CspIndex>, String> {
+) -> Result<Arc<CspIndex>, String> {
     if let Some(r) = repo {
         if is_git_url(r) && !r.starts_with("https://") && !r.starts_with("http://") {
             return Err(format!(
@@ -302,7 +302,7 @@ mod tests {
         let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
         let first = cache.get("/tmp/repo", None).unwrap();
         let second = cache.get("/tmp/repo", None).unwrap();
-        assert!(Rc::ptr_eq(&first, &second));
+        assert!(Arc::ptr_eq(&first, &second));
         assert_eq!(*cache.seam.path_calls.borrow(), 1);
     }
 
