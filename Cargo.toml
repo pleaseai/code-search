@@ -27,6 +27,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
 thiserror = "2"
+regex = "1"            # Phase 1 — ranking/penalty patterns (no lookarounds)
+fancy-regex = "0.16"   # Phase 1 — boosting definition patterns (lookbehind/lookahead)
+indexmap = "2"         # Phase 1 — insertion-ordered score maps (Map<Chunk,number> parity)
 
 # Single-binary release profile (ADR-0003 motivation #1).
 [profile.release]

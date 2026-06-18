@@ -12,3 +12,6 @@ authors.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+regex = { workspace = true }
+fancy-regex = { workspace = true }
+indexmap = { workspace = true }

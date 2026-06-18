@@ -41,9 +41,9 @@ Incremental over big-bang: the dependency-ordered phases each merge behind a pas
 - [x] T002 [P] Port core types — ContentType/CallType enums, Chunk, chunk_to_dict/chunk_from_dict (file: crates/csp/src/types.rs) (depends on T001)
 - [x] T003 [P] Port identifier-aware tokenizer — camelCase/PascalCase/snake_case split + lowercased compound (file: crates/csp/src/tokens.rs) (depends on T001)
 - [x] T004 [P] Port utils — is_git_url, resolve_chunk (file: crates/csp/src/utils.rs) (depends on T001)
-- [ ] T005 Port ranking weighting — RRF k=60, adaptive alpha 0.3 symbol / 0.5 NL, is_symbol_query (file: crates/csp/src/ranking/weighting.rs) (depends on T002)
-- [ ] T006 Port ranking boosting — multi-chunk file boost, query-type boosts (file: crates/csp/src/ranking/boosting.rs) (depends on T002)
-- [ ] T007 Port ranking penalties — test/barrel/.d.ts/compat path penalties, applied only when alpha_weight < 1.0 (file: crates/csp/src/ranking/penalties.rs) (depends on T002)
+- [x] T005 Port ranking weighting — adaptive alpha 0.3 symbol / 0.5 NL via resolve_alpha (file: crates/csp/src/ranking/weighting.rs) (depends on T002)
+- [ ] T006 Port ranking boosting — multi-chunk file boost, query-type boosts (file: crates/csp/src/ranking/boosting.rs) (depends on T002) — PARTIAL: is_symbol_query done; apply_query_boost / boost_multi_chunk_files / definition detection (fancy-regex) pending
+- [x] T007 Port ranking penalties — test/barrel/.d.ts/compat path penalties + rerank_top_k with file-saturation decay (file: crates/csp/src/ranking/penalties.rs) (depends on T002)
 - [ ] T008 Port BM25 scoring math + enrich_for_bm25 (stem×2 + last 3 dir parts) (file: crates/csp/src/ranking/bm25.rs) (depends on T003)
 
 ### Phase 2: Chunking
@@ -188,6 +188,7 @@ Phase 1 (T001 → {T002,T003,T004} → {T005,T006,T007,T008}) → Phase 2 (T009 
 ## Progress
 
 - 2026-06-18: **T002/T003/T004 done** — ported `types`, `tokens` (camelCase splitter reimplemented as a state machine, since Rust `regex` lacks the upstream lookahead), and `utils` (`is_git_url`, `resolve_chunk`) into `crates/csp`. 32 equivalence tests (mirroring the TS test vectors) pass; `cargo fmt`/`clippy -D warnings`/`test` green.
+- 2026-06-18: **T005/T007 done + T006 partial** — added the `ranking` module: `weighting` (`resolve_alpha`), `penalties` (`file_path_penalty` + `rerank_top_k` with file-saturation decay), and `boosting::is_symbol_query`. Score maps use `IndexMap<usize, f64>` (chunk-index keys, insertion-ordered) as the Rust analogue of TS `Map<Chunk, number>`. 58 tests total pass. T006's remaining boost logic (apply_query_boost, multi-chunk boost, definition-pattern detection via fancy-regex) is the next task.
 - T001 (shared cross-language fixture harness) deferred to the heavier modules (chunking/search/embeddings); for these pure modules the TS test vectors are inlined directly as Rust unit tests, which is sufficient equivalence coverage.
 
 ## Decision Log
