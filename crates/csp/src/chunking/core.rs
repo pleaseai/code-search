@@ -1,14 +1,44 @@
 //! AST-based chunker with a line-based fallback. Port of
 //! `src/chunking/core.ts` (← semble `chunking/core.py`).
 //!
-//! The merge algorithm is generic over [`AstNode`] so it can be unit-tested
-//! with mock nodes and later driven by `tree_sitter::Node`. Real tree-sitter
-//! parsing activates together with the language map (T012); until then
-//! `is_supported_language` returns `false` (matching the upstream `ALL_LANGUAGES`
-//! stub) and callers use the line fallback.
+//! The merge algorithm is generic over [`AstNode`] so it can be unit-tested with
+//! mock nodes; in production it is driven by [`tree_sitter::Node`] via [`TsNode`].
+//! A curated set of grammars is statically linked (see [`language_for`]); a
+//! language with no bundled grammar makes [`chunk`] return `None` and callers
+//! fall back to [`chunk_lines`] — exactly the upstream behavior when
+//! `tree_sitter_language_pack` has no parser for the language.
+
+use tree_sitter::{Language, Parser};
 
 pub const RECURSION_DEPTH: usize = 500;
 pub const MIN_CHUNK_SIZE: usize = 50;
+
+/// Resolve a semble language name (the values in
+/// [`crate::indexing::files`]'s `EXTENSION_TO_LANGUAGE`) to a statically-linked
+/// tree-sitter grammar, or `None` when no grammar is bundled for it.
+///
+/// The curated set covers the common code languages; everything else falls back
+/// to line chunking. Add a grammar crate + an arm here to extend coverage.
+pub fn language_for(language: &str) -> Option<Language> {
+    let lang: Language = match language {
+        "rust" => tree_sitter_rust::LANGUAGE.into(),
+        "python" => tree_sitter_python::LANGUAGE.into(),
+        "javascript" => tree_sitter_javascript::LANGUAGE.into(),
+        "typescript" => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+        "tsx" => tree_sitter_typescript::LANGUAGE_TSX.into(),
+        "go" => tree_sitter_go::LANGUAGE.into(),
+        "java" => tree_sitter_java::LANGUAGE.into(),
+        "c" => tree_sitter_c::LANGUAGE.into(),
+        "cpp" => tree_sitter_cpp::LANGUAGE.into(),
+        "ruby" => tree_sitter_ruby::LANGUAGE.into(),
+        "json" => tree_sitter_json::LANGUAGE.into(),
+        "bash" => tree_sitter_bash::LANGUAGE.into(),
+        "html" => tree_sitter_html::LANGUAGE.into(),
+        "css" => tree_sitter_css::LANGUAGE.into(),
+        _ => return None,
+    };
+    Some(lang)
+}
 
 /// A half-open `[start, end)` boundary in character offsets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,10 +54,37 @@ pub trait AstNode: Sized {
     fn children(&self) -> Vec<Self>;
 }
 
-/// Check if the language is supported by tree-sitter. Currently always `false`
-/// (the upstream `ALL_LANGUAGES` is an empty stub pending the language map).
-pub fn is_supported_language(_language: &str) -> bool {
-    false
+/// Check if the language has a bundled tree-sitter grammar.
+pub fn is_supported_language(language: &str) -> bool {
+    language_for(language).is_some()
+}
+
+/// [`AstNode`] adapter over a real [`tree_sitter::Node`]. `Node` is `Copy` and
+/// carries the tree's lifetime, so children are collected via a transient cursor.
+struct TsNode<'tree>(tree_sitter::Node<'tree>);
+
+impl<'tree> AstNode for TsNode<'tree> {
+    fn start_byte(&self) -> usize {
+        self.0.start_byte()
+    }
+    fn end_byte(&self) -> usize {
+        self.0.end_byte()
+    }
+    fn children(&self) -> Vec<Self> {
+        let mut cursor = self.0.walk();
+        self.0.children(&mut cursor).map(TsNode).collect()
+    }
+}
+
+/// Convert a UTF-8 byte offset into a character offset (Python parity:
+/// `len(as_bytes[:offset].decode("utf-8"))`). Floors to the nearest char
+/// boundary so a mid-codepoint offset can't panic.
+fn byte_to_char(text: &str, byte: usize) -> usize {
+    let mut b = byte.min(text.len());
+    while b > 0 && !text.is_char_boundary(b) {
+        b -= 1;
+    }
+    text[..b].chars().count()
 }
 
 /// Merge adjacent chunks up to the desired length.
@@ -187,17 +244,32 @@ pub fn chunk_lines(text: &str, desired_length: usize) -> Vec<ChunkBoundary> {
 }
 
 /// Chunk source via tree-sitter. Returns `Some(vec![])` for whitespace-only
-/// input, and `None` when no parser is available for `language` (callers fall
-/// back to [`chunk_lines`]).
+/// input, and `None` when no grammar is bundled for `language` or parsing fails
+/// (callers fall back to [`chunk_lines`]).
 ///
-/// Until language grammars are registered (T012), no parser is available, so
-/// this returns `None` for any non-whitespace input — matching the upstream
-/// lazy-load fallback when the tree-sitter dependency is absent.
-pub fn chunk(text: &str, _language: &str, _desired_length: usize) -> Option<Vec<ChunkBoundary>> {
+/// The merge runs on tree-sitter **byte** offsets (as upstream does), then each
+/// boundary is converted to a **character** offset for the caller — matching
+/// semble's `len(as_bytes[:n].decode("utf-8"))`.
+pub fn chunk(text: &str, language: &str, desired_length: usize) -> Option<Vec<ChunkBoundary>> {
     if text.trim().is_empty() {
         return Some(Vec::new());
     }
-    None
+    let lang = language_for(language)?;
+    let mut parser = Parser::new();
+    if parser.set_language(&lang).is_err() {
+        return None;
+    }
+    let tree = parser.parse(text.as_bytes(), None)?;
+    let byte_boundaries = merge_node(&TsNode(tree.root_node()), desired_length);
+    Some(
+        byte_boundaries
+            .iter()
+            .map(|b| ChunkBoundary {
+                start: byte_to_char(text, b.start),
+                end: byte_to_char(text, b.end),
+            })
+            .collect(),
+    )
 }
 
 #[cfg(test)]
@@ -248,10 +320,31 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_language_stub() {
-        assert!(!is_supported_language("typescript"));
-        assert!(!is_supported_language("python"));
+    fn supported_languages_resolve_grammars() {
+        for lang in [
+            "rust",
+            "python",
+            "javascript",
+            "typescript",
+            "tsx",
+            "go",
+            "java",
+            "c",
+            "cpp",
+            "ruby",
+            "json",
+            "bash",
+            "html",
+            "css",
+        ] {
+            assert!(is_supported_language(lang), "{lang} should be supported");
+            assert!(
+                language_for(lang).is_some(),
+                "{lang} grammar should resolve"
+            );
+        }
         assert!(!is_supported_language("not-a-real-language"));
+        assert!(language_for("not-a-real-language").is_none());
     }
 
     // --- merge_adjacent_chunks ---
@@ -381,5 +474,37 @@ mod tests {
             chunk("let x = 1\n", "__definitely_not_a_real_language__", 1500),
             None
         );
+    }
+
+    #[test]
+    fn chunk_parses_real_rust_into_covering_boundaries() {
+        let src = "fn a() {\n    let x = 1;\n}\n\nfn b() {\n    let y = 2;\n}\n";
+        let boundaries = chunk(src, "rust", 1500).expect("rust is supported → Some");
+        assert!(!boundaries.is_empty());
+        // Boundaries are character offsets within the source.
+        let n = src.chars().count();
+        for b in &boundaries {
+            assert!(
+                b.start <= b.end && b.end <= n,
+                "boundary {b:?} out of range"
+            );
+        }
+        // A small desired length splits the two functions into separate chunks.
+        let split = chunk(src, "rust", 20).expect("Some");
+        assert!(
+            split.len() >= 2,
+            "small desired_length should split: {split:?}"
+        );
+    }
+
+    #[test]
+    fn chunk_byte_to_char_handles_multibyte() {
+        // A multibyte comment ensures byte→char conversion doesn't over-count.
+        let src = "// café ☕ a comment\nfn z() {}\n";
+        let boundaries = chunk(src, "rust", 1500).expect("Some");
+        let n = src.chars().count();
+        for b in &boundaries {
+            assert!(b.end <= n, "char boundary {b:?} exceeds char count {n}");
+        }
     }
 }
