@@ -44,7 +44,7 @@ Incremental over big-bang: the dependency-ordered phases each merge behind a pas
 - [x] T005 Port ranking weighting — adaptive alpha 0.3 symbol / 0.5 NL via resolve_alpha (file: crates/csp/src/ranking/weighting.rs) (depends on T002)
 - [ ] T006 Port ranking boosting — multi-chunk file boost, query-type boosts (file: crates/csp/src/ranking/boosting.rs) (depends on T002) — PARTIAL: is_symbol_query done; apply_query_boost / boost_multi_chunk_files / definition detection (fancy-regex) pending
 - [x] T007 Port ranking penalties — test/barrel/.d.ts/compat path penalties + rerank_top_k with file-saturation decay (file: crates/csp/src/ranking/penalties.rs) (depends on T002)
-- [ ] T008 Port BM25 scoring math + enrich_for_bm25 (stem×2 + last 3 dir parts) (file: crates/csp/src/ranking/bm25.rs) (depends on T003)
+- [x] T008 Port BM25 scoring core — enrich_for_bm25 (stem×2 + last 3 dir parts), selector_to_mask, Bm25Index build/get_scores (file: crates/csp/src/indexing/sparse.rs) (depends on T003) — save/load deferred to T014 (filesystem)
 
 ### Phase 2: Chunking
 
@@ -188,7 +188,8 @@ Phase 1 (T001 → {T002,T003,T004} → {T005,T006,T007,T008}) → Phase 2 (T009 
 ## Progress
 
 - 2026-06-18: **T002/T003/T004 done** — ported `types`, `tokens` (camelCase splitter reimplemented as a state machine, since Rust `regex` lacks the upstream lookahead), and `utils` (`is_git_url`, `resolve_chunk`) into `crates/csp`. 32 equivalence tests (mirroring the TS test vectors) pass; `cargo fmt`/`clippy -D warnings`/`test` green.
-- 2026-06-18: **T005/T007 done + T006 partial** — added the `ranking` module: `weighting` (`resolve_alpha`), `penalties` (`file_path_penalty` + `rerank_top_k` with file-saturation decay), and `boosting::is_symbol_query`. Score maps use `IndexMap<usize, f64>` (chunk-index keys, insertion-ordered) as the Rust analogue of TS `Map<Chunk, number>`. 58 tests total pass. T006's remaining boost logic (apply_query_boost, multi-chunk boost, definition-pattern detection via fancy-regex) is the next task.
+- 2026-06-18: **T005/T007 done + T006 partial** — added the `ranking` module: `weighting` (`resolve_alpha`), `penalties` (`file_path_penalty` + `rerank_top_k` with file-saturation decay), and `boosting::is_symbol_query`. Score maps use `IndexMap<usize, f64>` (chunk-index keys, insertion-ordered) as the Rust analogue of TS `Map<Chunk, number>`. 58 tests total pass.
+- 2026-06-18: **T008 done** — ported the BM25 scoring core into `indexing/sparse` (`enrich_for_bm25`, `selector_to_mask`, `Bm25Index::{build, get_scores}`). Reproduced two subtle parity points: per-add `f32` rounding (Float32Array semantics) and first-appearance unique-term ordering, both of which affect exact scores. 73 tests total pass. **Phase 1 leaves complete except T006's full boost logic.** Next: T006 boosting (fancy-regex definition detection).
 - T001 (shared cross-language fixture harness) deferred to the heavier modules (chunking/search/embeddings); for these pure modules the TS test vectors are inlined directly as Rust unit tests, which is sufficient equivalence coverage.
 
 ## Decision Log
