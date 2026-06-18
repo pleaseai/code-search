@@ -1,34 +1,7 @@
 // Port of src/semble/ranking/boosting.py
 
-// TODO(integration): replace inline Chunk type with `import type { Chunk } from '../types.ts'`
-//                    once Unit 1 lands in main.
-export interface Chunk {
-  content: string
-  filePath: string
-  startLine: number
-  endLine: number
-  language?: string
-}
-
-// TODO(integration): replace with import from '../tokens.ts' once Unit 2 lands in main.
-const TOKEN_CAMEL_RE = /[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+/g
-
-function splitIdentifier(token: string): string[] {
-  const lower = token.toLowerCase()
-  let parts: string[] = []
-
-  if (token.includes('_')) {
-    parts = lower.split('_').filter(p => p.length > 0)
-  }
-  else {
-    parts = (token.match(TOKEN_CAMEL_RE) ?? []).map(m => m.toLowerCase())
-  }
-
-  if (parts.length >= 2) {
-    return [lower, ...parts]
-  }
-  return [lower]
-}
+import type { Chunk } from '../types.ts'
+import { splitIdentifier } from '../tokens.ts'
 
 // Symbol-lookup queries: namespace-qualified, leading-underscore, or containing
 // uppercase/underscore. Plain lowercase words (e.g. "session") are NL, not symbols.

@@ -60,6 +60,18 @@ describe('splitIdentifier', () => {
       'def',
     ])
   })
+
+  it('splits kebab-case and dotted path stems on `-`/`.` separators', () => {
+    // `splitIdentifier` is also called on raw file-path stems (e.g. in
+    // ranking/boosting.ts). The camel regex treats `-`/`.` as separators, so
+    // the lowercase fast-path must not short-circuit these.
+    expect(splitIdentifier('user-service')).toEqual([
+      'user-service',
+      'user',
+      'service',
+    ])
+    expect(splitIdentifier('foo.bar')).toEqual(['foo.bar', 'foo', 'bar'])
+  })
 })
 
 describe('tokenize', () => {

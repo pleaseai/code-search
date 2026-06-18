@@ -1,4 +1,4 @@
-import type { Chunk } from './boosting.ts'
+import type { Chunk } from '../types.ts'
 import { describe, expect, test } from 'bun:test'
 import {
   _chunkDefinesSymbol,

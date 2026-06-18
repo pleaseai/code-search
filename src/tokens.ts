@@ -19,10 +19,12 @@ const CAMEL_RE = /[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+/g
 export function splitIdentifier(token: string): string[] {
   const lower = token.toLowerCase()
 
-  // Fast-path: pure-lowercase tokens with no underscores/digits cannot split
-  // further. TOKEN_RE only matches [a-zA-Z0-9_], so the absence of `_`,
-  // uppercase, and digits means the token is already a single sub-token.
-  if (!token.includes('_') && !/[A-Z0-9]/.test(token)) {
+  // Fast-path: a token made up solely of lowercase ASCII letters cannot split
+  // further, since `CAMEL_RE` would match it as a single run. This guard is
+  // intentionally narrow — `splitIdentifier` is also called on raw path stems
+  // (e.g. "user-service", "foo.bar"), and `CAMEL_RE` treats `-`/`.` as
+  // separators, so those must fall through to the splitting logic below.
+  if (/^[a-z]+$/.test(token)) {
     return [lower]
   }
 
