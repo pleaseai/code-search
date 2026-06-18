@@ -1,0 +1,17 @@
+{
+  "generated_by": "/please:sync-specs",
+  "specs": [
+    {
+      "id": "SPEC-001",
+      "domain": "indexing",
+      "feature": "spec",
+      "created_at": "2026-06-17T19:14:41.411Z",
+      "updated_at": "2026-06-17T19:14:41.411Z",
+      "source_tracks": [
+        "cspindex-orchestrator-20260617"
+      ],
+      "traces": [],
+      "requirements": []
+    }
+  ]
+}

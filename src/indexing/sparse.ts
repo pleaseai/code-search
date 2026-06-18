@@ -16,17 +16,11 @@
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import type { Chunk } from '../types.ts'
 
-// Stopgap structural type until ./types.ts lands from Unit 1.
-// Mirrors semble.types.Chunk with camelCase field names per
-// @pleaseai/csp public-API conventions.
-export interface Chunk {
-  content: string
-  filePath: string
-  startLine: number
-  endLine: number
-  language?: string | null
-}
+// Re-exported so existing importers (e.g. sparse.test.ts) keep resolving
+// `Chunk` from this module after the type was unified into ../types.ts.
+export type { Chunk }
 
 /**
  * Append file path components to BM25 content to boost path-based queries.
@@ -106,6 +100,15 @@ export class Bm25Index {
 
   private constructor(state: Bm25State) {
     this.#state = state
+  }
+
+  /**
+   * Per-document token counts in document order — one entry per indexed
+   * document. Exposed read-only so callers can assert the corpus size
+   * (`documents.length === numDocs`) without reaching into private state.
+   */
+  get documents(): readonly number[] {
+    return Array.from(this.#state.docLengths)
   }
 
   /** Build an index from an array of pre-tokenized documents. */

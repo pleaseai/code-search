@@ -169,7 +169,7 @@ pnpm update -g @pleaseai/csp         # with pnpm
 
 ## MCP Server
 
-`csp` can run as an MCP server so agents can search any codebase directly. Repos are cloned and indexed on demand, and indexes are cached for the lifetime of the session. Local paths are watched for file changes and re-indexed automatically.
+`csp` can run as an MCP server so agents can search any codebase directly. Repos are cloned and indexed on demand. The server keeps a hot in-memory cache for the session and shares the same on-disk cache at `~/.csp/index/` as the CLI, so an index built once is reused across both. Local paths are watched for file changes and re-indexed automatically; on-disk reuse is invalidated by source content hash.
 
 ### Setup
 
@@ -376,6 +376,8 @@ csp find-related src/auth.ts 42 ./my-project
 
 `--content` accepts `code` (default), `docs`, `config`, or `all`. `path` defaults to the current directory when omitted; git URLs are accepted. If `csp` is not on `$PATH`, use `bunx @pleaseai/csp` in its place.
 
+When you run `csp search` or `csp find-related` **without** `--index`, `csp` automatically indexes and caches the source in a global cache at `~/.csp/index/`, keyed by the source and content selection. The cache is reused on the next run and invalidated automatically when the source files change (by content hash), so you do not need to reindex manually. Passing `--index <path>` uses that exact path instead and bypasses the auto-cache. `csp index -o <path>` is for explicit persistence only (`-o` is required) and is independent of the auto-cache.
+
 <details>
 <summary>Savings</summary>
 
@@ -418,11 +420,13 @@ Stats are stored in `~/.csp/savings.jsonl`.
 
 ```bash
 csp clear savings  # delete ~/.csp/savings.jsonl
-csp clear all      # currently the same as `savings`
-csp clear index    # prints a note (see below)
+csp clear index    # delete the global index cache at ~/.csp/index/
+csp clear all      # delete both the index cache and savings
 ```
 
-Index persistence is not wired up yet, and the storage model — repo-local `.csp/` vs a global cache — is still undecided, so `clear index` has nothing to remove for now. `csp index -o <path>` writes only to the path you pass; delete those directories yourself.
+`clear index` removes the global index cache at `~/.csp/index/` (where `csp search`/`find-related` auto-cache indexes) and reports how many cached entries were removed; your `~/.csp/savings.jsonl` is preserved. `clear all` removes both `~/.csp/index/` and `~/.csp/savings.jsonl` as two independent actions.
+
+Explicit index paths written with `csp index -o <path>` are not part of the auto-cache, so `clear` never touches them — delete those directories yourself.
 
 </details>
 

@@ -15,17 +15,17 @@ import {
 
 describe('ContentType', () => {
   test('enum values match the Python str enum', () => {
-    expect(ContentType.Code).toBe('code')
-    expect(ContentType.Docs).toBe('docs')
-    expect(ContentType.Config).toBe('config')
+    expect(ContentType.CODE).toBe('code')
+    expect(ContentType.DOCS).toBe('docs')
+    expect(ContentType.CONFIG).toBe('config')
   })
 })
 
 describe('CallType', () => {
   test('enum values match the Python str enum', () => {
-    expect(CallType.Search).toBe('search')
+    expect(CallType.SEARCH).toBe('search')
     // Python uses `find_related` (snake_case) — telemetry compatibility.
-    expect(CallType.FindRelated).toBe('find_related')
+    expect(CallType.FIND_RELATED).toBe('find_related')
   })
 })
 

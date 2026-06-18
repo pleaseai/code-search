@@ -1,40 +1,38 @@
 // Port of src/semble/search.py
 
-// TODO(integration): replace with import from './types.ts'
-export interface Chunk {
-  content: string
-  filePath: string
-  startLine: number
-  endLine: number
-  language?: string | null
+import type { Chunk, SearchResult } from './types.ts'
+import { tokenize } from './tokens.ts'
+
+// Re-export the shared types so downstream importers (and tests) can keep
+// pulling `Chunk`/`SearchResult` from this module's public surface.
+export type { Chunk, SearchResult }
+
+/**
+ * Render a chunk as a JSONable object (snake_cased fields + `location`),
+ * mirroring semble's `Chunk.to_dict`.
+ */
+function chunkToDict(chunk: Chunk): Record<string, unknown> {
+  return {
+    content: chunk.content,
+    file_path: chunk.filePath,
+    start_line: chunk.startLine,
+    end_line: chunk.endLine,
+    language: chunk.language ?? null,
+    location: `${chunk.filePath}:${chunk.startLine}-${chunk.endLine}`,
+  }
 }
 
-// TODO(integration): replace with import from './types.ts'
-export interface SearchResult {
-  chunk: Chunk
-  score: number
-}
-
-// TODO(integration): replace with import from './tokens.ts'
-function tokenize(text: string): string[] {
-  const TOKEN_RE = /[a-zA-Z_][a-zA-Z0-9_]*/g
-  const CAMEL_RE = /[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[0-9]+/g
-  const splitIdentifier = (token: string): string[] => {
-    const lower = token.toLowerCase()
-    let parts: string[]
-    if (token.includes('_')) {
-      parts = lower.split('_').filter(p => p.length > 0)
-    }
-    else {
-      parts = Array.from(token.matchAll(CAMEL_RE), ([m]) => m.toLowerCase())
-    }
-    return parts.length >= 2 ? [lower, ...parts] : [lower]
+/**
+ * Build a `SearchResult` with a `toDict` closure, so every result this module
+ * produces satisfies the `../types.ts` `SearchResult` contract that
+ * `utils.formatResults` consumes.
+ */
+function makeResult(chunk: Chunk, score: number): SearchResult {
+  return {
+    chunk,
+    score,
+    toDict: () => ({ chunk: chunkToDict(chunk), score }),
   }
-  const result: string[] = []
-  for (const [match] of text.matchAll(TOKEN_RE)) {
-    result.push(...splitIdentifier(match))
-  }
-  return result
 }
 
 // TODO(integration): replace with import from './ranking/weighting.ts'
@@ -229,7 +227,7 @@ export function _searchSemantic(
     const chunk = chunks[index]
     if (chunk === undefined)
       continue
-    results.push({ chunk, score: 1.0 - distance })
+    results.push(makeResult(chunk, 1.0 - distance))
   }
   return results
 }
@@ -256,7 +254,7 @@ export function _searchBm25(
     const chunk = chunks[i]
     if (chunk === undefined)
       continue
-    results.push({ chunk, score })
+    results.push(makeResult(chunk, score))
   }
   return results
 }
@@ -328,5 +326,5 @@ export function search(
       .slice(0, topK)
   }
 
-  return ranked.map(([chunk, score]) => ({ chunk, score }))
+  return ranked.map(([chunk, score]) => makeResult(chunk, score))
 }

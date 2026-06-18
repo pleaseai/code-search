@@ -11,6 +11,11 @@
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { Chunk } from '../types.ts'
+
+// Re-exported so existing importers (e.g. dense.test.ts) keep resolving
+// `Chunk` from this module after the type was unified into ../types.ts.
+export type { Chunk }
 
 /**
  * Default Model2Vec model name (kept identical to semble for parity).
@@ -23,20 +28,6 @@ export const DEFAULT_MODEL_NAME = 'minishlab/potion-code-16M'
  * dimension-agnostic — pick something small enough for fast tests.
  */
 const _DEFAULT_STUB_DIM = 256
-
-/**
- * Minimal chunk shape this module consumes. We only need `content`,
- * so this is inlined rather than imported from a (not-yet-existing)
- * top-level `types.ts`. When `src/types.ts` lands, swap this for
- *   `import type { Chunk } from '../types.ts'`.
- */
-export interface Chunk {
-  content: string
-  // Other fields (filePath, startLine, endLine, language) are unused
-  // here but allowed via the index signature so callers can pass full
-  // Chunk objects without type narrowing.
-  [key: string]: unknown
-}
 
 /**
  * Loaded Model2Vec model. The real model exposes `.encode(texts)`;
@@ -97,7 +88,7 @@ function stubEmbed(text: string, dim: number): Float32Array {
   return v
 }
 
-function makeStubModel(dim: number): Model {
+export function makeStubModel(dim: number): Model {
   return {
     dim,
     encode(texts: string[]): Float32Array[] {

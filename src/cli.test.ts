@@ -1,7 +1,7 @@
 // Port of (none) — unit tests for src/cli.ts
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync } from 'node:fs'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -207,7 +207,7 @@ describe('csp search (stub-mocked)', () => {
     }) as typeof process.stdout.write
     try {
       const code = await runCli(['search', 'foo', '.', '-k', '7'], {
-        fromPath: async () => fakeIndex as CspIndex,
+        loadOrBuild: async () => fakeIndex as CspIndex,
       })
       expect(code).toBe(0)
     }
@@ -227,6 +227,18 @@ describe('csp search (stub-mocked)', () => {
         {
           chunk: { content: 'def foo()', filePath: 'a.py', startLine: 1, endLine: 3, language: 'python' },
           score: 0.9,
+          // Mirrors search.ts's snake_case wire format that utils.formatResults consumes.
+          toDict: () => ({
+            chunk: {
+              content: 'def foo()',
+              file_path: 'a.py',
+              start_line: 1,
+              end_line: 3,
+              language: 'python',
+              location: 'a.py:1-3',
+            },
+            score: 0.9,
+          }),
         },
       ],
     }
@@ -238,7 +250,7 @@ describe('csp search (stub-mocked)', () => {
     }) as typeof process.stdout.write
     try {
       await runCli(['search', 'foo', '.'], {
-        fromPath: async () => fakeIndex as CspIndex,
+        loadOrBuild: async () => fakeIndex as CspIndex,
       })
     }
     finally {
@@ -331,34 +343,91 @@ describe('csp clear', () => {
     expect(writes.join('')).toContain('No savings file found at `/tmp/x/savings.jsonl`')
   })
 
-  test('clear index notes there is no managed index cache', async () => {
+  test('clear index deletes the index cache and leaves savings untouched', async () => {
     const { writes, restore } = captureStdout()
-    let called = 0
+    let savingsCalled = 0
+    let indexCalled = 0
     try {
       await runCli(['clear', 'index'], {
-        clearSavings: () => { called++; return { path: '/tmp/x/savings.jsonl', cleared: true } },
+        clearSavings: () => { savingsCalled++; return { path: '/tmp/x/savings.jsonl', cleared: true } },
+        clearIndex: () => { indexCalled++; return { path: '/tmp/x/index', cleared: true, entries: 3 } },
       })
     }
     finally {
       restore()
     }
-    expect(called).toBe(0) // index-only must not touch savings
-    expect(writes.join('')).toContain('No index cache to clear')
+    expect(indexCalled).toBe(1)
+    expect(savingsCalled).toBe(0) // index-only must not touch savings
+    const out = writes.join('')
+    expect(out).toContain('Cleared 3 cached index entries')
+    expect(out).toContain('/tmp/x/index')
   })
 
-  test('clear all clears savings and notes the index', async () => {
+  test('clear index reports when no index cache exists', async () => {
     const { writes, restore } = captureStdout()
     try {
-      await runCli(['clear', 'all'], {
+      await runCli(['clear', 'index'], {
         clearSavings: () => ({ path: '/tmp/x/savings.jsonl', cleared: true }),
+        clearIndex: () => ({ path: '/tmp/x/index', cleared: false, entries: 0 }),
       })
     }
     finally {
       restore()
     }
+    expect(writes.join('')).toContain('No index cache found at `/tmp/x/index`')
+  })
+
+  test('clear all clears index and savings as two independent actions', async () => {
+    const { writes, restore } = captureStdout()
+    let savingsCalled = 0
+    let indexCalled = 0
+    try {
+      await runCli(['clear', 'all'], {
+        clearSavings: () => { savingsCalled++; return { path: '/tmp/x/savings.jsonl', cleared: true } },
+        clearIndex: () => { indexCalled++; return { path: '/tmp/x/index', cleared: true, entries: 2 } },
+      })
+    }
+    finally {
+      restore()
+    }
+    // Both seams invoked independently — savings cleared via its own call, not
+    // as a side effect of removing the index root.
+    expect(indexCalled).toBe(1)
+    expect(savingsCalled).toBe(1)
     const out = writes.join('')
-    expect(out).toContain('No index cache to clear')
+    expect(out).toContain('Cleared 2 cached index entries')
     expect(out).toContain('Cleared savings at')
+  })
+
+  test('clear index over a real temp home removes only index/ and preserves savings (AC-015)', async () => {
+    const { mkdirSync, writeFileSync, existsSync: exists } = require('node:fs') as typeof import('node:fs')
+    const { clearIndexCache, resolveIndexRoot } = require('./indexing/cache.ts') as typeof import('./indexing/cache.ts')
+    const tmpHome = await mkdtemp(join(tmpdir(), 'csp-cli-clear-'))
+    const base = join(tmpHome, '.csp')
+    const indexRoot = resolveIndexRoot({ baseDir: base })
+    const savings = join(base, 'savings.jsonl')
+    try {
+      mkdirSync(join(indexRoot, 'key-a'), { recursive: true })
+      writeFileSync(savings, '{"call":"search"}\n')
+
+      const { restore } = captureStdout()
+      try {
+        await runCli(['clear', 'index'], {
+          clearIndex: () => clearIndexCache({ baseDir: base }),
+        })
+      }
+      finally {
+        restore()
+      }
+
+      // Index gone; home directory and savings file still present.
+      expect(exists(indexRoot)).toBe(false)
+      expect(exists(savings)).toBe(true)
+      expect(exists(base)).toBe(true)
+    }
+    finally {
+      await rm(tmpHome, { recursive: true, force: true })
+    }
   })
 
   test('clear with an invalid type exits 1', async () => {
@@ -412,7 +481,7 @@ describe('csp find-related validates line', () => {
     }) as typeof process.stderr.write
     try {
       const code = await runCli(['find-related', 'src/auth.ts', '42abc', '.'], {
-        fromPath: async () => ({ chunks: [] }) as unknown as CspIndex,
+        loadOrBuild: async () => ({ chunks: [] }) as unknown as CspIndex,
       })
       expect(code).toBe(1)
     }
@@ -489,7 +558,7 @@ describe('runCli error handling', () => {
     }) as typeof process.stderr.write
     try {
       const code = await runCli(['search', 'foo', '--content', 'bogus'], {
-        fromPath: async () => ({ chunks: [] }) as unknown as CspIndex,
+        loadOrBuild: async () => ({ chunks: [] }) as unknown as CspIndex,
       })
       expect(code).toBe(1)
     }
@@ -560,5 +629,266 @@ describe('csp index --content', () => {
     }
     expect(captured.path).toBe('.')
     expect(captured.content).toEqual([ContentType.CODE, ContentType.DOCS, ContentType.CONFIG])
+  })
+})
+
+describe('csp index -o (explicit path persistence)', () => {
+  test('saves the built index to the explicit -o directory', async () => {
+    let savedTo: string | undefined
+    const fakeIndex: Partial<CspIndex> = {
+      chunks: [],
+      save: async (dir: string) => { savedTo = dir },
+    }
+    const tmp = await mkdtemp(join(tmpdir(), 'csp-cli-index-out-'))
+    const out = join(tmp, 'idx')
+    try {
+      const code = await runCli(['index', '.', '-o', out], {
+        fromPath: async () => fakeIndex as CspIndex,
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      await rm(tmp, { recursive: true, force: true })
+    }
+    // The explicit -o path must be the directory passed to save (no cache rerouting).
+    expect(savedTo).toBe(out)
+  })
+
+  test('without -o keeps the required-flag error and exits 1', async () => {
+    const errs: string[] = []
+    const origErr = process.stderr.write.bind(process.stderr)
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      errs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stderr.write
+    try {
+      const code = await runCli(['index', '.'], {
+        fromPath: async () => ({ chunks: [], save: async () => {} }) as unknown as CspIndex,
+      })
+      expect(code).toBe(1)
+    }
+    finally {
+      process.stderr.write = origErr
+    }
+    expect(errs.join('')).toContain('--out / -o is required for `index`')
+  })
+})
+
+describe('csp search/find-related --index (explicit path respected)', () => {
+  test('search --index loads via loadFromDisk seam with the explicit path', async () => {
+    let loadedFrom: string | undefined
+    const fakeIndex: Partial<CspIndex> = {
+      chunks: [],
+      search: (): SearchResult[] => [],
+    }
+    const writes: string[] = []
+    const origWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stdout.write
+    try {
+      const code = await runCli(['search', 'foo', '--index', '/some/explicit/idx'], {
+        readIndex: async (p: string) => { loadedFrom = p; return fakeIndex as CspIndex },
+        // fromPath provided to prove it is NOT used when --index is set.
+        fromPath: async () => { throw new Error('fromPath must not run when --index is given') },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      process.stdout.write = origWrite
+    }
+    expect(loadedFrom).toBe('/some/explicit/idx')
+    expect(JSON.parse(writes.join('').trim())).toEqual({ error: 'No results found.' })
+  })
+
+  test('find-related --index loads via loadFromDisk seam with the explicit path', async () => {
+    let loadedFrom: string | undefined
+    const seedChunk = { content: 'x', filePath: 'a.ts', startLine: 1, endLine: 5, language: 'typescript' }
+    const fakeIndex: Partial<CspIndex> = {
+      chunks: [seedChunk],
+      findRelated: (): SearchResult[] => [],
+    }
+    const writes: string[] = []
+    const origWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stdout.write
+    try {
+      const code = await runCli(['find-related', 'a.ts', '2', '--index', '/explicit/idx2'], {
+        readIndex: async (p: string) => { loadedFrom = p; return fakeIndex as CspIndex },
+        fromPath: async () => { throw new Error('fromPath must not run when --index is given') },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      process.stdout.write = origWrite
+    }
+    expect(loadedFrom).toBe('/explicit/idx2')
+  })
+
+  test('search --index with a missing path surfaces a clear error and exits 1', async () => {
+    const errs: string[] = []
+    const origErr = process.stderr.write.bind(process.stderr)
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      errs.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stderr.write
+    const missing = join(tmpdir(), `csp-no-such-index-${Date.now()}`)
+    try {
+      // No readIndex seam → real CspIndex.loadFromDisk runs and must throw a clear error.
+      const code = await runCli(['search', 'foo', '--index', missing])
+      expect(code).toBe(1)
+    }
+    finally {
+      process.stderr.write = origErr
+    }
+    expect(errs.join('')).toContain('Index not found:')
+    expect(errs.join('')).toContain(missing)
+  })
+})
+
+describe('csp index -o → search --index (real roundtrip, no seams)', () => {
+  test('persisted index is loadable and searchable via the explicit path', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'csp-cli-roundtrip-'))
+    const out = join(tmp, 'idx')
+    const writes: string[] = []
+    const origWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stdout.write
+    try {
+      // Build a real CspIndex from a tiny source dir, persist via `csp index -o`.
+      const src = join(tmp, 'src')
+      await mkdir(src, { recursive: true })
+      await writeFile(join(src, 'auth.ts'), 'export function login(user: string) { return user }\n', 'utf8')
+      const idxCode = await runCli(['index', src, '-o', out])
+      expect(idxCode).toBe(0)
+      // The manifest proves persistence happened at the explicit path.
+      expect(existsSync(join(out, 'manifest.json'))).toBe(true)
+
+      // Load it back through the explicit --index path and search.
+      const searchCode = await runCli(['search', 'login', '--index', out, '-k', '3'])
+      expect(searchCode).toBe(0)
+    }
+    finally {
+      process.stdout.write = origWrite
+      await rm(tmp, { recursive: true, force: true })
+    }
+    // A non-empty result set (or an explicit "No results") must be valid JSON.
+    const out2 = JSON.parse(writes.join('').trim().split('\n').pop() ?? '{}')
+    expect(out2).toBeDefined()
+  })
+})
+
+describe('csp search/find-related (no --index) auto-caches via loadOrBuildIndex (T011)', () => {
+  function captureStdout(): { writes: string[], restore: () => void } {
+    const writes: string[] = []
+    const origWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+      return true
+    }) as typeof process.stdout.write
+    return { writes, restore: () => { process.stdout.write = origWrite } }
+  }
+
+  test('search without --index routes through the loadOrBuild seam with source + content + topK', async () => {
+    let captured: { source?: string, content?: ContentType[], ref?: string | undefined } = {}
+    const fakeIndex: Partial<CspIndex> = {
+      chunks: [],
+      search: (): SearchResult[] => [],
+    }
+    const { writes, restore } = captureStdout()
+    try {
+      const code = await runCli(['search', 'foo', './my-project', '-k', '3'], {
+        loadOrBuild: async (source, opts) => {
+          captured = { source, content: opts.content, ref: opts.ref }
+          return fakeIndex as CspIndex
+        },
+        // fromPath must NOT be used for the build branch anymore.
+        fromPath: async () => { throw new Error('fromPath must not run when auto-cache is wired') },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      restore()
+    }
+    expect(captured.source).toBe('./my-project')
+    expect(captured.content).toEqual([ContentType.CODE])
+    expect(JSON.parse(writes.join('').trim())).toEqual({ error: 'No results found.' })
+  })
+
+  test('search without a path argument defaults the source to "."', async () => {
+    let capturedSource: string | undefined
+    const fakeIndex: Partial<CspIndex> = { chunks: [], search: (): SearchResult[] => [] }
+    const { restore } = captureStdout()
+    try {
+      const code = await runCli(['search', 'foo'], {
+        loadOrBuild: async (source) => { capturedSource = source; return fakeIndex as CspIndex },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      restore()
+    }
+    expect(capturedSource).toBe('.')
+  })
+
+  test('find-related without --index routes through the loadOrBuild seam with its path source', async () => {
+    let capturedSource: string | undefined
+    const seedChunk = { content: 'x', filePath: 'a.ts', startLine: 1, endLine: 5, language: 'typescript' }
+    const fakeIndex: Partial<CspIndex> = {
+      chunks: [seedChunk],
+      findRelated: (): SearchResult[] => [],
+    }
+    const { restore } = captureStdout()
+    try {
+      const code = await runCli(['find-related', 'a.ts', '2', './repo'], {
+        loadOrBuild: async (source) => { capturedSource = source; return fakeIndex as CspIndex },
+        fromPath: async () => { throw new Error('fromPath must not run when auto-cache is wired') },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      restore()
+    }
+    expect(capturedSource).toBe('./repo')
+  })
+
+  test('--index still bypasses the auto-cache seam (T008 guarantee preserved)', async () => {
+    let loadedFrom: string | undefined
+    let autoCacheCalled = false
+    const fakeIndex: Partial<CspIndex> = { chunks: [], search: (): SearchResult[] => [] }
+    const { restore } = captureStdout()
+    try {
+      const code = await runCli(['search', 'foo', '--index', '/explicit/idx'], {
+        readIndex: async (p: string) => { loadedFrom = p; return fakeIndex as CspIndex },
+        loadOrBuild: async () => { autoCacheCalled = true; return fakeIndex as CspIndex },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      restore()
+    }
+    expect(loadedFrom).toBe('/explicit/idx')
+    expect(autoCacheCalled).toBe(false)
+  })
+
+  test('ref flag is forwarded to the loadOrBuild seam', async () => {
+    let capturedRef: string | undefined
+    const fakeIndex: Partial<CspIndex> = { chunks: [], search: (): SearchResult[] => [] }
+    const { restore } = captureStdout()
+    try {
+      const code = await runCli(['search', 'foo', 'https://github.com/o/r', '--ref', 'v1.2.3'], {
+        loadOrBuild: async (_source, opts) => { capturedRef = opts.ref; return fakeIndex as CspIndex },
+      })
+      expect(code).toBe(0)
+    }
+    finally {
+      restore()
+    }
+    expect(capturedRef).toBe('v1.2.3')
   })
 })

@@ -1,6 +1,7 @@
 // Tests for src/indexing/index.ts (CspIndex)
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
@@ -27,7 +28,7 @@ function makeChunk(
 }
 
 function buildIndex(chunks: Chunk[]): CspIndex {
-  const model = makeStubModel('test-model', 4)
+  const model = makeStubModel(4)
   const vectors = chunks.map((_, i) => {
     const v = new Float32Array(4)
     v[0] = i + 1
@@ -35,8 +36,8 @@ function buildIndex(chunks: Chunk[]): CspIndex {
   })
   return new CspIndex({
     model,
-    bm25Index: new Bm25Index(chunks.map(() => ['x'])),
-    semanticIndex: new SelectableBasicBackend(vectors, 4),
+    bm25Index: Bm25Index.build(chunks.map(() => ['x'])),
+    semanticIndex: new SelectableBasicBackend(vectors),
     chunks,
     modelPath: 'test-model',
     root: null,
@@ -163,6 +164,137 @@ describe('CspIndex save → loadFromDisk roundtrip', () => {
     // Dir exists but is empty.
     await expect(CspIndex.loadFromDisk(dir)).rejects.toThrow(/Missing:/)
   })
+
+  it('loadFromDisk throws on a schema version mismatch', async () => {
+    const idx = buildIndex([makeChunk('a.ts', 1, 10, 'typescript', 'A')])
+    await idx.save(dir)
+    // Corrupt the manifest's schema version to simulate a future/older index.
+    const manifestPath = join(dir, 'manifest.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>
+    manifest.schemaVersion = 999
+    writeFileSync(manifestPath, JSON.stringify(manifest))
+    await expect(CspIndex.loadFromDisk(dir)).rejects.toThrow(/schema version/i)
+  })
+
+  it('loadFromDisk rejects a manifest with an invalid content field', async () => {
+    const idx = buildIndex([makeChunk('a.ts', 1, 10, 'typescript', 'A')])
+    await idx.save(dir)
+    // Schema version stays valid; `content` is corrupted to a non-ContentType.
+    const manifestPath = join(dir, 'manifest.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>
+    manifest.content = ['not-a-content-type']
+    writeFileSync(manifestPath, JSON.stringify(manifest))
+    await expect(CspIndex.loadFromDisk(dir)).rejects.toThrow(/Invalid manifest/)
+  })
+
+  it('round-trips chunk content losslessly and yields stable search results', async () => {
+    const chunks: Chunk[] = [
+      makeChunk('a.ts', 1, 10, 'typescript', 'alpha beta'),
+      makeChunk('b.ts', 11, 20, 'typescript', 'gamma delta'),
+      makeChunk('c.py', 1, 5, 'python', 'epsilon'),
+    ]
+    const idx = buildIndex(chunks)
+    await idx.save(dir)
+
+    // Chunk fields survive the round-trip intact (chunkToDict/chunkFromDict symmetry).
+    const loaded = await CspIndex.loadFromDisk(dir)
+    expect(loaded.chunks).toEqual(chunks)
+    expect(loaded.stats).toEqual(idx.stats)
+
+    // Two independent loads of the same persisted index produce identical
+    // ranked results — the restored bm25/dense/model state is deterministic.
+    const loaded2 = await CspIndex.loadFromDisk(dir)
+    const a = loaded.search('alpha', { topK: 3 }).map(r => r.chunk.filePath)
+    const b = loaded2.search('alpha', { topK: 3 }).map(r => r.chunk.filePath)
+    expect(a).toEqual(b)
+  })
+})
+
+describe('CspIndex.save', () => {
+  let dir: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'csp-save-'))
+  })
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  function readJson(name: string): unknown {
+    return JSON.parse(readFileSync(join(dir, name), 'utf8'))
+  }
+
+  it('writes all index artifacts to the target directory', async () => {
+    const chunks: Chunk[] = [
+      makeChunk('a.ts', 1, 10, 'typescript', 'A'),
+      makeChunk('b.ts', 1, 5, 'python', 'B'),
+    ]
+    const idx = buildIndex(chunks)
+    await idx.save(dir)
+
+    for (const name of ['manifest.json', 'chunks.json', 'bm25.json', 'vectors.bin', 'args.json'])
+      expect(existsSync(join(dir, name))).toBe(true)
+  })
+
+  it('creates the target directory if it does not exist', async () => {
+    const nested = join(dir, 'a', 'b', 'idx')
+    const idx = buildIndex([makeChunk('a.ts', 1, 10)])
+    await idx.save(nested)
+    expect(existsSync(join(nested, 'manifest.json'))).toBe(true)
+  })
+
+  it('writes a manifest with schema version, content, source id, and model id', async () => {
+    const chunks: Chunk[] = [makeChunk('a.ts', 1, 10, 'typescript', 'A')]
+    const idx = buildIndex(chunks)
+    await idx.save(dir)
+
+    const manifest = readJson('manifest.json') as Record<string, unknown>
+    expect(manifest.schemaVersion).toBe(1)
+    expect(manifest.content).toEqual([...DEFAULT_CONTENT])
+    // buildIndex sets root: null → sourceId is null.
+    expect(manifest.sourceId).toBeNull()
+    expect(manifest.modelId).toBe('test-model')
+    // contentHash is deterministic and non-empty.
+    expect(typeof manifest.contentHash).toBe('string')
+    expect((manifest.contentHash as string).length).toBeGreaterThan(0)
+  })
+
+  it('serializes chunks in camelCase (chunkToDict) form, preserving order', async () => {
+    const chunks: Chunk[] = [
+      makeChunk('a.ts', 1, 10, 'typescript', 'A'),
+      makeChunk('b.ts', 1, 5, 'python', 'B'),
+    ]
+    const idx = buildIndex(chunks)
+    await idx.save(dir)
+
+    const serialized = readJson('chunks.json') as Array<Record<string, unknown>>
+    expect(serialized.length).toBe(2)
+    expect(serialized.map(c => c.filePath)).toEqual(['a.ts', 'b.ts'])
+    const first = serialized[0]!
+    expect(first.content).toBe('A')
+    expect(first.startLine).toBe(1)
+    expect(first.endLine).toBe(10)
+    expect(first.language).toBe('typescript')
+    expect(first.location).toBe('a.ts:1-10')
+    // snake_case wire keys must NOT leak into the round-trip format.
+    expect(first.file_path).toBeUndefined()
+  })
+
+  it('produces a deterministic contentHash for identical chunks', async () => {
+    const make = (): CspIndex =>
+      buildIndex([makeChunk('a.ts', 1, 10, 'typescript', 'A')])
+
+    const dir2 = mkdtempSync(join(tmpdir(), 'csp-save-2-'))
+    try {
+      await make().save(dir)
+      await make().save(dir2)
+      const h1 = (JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as Record<string, unknown>).contentHash
+      const h2 = (JSON.parse(readFileSync(join(dir2, 'manifest.json'), 'utf8')) as Record<string, unknown>).contentHash
+      expect(h1).toBe(h2)
+    } finally {
+      rmSync(dir2, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('CspIndex.fromPath', () => {
@@ -194,9 +326,89 @@ describe('CspIndex.fromPath', () => {
       join(dir, 'sample.ts'),
       'export function greet(name: string) {\n  return `hi ${name}`\n}\n',
     )
-    const idx = await CspIndex.fromPath(dir, { content: ContentType.Code })
+    const idx = await CspIndex.fromPath(dir, { content: ContentType.CODE })
     expect(idx.stats.totalChunks).toBeGreaterThan(0)
     expect(idx.stats.indexedFiles).toBe(1)
     expect(idx.chunks[0]!.filePath).toBe('sample.ts')
+  })
+})
+
+describe('CspIndex.fromGit', () => {
+  let workdir: string
+  let repoDir: string
+
+  /** Run a git command in `cwd`, throwing with stderr on failure. */
+  function git(cwd: string, ...args: string[]): void {
+    const res = spawnSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    })
+    if (res.status !== 0)
+      throw new Error(`git ${args.join(' ')} failed: ${res.stderr}`)
+  }
+
+  /** Count leftover clone temp dirs so we can assert cleanup. */
+  function cloneTempDirCount(): number {
+    return readdirSync(tmpdir()).filter(name => name.startsWith('csp-git-')).length
+  }
+
+  beforeEach(() => {
+    workdir = mkdtempSync(join(tmpdir(), 'csp-git-src-'))
+    // A real, non-bare local repo with one committed TS file. `git clone` can
+    // shallow-clone this over a file:// URL with no network.
+    repoDir = join(workdir, 'repo')
+    spawnSync('git', ['init', repoDir], { encoding: 'utf8' })
+    git(repoDir, 'config', 'user.email', 'test@example.com')
+    git(repoDir, 'config', 'user.name', 'Test')
+    git(repoDir, 'config', 'commit.gpgsign', 'false')
+    writeFileSync(
+      join(repoDir, 'sample.ts'),
+      'export function greet(name: string) {\n  return `hi ${name}`\n}\n',
+    )
+    git(repoDir, 'add', '.')
+    git(repoDir, 'commit', '-m', 'initial')
+  })
+  afterEach(() => {
+    rmSync(workdir, { recursive: true, force: true })
+  })
+
+  it('shallow-clones the repo and builds a populated index', async () => {
+    const before = cloneTempDirCount()
+    const idx = await CspIndex.fromGit(`file://${repoDir}`, {
+      content: ContentType.CODE,
+    })
+    expect(idx.stats.totalChunks).toBeGreaterThan(0)
+    expect(idx.stats.indexedFiles).toBe(1)
+    expect(idx.chunks[0]!.filePath).toBe('sample.ts')
+    // The index is rooted at the git URL, not the (deleted) temp checkout, so a
+    // persisted manifest records a stable sourceId.
+    expect(idx.root).toBe(`file://${repoDir}`)
+    // The temporary checkout must be cleaned up (no leak) after success.
+    expect(cloneTempDirCount()).toBe(before)
+  })
+
+  it('cleans up the temp checkout even when clone fails', async () => {
+    const before = cloneTempDirCount()
+    const bogus = join(workdir, 'does-not-exist.git')
+    expect(existsSync(bogus)).toBe(false)
+    await expect(
+      CspIndex.fromGit(`file://${bogus}`, { content: ContentType.CODE }),
+    ).rejects.toThrow(/clone/i)
+    // Failure path must not leak the temp checkout directory either.
+    expect(cloneTempDirCount()).toBe(before)
+  })
+
+  it('rejects a ref that would inject a git flag (leading dash)', async () => {
+    const before = cloneTempDirCount()
+    await expect(
+      CspIndex.fromGit(`file://${repoDir}`, {
+        content: ContentType.CODE,
+        ref: '--upload-pack=touch /tmp/pwned',
+      }),
+    ).rejects.toThrow(/Invalid git ref/)
+    // The guard throws inside the clone step; fromGit's `finally` still cleans
+    // up the temp checkout, so no dir leaks.
+    expect(cloneTempDirCount()).toBe(before)
   })
 })

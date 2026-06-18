@@ -3,6 +3,7 @@
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 
+import { loadOrBuildIndex } from '../indexing/cache.ts'
 import { CspIndex, loadModel } from '../indexing/index.ts'
 import { ContentType } from '../types.ts'
 import { formatResults, isGitUrl, resolveChunk } from '../utils.ts'
@@ -51,8 +52,42 @@ async function resolvePath(p: string): Promise<string> {
   }
 }
 
+/**
+ * Disk-cache seam: routes an in-memory cache miss through the shared
+ * `~/.csp/index/<key>` disk cache. Mirrors the cli DI seam contract so cli and
+ * mcp compute the same cache key for the same (source, content, ref) — see
+ * `cli.ts`'s `_defaultLoadOrBuild`. Tests inject a stub to stay off the real
+ * `~/.csp` home and the network.
+ */
+export type LoadOrBuildSeam = (
+  source: string,
+  opts: { content: ContentType[], ref?: string | undefined, modelPath?: string | undefined },
+) => Promise<CspIndex>
+
 export interface IndexCacheOptions {
   content?: ContentType[]
+  /**
+   * Override the disk-cache build path (defaults to {@link loadOrBuildIndex}).
+   * Injected by tests to assert routing without touching `~/.csp` / network.
+   */
+  loadOrBuild?: LoadOrBuildSeam
+}
+
+/**
+ * Default disk-cache seam: forward to {@link loadOrBuildIndex}, re-narrowing
+ * `ref` so an absent ref is omitted rather than passed as explicit `undefined`
+ * (required under `exactOptionalPropertyTypes`). Identical to cli's
+ * `_defaultLoadOrBuild` so both layers key the cache the same way.
+ */
+function defaultLoadOrBuild(
+  source: string,
+  opts: { content: ContentType[], ref?: string | undefined, modelPath?: string | undefined },
+): Promise<CspIndex> {
+  return loadOrBuildIndex(source, {
+    content: opts.content,
+    ...(opts.ref !== undefined ? { ref: opts.ref } : {}),
+    ...(opts.modelPath !== undefined ? { modelPath: opts.modelPath } : {}),
+  })
 }
 
 /**
@@ -64,6 +99,7 @@ export class IndexCache {
   // Use a Map for insertion-order semantics (LRU via re-insert).
   private readonly tasks = new Map<string, Promise<CspIndex>>()
   private readonly content: ContentType[]
+  private readonly loadOrBuild: LoadOrBuildSeam
   private readonly modelReady: Deferred<string>
   private modelPath: string | null = null
   private modelError: unknown = null
@@ -72,6 +108,7 @@ export class IndexCache {
 
   constructor(options: IndexCacheOptions = {}) {
     this.content = options.content ?? [ContentType.CODE]
+    this.loadOrBuild = options.loadOrBuild ?? defaultLoadOrBuild
     this.modelReady = createDeferred<string>()
     // Prevent unhandled promise rejection warnings if the model fails to load
     // before any caller awaits the promise. Callers of awaitModel() still
@@ -154,20 +191,16 @@ export class IndexCache {
         this.tasks.delete(oldestKey)
     }
 
-    const buildPromise: Promise<CspIndex> = isGitUrl(source)
-      ? CspIndex.fromGit(source, {
-          // Only include `ref` when caller actually supplied one — avoids
-          // tripping `exactOptionalPropertyTypes` and matches semble's behavior
-          // (passing `ref=None` would be equivalent, but explicit-undefined is
-          // distinct from "not present" in TS).
-          ...(ref !== undefined ? { ref } : {}),
-          modelPath,
-          content: this.content,
-        })
-      : CspIndex.fromPath(cacheKey, {
-          modelPath,
-          content: this.content,
-        })
+    // Route the in-memory miss through the shared disk cache. The seam owns the
+    // `isGitUrl` branch and the `~/.csp/index/<key>` content-hash reuse/rebuild;
+    // we only hand it the (source, content, ref) and the pre-warmed modelPath.
+    // `ref` / `modelPath` are omitted when absent to satisfy
+    // `exactOptionalPropertyTypes` and to match cli's cache-key contract.
+    const buildPromise: Promise<CspIndex> = this.loadOrBuild(source, {
+      content: this.content,
+      ...(ref !== undefined ? { ref } : {}),
+      ...(modelPath !== undefined ? { modelPath } : {}),
+    })
 
     this.tasks.set(cacheKey, buildPromise)
 
