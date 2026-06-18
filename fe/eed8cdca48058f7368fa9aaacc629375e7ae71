@@ -1,0 +1,25 @@
+.gitignore
+  s_4fc351d6f8f5f5::t_013fa2893586ab 58-60
+.please/docs/tracks/active/rust-rewrite-20260618/plan.md
+  s_4fc351d6f8f5f5::t_1aa8156e68a515 82-85
+  s_4fc351d6f8f5f5::t_70d0bc16868223 194
+npm/scripts/generate-platform-packages.mjs
+  s_4fc351d6f8f5f5::t_bc3bdb7248f25a 42-45,47-52,73,77-83,87
+  s_4fc351d6f8f5f5::t_f6ae40132b6652 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "feeed8cdca48058f7368fa9aaacc629375e7ae71",
+  "prompts": {},
+  "sessions": {
+    "s_4fc351d6f8f5f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d716d4e4-e51c-4bb2-8e56-af1ec7a37a38",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
