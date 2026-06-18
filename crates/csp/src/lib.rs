@@ -10,8 +10,7 @@
 pub mod chunking;
 pub mod indexing;
 pub mod ranking;
+pub mod search;
 pub mod tokens;
 pub mod types;
 pub mod utils;
-// pub mod indexing;   // Phase 3
-// pub mod search;     // Phase 4
