@@ -1,12 +1,6 @@
 // Port of src/semble/ranking/penalties.py
-// Inlined Chunk type until src/types.ts lands (Unit 1).
-interface Chunk {
-  content: string
-  filePath: string
-  startLine: number
-  endLine: number
-  language?: string
-}
+
+import type { Chunk } from '../types.ts'
 
 // Patterns that identify test files across common languages.
 // Grouped by language for readability; combined into a single regex.

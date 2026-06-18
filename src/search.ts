@@ -1,6 +1,9 @@
 // Port of src/semble/search.py
 
 import type { Chunk, SearchResult } from './types.ts'
+import { applyQueryBoost, boostMultiChunkFiles } from './ranking/boosting.ts'
+import { rerankTopK } from './ranking/penalties.ts'
+import { resolveAlpha } from './ranking/weighting.ts'
 import { tokenize } from './tokens.ts'
 
 // Re-export the shared types so downstream importers (and tests) can keep
@@ -33,109 +36,6 @@ function makeResult(chunk: Chunk, score: number): SearchResult {
     score,
     toDict: () => ({ chunk: chunkToDict(chunk), score }),
   }
-}
-
-// TODO(integration): replace with import from './ranking/weighting.ts'
-const _ALPHA_SYMBOL = 0.3
-const _ALPHA_NL = 0.5
-const _SYMBOL_QUERY_RE = /^(?:[A-Za-z_]\w*(?:(?:::|\\|->|\.)[A-Za-z_]\w*)+|_\w*|[A-Za-z][\da-z]*[A-Z_]\w*|[A-Z][A-Za-z0-9]*)$/
-function isSymbolQuery(query: string): boolean {
-  return _SYMBOL_QUERY_RE.test(query.trim())
-}
-function resolveAlpha(query: string, alpha: number | undefined): number {
-  if (alpha !== undefined) {
-    return alpha
-  }
-  return isSymbolQuery(query) ? _ALPHA_SYMBOL : _ALPHA_NL
-}
-
-// TODO(integration): replace with import from './ranking/boosting.ts'
-function boostMultiChunkFiles(scores: Map<Chunk, number>): void {
-  if (scores.size === 0) {
-    return
-  }
-  let maxScore = -Infinity
-  for (const v of scores.values()) {
-    if (v > maxScore) {
-      maxScore = v
-    }
-  }
-  if (maxScore === 0) {
-    return
-  }
-  const fileSum = new Map<string, number>()
-  const bestChunk = new Map<string, Chunk>()
-  for (const [chunk, score] of scores) {
-    fileSum.set(chunk.filePath, (fileSum.get(chunk.filePath) ?? 0) + score)
-    const existing = bestChunk.get(chunk.filePath)
-    if (existing === undefined || score > (scores.get(existing) ?? -Infinity)) {
-      bestChunk.set(chunk.filePath, chunk)
-    }
-  }
-  let maxFileSum = -Infinity
-  for (const v of fileSum.values()) {
-    if (v > maxFileSum) {
-      maxFileSum = v
-    }
-  }
-  const boostUnit = maxScore * 0.2
-  for (const [filePath, chunk] of bestChunk) {
-    const sum = fileSum.get(filePath) ?? 0
-    scores.set(chunk, (scores.get(chunk) ?? 0) + (boostUnit * sum) / maxFileSum)
-  }
-}
-
-// TODO(integration): replace with import from './ranking/boosting.ts'
-function applyQueryBoost(
-  combinedScores: Map<Chunk, number>,
-  _query: string,
-  _allChunks: Chunk[],
-): Map<Chunk, number> {
-  // Minimal stub — preserves identity. Full implementation arrives with ranking/boosting.ts.
-  return new Map(combinedScores)
-}
-
-// TODO(integration): replace with import from './ranking/penalties.ts'
-function rerankTopK(
-  scores: Map<Chunk, number>,
-  topK: number,
-  options: { penalisePaths: boolean } = { penalisePaths: true },
-): Array<[Chunk, number]> {
-  // Minimal stub mirroring the Python file-saturation logic without path penalties.
-  void options
-  if (scores.size === 0) {
-    return []
-  }
-  const ranked = [...scores.entries()].sort((a, b) => b[1] - a[1])
-  const FILE_SATURATION_THRESHOLD = 1
-  const FILE_SATURATION_DECAY = 0.5
-  const fileSelected = new Map<string, number>()
-  const selected: Array<[number, Chunk]> = []
-  let minSelected = Number.POSITIVE_INFINITY
-
-  for (const [chunk, penScore] of ranked) {
-    if (selected.length >= topK && penScore <= minSelected) {
-      break
-    }
-    const alreadySelected = fileSelected.get(chunk.filePath) ?? 0
-    let effScore = penScore
-    if (alreadySelected >= FILE_SATURATION_THRESHOLD) {
-      const excess = alreadySelected - FILE_SATURATION_THRESHOLD + 1
-      effScore *= FILE_SATURATION_DECAY ** excess
-    }
-    selected.push([effScore, chunk])
-    fileSelected.set(chunk.filePath, alreadySelected + 1)
-    if (selected.length >= topK) {
-      minSelected = Number.POSITIVE_INFINITY
-      for (const [s] of selected) {
-        if (s < minSelected) {
-          minSelected = s
-        }
-      }
-    }
-  }
-  selected.sort((a, b) => b[0] - a[0])
-  return selected.slice(0, topK).map(([score, chunk]) => [chunk, score])
 }
 
 // --- Public exports ---------------------------------------------------------
