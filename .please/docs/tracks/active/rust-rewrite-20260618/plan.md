@@ -44,7 +44,7 @@ Incremental over big-bang: the dependency-ordered phases each merge behind a pas
 - [x] T005 Port ranking weighting — adaptive alpha 0.3 symbol / 0.5 NL via resolve_alpha (file: crates/csp/src/ranking/weighting.rs) (depends on T002)
 - [x] T006 Port ranking boosting — apply_query_boost (symbol/embedded/stem), boost_multi_chunk_files, definition detection via fancy-regex (file: crates/csp/src/ranking/boosting.rs) (depends on T002)
 - [x] T007 Port ranking penalties — test/barrel/.d.ts/compat path penalties + rerank_top_k with file-saturation decay (file: crates/csp/src/ranking/penalties.rs) (depends on T002)
-- [x] T008 Port BM25 scoring core — enrich_for_bm25 (stem×2 + last 3 dir parts), selector_to_mask, Bm25Index build/get_scores (file: crates/csp/src/indexing/sparse.rs) (depends on T003) — save/load deferred to T014 (filesystem)
+- [x] T008 Port BM25 scoring core — enrich_for_bm25 (stem×2 + last 3 dir parts), selector_to_mask, Bm25Index build/get_scores (file: crates/csp/src/indexing/sparse.rs) (depends on T003)
 
 ### Phase 2: Chunking
 
@@ -58,7 +58,7 @@ Incremental over big-bang: the dependency-ordered phases each merge behind a pas
 - [x] T012 Port file classification — EXTENSION_TO_LANGUAGE map (~330), DOC/CONFIG/DATA/CODE language sets, detect_language, get_extensions (file: crates/csp/src/indexing/files.rs) (depends on T002)
 - [ ] T013 Port dense embeddings via model2vec-rs (file: crates/csp/src/indexing/dense.rs) (depends on T003)
   STOP: embedding parity is the single largest risk — verify vectors match the TS output before building any search result on top (see Context STOP Conditions).
-- [ ] T014 Port sparse BM25 index build (file: crates/csp/src/indexing/sparse.rs) (depends on T008)
+- [x] T014 Port BM25 save/load — Bm25Index::save/load to bm25.json, TS-compatible camelCase + entry-array format (build itself landed in T008) (file: crates/csp/src/indexing/sparse.rs) (depends on T008)
 - [ ] T015 Port content-hash cache — global ~/.csp/index/, serde serialization (file: crates/csp/src/indexing/cache.rs) (depends on T002)
   STOP: pick a serialization format that can be rebuilt from source; do not promise cross-version cache compatibility (the cache is disposable per ADR-0002).
 - [ ] T016 Port index create/orchestration (file: crates/csp/src/indexing/create.rs, crates/csp/src/indexing/mod.rs) (depends on T010, T012, T013, T014, T015)

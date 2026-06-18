@@ -1,10 +1,11 @@
 //! Minimal BM25 index + BM25 enrichment. Port of `src/indexing/sparse.ts`
 //! (← semble `index/sparse.py`, standing in for Python's `bm25s`).
 //!
-//! Phase 1 covers the pure scoring core: `enrich_for_bm25`, `selector_to_mask`,
-//! and `Bm25Index::{build, get_scores}`. On-disk `save`/`load` (filesystem) is
-//! deferred to Phase 3 (T014); the state derives serde so it can be added
-//! without reshaping.
+//! Phase 1 covered the pure scoring core: `enrich_for_bm25`, `selector_to_mask`,
+//! and `Bm25Index::{build, get_scores}`. Phase 3 (T014) adds on-disk
+//! `save`/`load` to a `bm25.json` file whose shape matches the TS serialization
+//! exactly (camelCase keys, `[[term, postings]]` entry arrays), so a Rust-written
+//! index is byte-compatible with — and loadable by — the TS implementation.
 //!
 //! Float parity: the upstream stores scores in a `Float32Array`, so each
 //! additive accumulation is rounded to `f32`. We reproduce that exactly —
@@ -13,6 +14,7 @@
 //! accumulation is order-sensitive.
 
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
@@ -188,6 +190,61 @@ impl Bm25Index {
 
         scores
     }
+
+    /// Persist the index to `dir/bm25.json`, creating `dir` if needed.
+    pub fn save(&self, dir: &Path) -> std::io::Result<()> {
+        std::fs::create_dir_all(dir)?;
+        let serialized = Bm25Serialized {
+            version: 1,
+            num_docs: self.num_docs,
+            avg_doc_length: self.avg_doc_length,
+            doc_lengths: self.doc_lengths.clone(),
+            postings: self
+                .postings
+                .iter()
+                .map(|(term, list)| (term.clone(), list.clone()))
+                .collect(),
+            doc_freq: self
+                .doc_freq
+                .iter()
+                .map(|(term, df)| (term.clone(), *df))
+                .collect(),
+        };
+        let json = serde_json::to_string(&serialized)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        std::fs::write(dir.join("bm25.json"), json)
+    }
+
+    /// Load an index previously persisted with [`save`](Self::save).
+    pub fn load(dir: &Path) -> std::io::Result<Self> {
+        let raw = std::fs::read_to_string(dir.join("bm25.json"))?;
+        let parsed: Bm25Serialized = serde_json::from_str(&raw)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        Ok(Self {
+            num_docs: parsed.num_docs,
+            doc_lengths: parsed.doc_lengths,
+            avg_doc_length: parsed.avg_doc_length,
+            postings: parsed.postings.into_iter().collect(),
+            doc_freq: parsed.doc_freq.into_iter().collect(),
+        })
+    }
+}
+
+/// On-disk representation of [`Bm25Index`]. The keys are camelCase and the
+/// maps are serialized as `[[key, value], ...]` entry arrays to match the TS
+/// `bm25.json` format exactly.
+#[derive(Serialize, Deserialize)]
+struct Bm25Serialized {
+    version: u32,
+    #[serde(rename = "numDocs")]
+    num_docs: usize,
+    #[serde(rename = "avgDocLength")]
+    avg_doc_length: f64,
+    #[serde(rename = "docLengths")]
+    doc_lengths: Vec<f32>,
+    postings: Vec<(String, Vec<(usize, u32)>)>,
+    #[serde(rename = "docFreq")]
+    doc_freq: Vec<(String, u32)>,
 }
 
 fn doc_lengths_get(doc_lengths: &[f32], doc_id: usize) -> f64 {
@@ -330,5 +387,50 @@ mod tests {
         let single = index.get_scores(&query(&["hello"]), None);
         let repeated = index.get_scores(&query(&["hello", "hello", "hello"]), None);
         assert_eq!(repeated, single);
+    }
+
+    // --- save / load (T014) ---
+
+    #[test]
+    fn save_load_round_trips_scores() {
+        let index = Bm25Index::build(&docs(&[
+            &["hello", "world"],
+            &["hello"],
+            &["world", "world"],
+        ]));
+        let dir = tempfile::tempdir().unwrap();
+        index.save(dir.path()).unwrap();
+
+        let loaded = Bm25Index::load(dir.path()).unwrap();
+        assert_eq!(loaded.num_docs(), index.num_docs());
+        for q in [
+            query(&["hello"]),
+            query(&["world"]),
+            query(&["hello", "world"]),
+        ] {
+            assert_eq!(loaded.get_scores(&q, None), index.get_scores(&q, None));
+        }
+    }
+
+    #[test]
+    fn save_writes_ts_compatible_json() {
+        let index = Bm25Index::build(&docs(&[&["hello"]]));
+        let dir = tempfile::tempdir().unwrap();
+        index.save(dir.path()).unwrap();
+
+        let raw = std::fs::read_to_string(dir.path().join("bm25.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(value["version"], 1);
+        assert_eq!(value["numDocs"], 1);
+        assert!(value["avgDocLength"].is_number());
+        assert!(value["docLengths"].is_array());
+        assert!(value["postings"].is_array());
+        assert!(value["docFreq"].is_array());
+    }
+
+    #[test]
+    fn load_missing_file_is_err() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(Bm25Index::load(dir.path()).is_err());
     }
 }
