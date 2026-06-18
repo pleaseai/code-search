@@ -5,11 +5,11 @@ import type { Model } from './dense.ts'
 import { readFileSync, statSync } from 'node:fs'
 import { relative } from 'node:path'
 import { chunkSource } from '../chunking/chunk-source.ts'
+import { detectLanguage, getExtensions } from '../languages.ts'
 import { tokenize } from '../tokens.ts'
 import { ContentType } from '../types.ts'
 import { embedChunks, SelectableBasicBackend } from './dense.ts'
 import { walkFiles } from './file-walker.ts'
-import { detectLanguage, getExtensions } from './files.ts'
 import { Bm25Index, enrichForBm25 } from './sparse.ts'
 
 /** 1 MB max file size to read and index. */

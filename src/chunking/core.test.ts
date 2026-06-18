@@ -20,9 +20,9 @@ describe('constants', () => {
 })
 
 describe('isSupportedLanguage', () => {
-  it('returns false for unknown languages (Unit 4 stub)', () => {
-    expect(isSupportedLanguage('typescript')).toBe(false)
-    expect(isSupportedLanguage('python')).toBe(false)
+  it('returns true for known languages and false for unknown ones', () => {
+    expect(isSupportedLanguage('typescript')).toBe(true)
+    expect(isSupportedLanguage('python')).toBe(true)
     expect(isSupportedLanguage('not-a-real-language')).toBe(false)
   })
 })
