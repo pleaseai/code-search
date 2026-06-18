@@ -7,6 +7,7 @@ import { loadOrBuildIndex } from '../indexing/cache.ts'
 import { CspIndex, loadModel } from '../indexing/index.ts'
 import { ContentType } from '../types.ts'
 import { formatResults, isGitUrl, resolveChunk } from '../utils.ts'
+import { version } from '../version.ts'
 
 const REPO_DESCRIPTION
   = 'https:// or http:// git URL (e.g. https://github.com/org/repo) or local directory path to index and search. '
@@ -497,7 +498,7 @@ export async function createServer(
   }
 
   const underlying = new McpServer(
-    { name: 'csp', version: '0.0.0' },
+    { name: 'csp', version },
     { instructions: SERVER_INSTRUCTIONS },
   )
 

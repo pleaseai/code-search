@@ -5,6 +5,7 @@
 //   * `package.json#version` is the source of truth for npm publishing.
 //   * Bun/tsdown don't read Python-style triples; reconstructing one would
 //     just be dead code.
-// A future integration PR will keep this in sync with `package.json#version`
-// (e.g. via a generated file or a build-time replacement).
-export const version = '0.0.0'
+// Kept in sync with `package.json#version` by release-please via the
+// `x-release-please-version` annotation below (see release-please-config.json
+// `extra-files`).
+export const version = '0.0.0' // x-release-please-version

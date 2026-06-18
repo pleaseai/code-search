@@ -71,10 +71,16 @@ codex plugin add csp@pleaseai
 에이전트의 컨텍스트에 `csp` 사용법을 추가해 언제 어떻게 CLI를 호출할지 알 수 있도록 합니다. 먼저 `csp` CLI를 설치한 뒤, 아래 스니펫을 `AGENTS.md` 또는 `CLAUDE.md`에 추가하세요.
 
 ```bash
+# Homebrew (macOS / Linux) — Node/Bun 없이 동작하는 독립 실행 바이너리
+brew install pleaseai/tap/csp
+
+# 또는 JavaScript 패키지 매니저로 설치 (PATH에 Bun 또는 Node 22+ 필요)
 bun add -g @pleaseai/csp     # bun으로 설치 (권장)
 npm install -g @pleaseai/csp # 또는 npm
 pnpm add -g @pleaseai/csp    # 또는 pnpm
 ```
+
+> Homebrew formula는 `bun build --compile`로 만든 자체 완결형 바이너리를 제공합니다(tree-sitter·임베딩 런타임 내장). 인덱스는 `~/.csp/`에 캐시됩니다([ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md) 참고).
 
 <details>
 <summary>AGENTS.md / CLAUDE.md 스니펫</summary>
