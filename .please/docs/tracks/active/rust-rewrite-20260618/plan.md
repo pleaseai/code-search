@@ -70,7 +70,7 @@ Incremental over big-bang: the dependency-ordered phases each merge behind a pas
 ### Phase 5: CLI + telemetry
 
 - [ ] T019 Wire CLI subcommands to core — search/index/find-related/init/clear with --top-k/--content/--index/--agent (file: crates/csp-cli/src/main.rs) (depends on T018)
-- [ ] T020 Port savings telemetry — ~/.csp/savings.jsonl + savings subcommand (file: crates/csp/src/stats.rs, crates/csp-cli/src/main.rs) (depends on T018)
+- [x] T020 Port savings telemetry — BucketStats, save_search_stats (JSONL append), clear_savings, build_savings_summary (UTC ymd buckets via Hinnant civil-date, NaN-skip), format_savings_report (ANSI; "Csp Token Savings"). now_secs injected for testable buckets (file: crates/csp/src/stats.rs) (depends on T018) — CLI wiring of the `savings` subcommand lands in T019
 
 ### Phase 6: MCP server
 

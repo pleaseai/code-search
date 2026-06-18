@@ -11,6 +11,7 @@ pub mod chunking;
 pub mod indexing;
 pub mod ranking;
 pub mod search;
+pub mod stats;
 pub mod tokens;
 pub mod types;
 pub mod utils;
