@@ -10,7 +10,7 @@
 // package.json with pinned optionalDependencies. Publish each with
 // `npm publish ./<dir> --provenance --access public`.
 
-import { chmodSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -39,7 +39,17 @@ mkdirSync(distRoot, { recursive: true })
 
 const base = JSON.parse(readFileSync(join(npmRoot, 'csp', 'package.json'), 'utf8'))
 
+// Generate a package per target whose asset is present. A missing asset is
+// skipped with a warning (so a partial matrix can still publish what built);
+// only generated targets are pinned in the wrapper's optionalDependencies.
+const generated = []
 for (const t of TARGETS) {
+  const src = join(assetsDir, t.asset)
+  if (!existsSync(src)) {
+    process.stderr.write(`skip ${t.pkg}: asset ${t.asset} not found in ${assetsDir}\n`)
+    continue
+  }
+
   const outDir = join(distRoot, t.pkg.replace('/', '__'))
   mkdirSync(outDir, { recursive: true })
 
@@ -57,18 +67,24 @@ for (const t of TARGETS) {
   }
   writeFileSync(join(outDir, 'package.json'), `${JSON.stringify(pkg, null, 2)}\n`)
 
-  const src = join(assetsDir, t.asset)
   const dest = join(outDir, t.binary)
   copyFileSync(src, dest)
   chmodSync(dest, 0o755)
+  generated.push(t)
   process.stdout.write(`wrote ${t.pkg}@${version} (${t.asset} -> ${t.binary})\n`)
 }
 
-// Stamp the wrapper with the release version + pinned optionalDependencies.
+if (generated.length === 0) {
+  process.stderr.write('error: no assets matched any known target — nothing generated\n')
+  process.exit(1)
+}
+
+// Stamp the wrapper with the release version + pinned optionalDependencies
+// (only the targets actually generated this run).
 const wrapper = {
   ...base,
   version,
-  optionalDependencies: Object.fromEntries(TARGETS.map(t => [t.pkg, version])),
+  optionalDependencies: Object.fromEntries(generated.map(t => [t.pkg, version])),
 }
 const wrapperDir = join(distRoot, 'csp')
 mkdirSync(join(wrapperDir, 'bin'), { recursive: true })
