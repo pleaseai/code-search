@@ -5,7 +5,6 @@ import { dirname, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
-// TODO(integration): replace stub when sibling modules land
 import { clearIndexCache, loadOrBuildIndex } from './indexing/cache.ts'
 import { CspIndex } from './indexing/index.ts'
 import { serve } from './mcp/server.ts'

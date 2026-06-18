@@ -4,13 +4,14 @@
 // indexing units (model loading + createIndexFromPath) into a single object
 // that the CLI and MCP server drive.
 //
-// Wiring status:
-//   - fromPath: implemented (this task, T003).
-//   - fromGit:  stub (T005).
-//   - search / findRelated: sync delegation to search.ts (T004).
-//   - save: implemented (this task, T006) — writes manifest + chunks + bm25 + dense.
-//   - loadFromDisk: throwing stub (real persistence in T007); declared here so
-//     the Phase A/B branch type-checks (cli.ts references CspIndex.loadFromDisk).
+// Construction:
+//   - fromPath:      index a local directory.
+//   - fromGit:       shallow-clone a git URL into a temp dir, index it via
+//                    fromPath, then re-root the index at the URL.
+//   - loadFromDisk:  reconstruct a saved index from its on-disk artifacts.
+// Operations:
+//   - search / findRelated: delegate to search.ts over the in-memory index.
+//   - save:          persist the index (manifest + chunks + bm25 + dense vectors).
 
 import type { Chunk, ContentType, IndexStats, SearchResult } from '../types.ts'
 import type { Model } from './dense.ts'
