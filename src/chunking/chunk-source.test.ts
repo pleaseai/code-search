@@ -35,8 +35,9 @@ describe('chunkSource', () => {
     const chunks = await chunkSource(src, 'big.txt', null)
     expect(chunks.length).toBeGreaterThanOrEqual(2)
 
-    for (const c of chunks)
+    for (const c of chunks) {
       expect(c.content.length).toBeLessThanOrEqual(DESIRED_CHUNK_LENGTH_CHARS)
+    }
   })
 
   it('emits 1-indexed start/end line numbers', async () => {
@@ -60,8 +61,9 @@ describe('chunkSource', () => {
     const src = `${'a'.repeat(100)}\n`.repeat(50)
     const chunks = await chunkSource(src, 'path/to/file.txt', null)
     expect(chunks.length).toBeGreaterThan(0)
-    for (const c of chunks)
+    for (const c of chunks) {
       expect(c.filePath).toBe('path/to/file.txt')
+    }
   })
 
   it('start/end lines align with source content across multi-chunk output', async () => {

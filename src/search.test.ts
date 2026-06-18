@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'bun:test'
 import type {
   Bm25Index,
   Chunk,
   Model,
   SelectableBasicBackend,
 } from './search.ts'
+import { describe, expect, it } from 'bun:test'
 import {
   _rrfScores,
   _searchBm25,
@@ -195,8 +195,9 @@ describe('search() — alpha blending', () => {
     expect(results[1]!.score).toBeGreaterThan(0)
     // chunks[4] is in the union but scored 0 under alpha=1.0.
     const ch4Result = results.find(r => r.chunk === chunks[4])
-    if (ch4Result !== undefined)
+    if (ch4Result !== undefined) {
       expect(ch4Result.score).toBe(0)
+    }
   })
 
   it('with alpha=0.0 yields purely BM25 ordering', () => {

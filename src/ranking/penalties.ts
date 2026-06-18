@@ -1,6 +1,6 @@
 // Port of src/semble/ranking/penalties.py
 // Inlined Chunk type until src/types.ts lands (Unit 1).
-type Chunk = {
+interface Chunk {
   content: string
   filePath: string
   startLine: number
@@ -53,7 +53,7 @@ export const TEST_FILE_RE = new RegExp(
   + '|[^/]*_test\\.lua' // foo_test.lua
   + '|test_[^/]*\\.lua' // test_foo.lua (luaunit)
   // Shared helper patterns (all languages)
-  + '|test_helpers?[^/]*\\.\\w+' // test_helpers.go, test_helper.rb, etc.
+  + '|test_helper[^/]*\\.\\w+' // test_helpers.go, test_helper.rb, etc.
   + ')$',
 )
 
@@ -149,7 +149,9 @@ export function rerankTopK(
     if (selected.length >= topK) {
       let m = Number.POSITIVE_INFINITY
       for (const [s] of selected) {
-        if (s < m) m = s
+        if (s < m) {
+          m = s
+        }
       }
       minSelected = m
     }

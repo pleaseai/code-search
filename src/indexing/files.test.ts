@@ -97,8 +97,12 @@ describe('getExtensions', () => {
     const code = new Set(getExtensions(['code'], undefined))
     const docs = new Set(getExtensions(['docs'], undefined))
     const both = new Set(getExtensions(['code', 'docs'], undefined))
-    for (const ext of code) expect(both.has(ext)).toBe(true)
-    for (const ext of docs) expect(both.has(ext)).toBe(true)
+    for (const ext of code) {
+      expect(both.has(ext)).toBe(true)
+    }
+    for (const ext of docs) {
+      expect(both.has(ext)).toBe(true)
+    }
   })
 })
 

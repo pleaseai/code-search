@@ -1,15 +1,17 @@
 // Port of src/semble/index/dense.py — unit tests
 
+import type { Chunk } from './dense'
+import { Buffer } from 'node:buffer'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import {
+
   DEFAULT_MODEL_NAME,
   embedChunks,
   loadModel,
   SelectableBasicBackend,
-  type Chunk,
 } from './dense'
 
 function chunk(content: string): Chunk {

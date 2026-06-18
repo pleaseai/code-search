@@ -74,11 +74,11 @@ jobs:
         # native runner — cross-compiling with `--target` produces a binary
         # with the wrong-arch addons ("bad CPU type in executable").
         include:
-          - os: macos-13        # Intel
+          - os: macos-13 # Intel
             target: darwin-x64
-          - os: macos-14        # Apple Silicon
+          - os: macos-14 # Apple Silicon
             target: darwin-arm64
-          - os: ubuntu-latest   # x64
+          - os: ubuntu-latest # x64
             target: linux-x64
           - os: ubuntu-24.04-arm # arm64
             target: linux-arm64

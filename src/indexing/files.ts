@@ -440,9 +440,15 @@ export const ALL_LANGUAGES: ReadonlySet<string> = new Set(
 // Code languages = ALL - DOC - CONFIG - DATA
 const CODE_LANGUAGES: ReadonlySet<string> = (() => {
   const set = new Set<string>(ALL_LANGUAGES)
-  for (const l of DOC_LANGUAGES) set.delete(l)
-  for (const l of CONFIG_LANGUAGES) set.delete(l)
-  for (const l of DATA_LANGUAGES) set.delete(l)
+  for (const l of DOC_LANGUAGES) {
+    set.delete(l)
+  }
+  for (const l of CONFIG_LANGUAGES) {
+    set.delete(l)
+  }
+  for (const l of DATA_LANGUAGES) {
+    set.delete(l)
+  }
   return set
 })()
 
@@ -451,8 +457,10 @@ const LANGUAGE_TO_EXTENSIONS: ReadonlyMap<string, readonly string[]> = (() => {
   const inv = new Map<string, string[]>()
   for (const [ext, lang] of Object.entries(EXTENSION_TO_LANGUAGE)) {
     const list = inv.get(lang)
-    if (list === undefined) inv.set(lang, [ext])
-    else list.push(ext)
+    if (list === undefined) {
+      inv.set(lang, [ext])
+    }
+    else { list.push(ext) }
   }
   return inv
 })()
@@ -478,7 +486,9 @@ export function detectLanguage(fileName: string): string | undefined {
   const lastSep = Math.max(fileName.lastIndexOf('/'), fileName.lastIndexOf('\\'))
   const base = fileName.slice(lastSep + 1)
   const dot = base.lastIndexOf('.')
-  if (dot <= 0) return undefined
+  if (dot <= 0) {
+    return undefined
+  }
   return EXTENSION_TO_LANGUAGE[base.slice(dot).toLowerCase()]
 }
 
@@ -500,11 +510,17 @@ export function getExtensions(
   const out = new Set<string>()
   for (const lang of languages) {
     const exts = LANGUAGE_TO_EXTENSIONS.get(lang)
-    if (exts === undefined) continue
-    for (const ext of exts) out.add(ext)
+    if (exts === undefined) {
+      continue
+    }
+    for (const ext of exts) {
+      out.add(ext)
+    }
   }
   if (extensions !== undefined) {
-    for (const ext of extensions) out.add(ext)
+    for (const ext of extensions) {
+      out.add(ext)
+    }
   }
   return [...out].sort()
 }

@@ -102,25 +102,32 @@ function isFiniteNumber(value: unknown): value is number {
  * a `TypeError` so corrupt JSON can't pollute the index.
  */
 export function chunkFromDict(dict: ChunkDictInput): Chunk {
-  if (dict === null || typeof dict !== 'object')
+  if (dict === null || typeof dict !== 'object') {
     throw new TypeError('chunkFromDict: expected an object')
+  }
 
   const { content, filePath, startLine, endLine, language } = dict as unknown as Record<string, unknown>
 
-  if (typeof content !== 'string')
+  if (typeof content !== 'string') {
     throw new TypeError('chunkFromDict: `content` must be a string')
-  if (typeof filePath !== 'string')
+  }
+  if (typeof filePath !== 'string') {
     throw new TypeError('chunkFromDict: `filePath` must be a string')
-  if (!isFiniteNumber(startLine))
+  }
+  if (!isFiniteNumber(startLine)) {
     throw new TypeError('chunkFromDict: `startLine` must be a finite number')
-  if (!isFiniteNumber(endLine))
+  }
+  if (!isFiniteNumber(endLine)) {
     throw new TypeError('chunkFromDict: `endLine` must be a finite number')
-  if (language !== undefined && language !== null && typeof language !== 'string')
+  }
+  if (language !== undefined && language !== null && typeof language !== 'string') {
     throw new TypeError('chunkFromDict: `language` must be a string, null, or omitted')
+  }
 
   const chunk: Chunk = { content, filePath, startLine, endLine }
-  if (typeof language === 'string')
+  if (typeof language === 'string') {
     chunk.language = language
+  }
   return chunk
 }
 

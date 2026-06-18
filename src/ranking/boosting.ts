@@ -11,7 +11,7 @@ export interface Chunk {
 }
 
 // TODO(integration): replace with import from '../tokens.ts' once Unit 2 lands in main.
-const TOKEN_CAMEL_RE = /[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[0-9]+/g
+const TOKEN_CAMEL_RE = /[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+/g
 
 function splitIdentifier(token: string): string[] {
   const lower = token.toLowerCase()
@@ -32,10 +32,10 @@ function splitIdentifier(token: string): string[] {
 
 // Symbol-lookup queries: namespace-qualified, leading-underscore, or containing
 // uppercase/underscore. Plain lowercase words (e.g. "session") are NL, not symbols.
-export const SYMBOL_QUERY_RE = /^(?:[A-Z_a-z]\w*(?:(?:::|\\|->|\.)[A-Z_a-z]\w*)+|_\w*|[A-Za-z][A-Za-z0-9]*[A-Z_]\w*|[A-Z][A-Za-z0-9]*)$/
+export const SYMBOL_QUERY_RE = /^(?:[A-Z_a-z]\w*(?:(?:::|\\|->|\.)[A-Z_a-z]\w*)+|_\w*|[A-Za-z][\da-z]*[A-Z_]\w*|[A-Z][A-Za-z0-9]*)$/
 
 // CamelCase/camelCase identifiers embedded in a NL query; excludes plain words and pure acronyms.
-export const EMBEDDED_SYMBOL_RE = /\b(?:[A-Z][a-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*|[a-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]+)\b/g
+export const EMBEDDED_SYMBOL_RE = /\b(?:[A-Z][a-z][\da-z]*[A-Z][\dA-Za-z]*|[a-z][\da-z]*[A-Z][\dA-Za-z]+)\b/g
 
 // Minimum stem length for prefix-based non-candidate scan (avoids over-broad matches).
 export const EMBEDDED_STEM_MIN_LEN = 4
@@ -89,7 +89,7 @@ export const FILE_COHERENCE_BOOST_FRAC = 0.2
 // Common English stopwords excluded from file-stem matching for NL queries.
 export const STOPWORDS: ReadonlySet<string> = new Set(
   ('a an and are as at be by do does for from has have how if in is it not of on or the to was'
-  + ' what when where which who why with').split(' '),
+    + ' what when where which who why with').split(' '),
 )
 
 function escapeRegex(s: string): string {
@@ -100,8 +100,9 @@ function escapeRegex(s: string): string {
 function maxValue(values: Iterable<number>): number {
   let m = Number.NEGATIVE_INFINITY
   for (const v of values) {
-    if (v > m)
+    if (v > m) {
       m = v
+    }
   }
   return m
 }
@@ -260,8 +261,9 @@ function pathParentName(filePath: string): string {
   // Strip trailing separators, then take the segment before the basename.
   const cleaned = filePath.replace(/[/\\]+$/, '')
   const sepIdx = Math.max(cleaned.lastIndexOf('/'), cleaned.lastIndexOf('\\'))
-  if (sepIdx === -1)
+  if (sepIdx === -1) {
     return ''
+  }
   const parent = cleaned.slice(0, sepIdx)
   const parentSepIdx = Math.max(parent.lastIndexOf('/'), parent.lastIndexOf('\\'))
   return parentSepIdx === -1 ? parent : parent.slice(parentSepIdx + 1)
@@ -276,8 +278,9 @@ export function _definitionTier(chunk: Chunk, names: Set<string>, boostUnit: num
       break
     }
   }
-  if (!matches)
+  if (!matches) {
     return 0.0
+  }
   const stem = pathStemLower(chunk.filePath)
   for (const name of names) {
     if (_stemMatches(stem, name.toLowerCase())) {
@@ -296,10 +299,12 @@ export function _scanNonCandidates(
   stemOk: (stem: string) => boolean,
 ): void {
   for (const chunk of allChunks) {
-    if (boosted.has(chunk))
+    if (boosted.has(chunk)) {
       continue
-    if (!stemOk(pathStemLower(chunk.filePath)))
+    }
+    if (!stemOk(pathStemLower(chunk.filePath))) {
       continue
+    }
     const tier = _definitionTier(chunk, names, boostUnit)
     if (tier !== 0.0) {
       boosted.set(chunk, tier)
@@ -354,8 +359,9 @@ export function _boostEmbeddedSymbols(
   allChunks: Chunk[],
 ): void {
   const names = new Set<string>(query.match(EMBEDDED_SYMBOL_RE) ?? [])
-  if (names.size === 0)
+  if (names.size === 0) {
     return
+  }
 
   const boostUnit = maxScore * DEFINITION_BOOST_MULTIPLIER * EMBEDDED_SYMBOL_BOOST_SCALE
 
@@ -369,8 +375,9 @@ export function _boostEmbeddedSymbols(
 
   const symbolsLower: string[] = Array.from(names, s => s.toLowerCase())
   for (const chunk of allChunks) {
-    if (boosted.has(chunk))
+    if (boosted.has(chunk)) {
       continue
+    }
     const stem = pathStemLower(chunk.filePath)
     const stemNorm = stem.replace(/_/g, '')
     let matches = false
@@ -385,8 +392,9 @@ export function _boostEmbeddedSymbols(
         break
       }
     }
-    if (!matches)
+    if (!matches) {
       continue
+    }
     const tier = _definitionTier(chunk, names, boostUnit)
     if (tier !== 0.0) {
       boosted.set(chunk, tier)
@@ -409,8 +417,9 @@ export function _countKeywordMatches(keywords: Set<string>, parts: Set<string>):
   }
   let nMatches = exactCount
   for (const keyword of keywords) {
-    if (exact.has(keyword))
+    if (exact.has(keyword)) {
       continue
+    }
     for (const part of parts) {
       // Avoid array allocation + destructuring on every iteration; pick shorter/longer directly.
       const shorter = keyword.length <= part.length ? keyword : part
@@ -424,7 +433,7 @@ export function _countKeywordMatches(keywords: Set<string>, parts: Set<string>):
   return nMatches
 }
 
-const QUERY_WORD_RE = /[A-Z_a-z]\w*/g
+const QUERY_WORD_RE = /[A-Z_]\w*/gi
 
 /**
  * Boost chunks whose file paths match NL query keywords (in-place).
@@ -446,8 +455,9 @@ export function _boostStemMatches(
       }
     }
   }
-  if (keywords.size === 0)
+  if (keywords.size === 0) {
     return
+  }
 
   const boost = maxScore * STEM_BOOST_MULTIPLIER
   const pathCache = new Map<string, Set<string>>()

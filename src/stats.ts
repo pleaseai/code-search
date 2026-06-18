@@ -94,7 +94,7 @@ export function saveSearchStats(
     const uniquePaths = new Set(results.map(r => r.chunk.filePath))
     let fileChars = 0
     for (const p of uniquePaths) {
-      if (Object.prototype.hasOwnProperty.call(fileSizes, p)) {
+      if (Object.hasOwn(fileSizes, p)) {
         fileChars += fileSizes[p] ?? 0
       }
     }
@@ -125,8 +125,9 @@ export function saveSearchStats(
  * `cleared: false` rather than crashing the CLI.
  */
 export function clearSavings(): { path: string, cleared: boolean } {
-  if (!existsSync(_STATS_FILE))
+  if (!existsSync(_STATS_FILE)) {
     return { path: _STATS_FILE, cleared: false }
+  }
   try {
     rmSync(_STATS_FILE)
     return { path: _STATS_FILE, cleared: true }
@@ -145,8 +146,9 @@ interface StatsRecord {
 }
 
 function isStatsRecord(value: unknown): value is StatsRecord {
-  if (value === null || typeof value !== 'object')
+  if (value === null || typeof value !== 'object') {
     return false
+  }
   const v = value as Record<string, unknown>
   // Reject NaN explicitly: `typeof NaN === 'number'` is true, but NaN
   // values would propagate into date formatting ("NaN-NaN-NaN") and
@@ -192,14 +194,16 @@ export function buildSavingsSummary(filePath?: string): SavingsSummary {
   // "__proto__" can't collide with built-in object properties.
   const callTypeCounts: Record<string, number> = Object.create(null) as Record<string, number>
 
-  if (!existsSync(target))
+  if (!existsSync(target)) {
     return { buckets, callTypeCounts }
+  }
 
   const raw = readFileSync(target, 'utf8')
   const lines = raw.split('\n')
   for (const line of lines) {
-    if (line.length === 0)
+    if (line.length === 0) {
       continue
+    }
     let record: unknown
     try {
       record = JSON.parse(line)
@@ -209,8 +213,9 @@ export function buildSavingsSummary(filePath?: string): SavingsSummary {
       // we omit the warning to keep stats imports side-effect-free).
       continue
     }
-    if (!isStatsRecord(record))
+    if (!isStatsRecord(record)) {
       continue
+    }
 
     const snippetChars = record.snippet_chars
     const fileChars = record.file_chars
@@ -222,24 +227,28 @@ export function buildSavingsSummary(filePath?: string): SavingsSummary {
     const inLast7 = day > sevenDaysAgo
 
     buckets['All time']!.add(snippetChars, fileChars)
-    if (inLast7)
+    if (inLast7) {
       buckets['Last 7 days']!.add(snippetChars, fileChars)
-    if (inToday)
-      buckets['Today']!.add(snippetChars, fileChars)
+    }
+    if (inToday) {
+      buckets.Today!.add(snippetChars, fileChars)
+    }
   }
 
   return { buckets, callTypeCounts }
 }
 
 function padRight(s: string, width: number): string {
-  if (s.length >= width)
+  if (s.length >= width) {
     return s
+  }
   return s + ' '.repeat(width - s.length)
 }
 
 function padLeft(s: string, width: number): string {
-  if (s.length >= width)
+  if (s.length >= width) {
     return s
+  }
   return ' '.repeat(width - s.length) + s
 }
 
@@ -265,10 +274,12 @@ function colorRatio(pct: number, enabled: boolean): string {
 }
 
 function formatSavedTokens(savedTokens: number): string {
-  if (savedTokens >= 1_000_000)
+  if (savedTokens >= 1_000_000) {
     return `~${(savedTokens / 1_000_000).toFixed(1)}M`
-  if (savedTokens >= 1000)
+  }
+  if (savedTokens >= 1000) {
     return `~${(savedTokens / 1000).toFixed(1)}k`
+  }
   return `~${savedTokens}`
 }
 
@@ -295,8 +306,9 @@ export function formatSavingsReport(options: FormatSavingsReportOptions = {}): s
   const target = options.path ?? _STATS_FILE
   const verbose = options.verbose ?? false
 
-  if (!existsSync(target))
+  if (!existsSync(target)) {
     return 'No stats yet. Run a search first.'
+  }
 
   const summary = buildSavingsSummary(target)
   const enabled = useColor()

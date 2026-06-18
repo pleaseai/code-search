@@ -1,3 +1,4 @@
+import type { Chunk } from './boosting.ts'
 import { describe, expect, test } from 'bun:test'
 import {
   _chunkDefinesSymbol,
@@ -6,7 +7,7 @@ import {
   _stemMatches,
   applyQueryBoost,
   boostMultiChunkFiles,
-  type Chunk,
+
   DEFINITION_BOOST_MULTIPLIER,
   EMBEDDED_SYMBOL_BOOST_SCALE,
   FILE_COHERENCE_BOOST_FRAC,

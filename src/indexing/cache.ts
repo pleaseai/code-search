@@ -13,18 +13,18 @@
 // The auto build/reuse orchestration (`loadOrBuildIndex`) lands in T010 and
 // composes these primitives.
 
+import type { ContentType } from '../types.ts'
+import type { CspIndexFromGitOptions } from './index.ts'
 import { createHash } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync, readdirSync, realpathSync, rmSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join, normalize, relative } from 'node:path'
-import { ContentType } from '../types.ts'
 import { isGitUrl } from '../utils.ts'
-import { CspIndex, DEFAULT_CONTENT, parseManifest } from './index.ts'
-import type { CspIndexFromGitOptions } from './index.ts'
 import { MAX_FILE_BYTES } from './create.ts'
 import { walkFiles } from './file-walker.ts'
 import { getExtensions } from './files.ts'
+import { CspIndex, DEFAULT_CONTENT, parseManifest } from './index.ts'
 
 /** Directory permissions for every cache directory (owner-only). NFR-003. */
 const CACHE_DIR_MODE = 0o700
@@ -125,8 +125,9 @@ export function computeContentHash(files: readonly CacheFile[]): string {
  */
 export function ensureCacheDir(dir: string, options: CacheLocationOptions = {}): void {
   mkdirSync(dir, { recursive: true, mode: CACHE_DIR_MODE })
-  for (const segment of chainTo(dir, cacheHome(options)))
+  for (const segment of chainTo(dir, cacheHome(options))) {
     chmodSync(segment, CACHE_DIR_MODE)
+  }
 }
 
 /** Outcome of {@link clearIndexCache}: the targeted path, whether it was removed, and the entry count. */
@@ -153,8 +154,9 @@ export function clearIndexCache(options: CacheLocationOptions = {}): ClearIndexR
   const home = cacheHome(options)
   const indexRoot = resolveIndexRoot(options)
 
-  if (!existsSync(indexRoot))
+  if (!existsSync(indexRoot)) {
     return { path: indexRoot, cleared: false, entries: 0 }
+  }
 
   // Resolve symlinks before the guard so a symlinked `index` (or home) cannot
   // redirect the delete outside the cache tree: rmSync follows the link and
@@ -167,8 +169,9 @@ export function clearIndexCache(options: CacheLocationOptions = {}): ClearIndexR
   // of the resolved home. Checking the parent (not just `basename === 'index'`)
   // also rejects a symlinked `index` that resolves to some *other* `.../index`
   // directory outside the cache home. If the invariant fails we delete nothing.
-  if (basename(realIndexRoot) !== 'index' || normalize(dirname(realIndexRoot)) !== normalize(realHome))
+  if (basename(realIndexRoot) !== 'index' || normalize(dirname(realIndexRoot)) !== normalize(realHome)) {
     throw new Error(`Refusing to clear unsafe index path: ${realIndexRoot}`)
+  }
 
   let entries = 0
   try {
@@ -193,11 +196,13 @@ function chainTo(leaf: string, home: string): string[] {
   let current = normalize(leaf)
   while (true) {
     segments.push(current)
-    if (current === normalizedHome)
+    if (current === normalizedHome) {
       break
+    }
     const parent = dirname(current)
-    if (parent === current || !current.startsWith(normalizedHome))
+    if (parent === current || !current.startsWith(normalizedHome)) {
       break
+    }
     current = parent
   }
   return segments.reverse()
@@ -205,8 +210,9 @@ function chainTo(leaf: string, home: string): string[] {
 
 /** Normalize a source identity: local paths are path-normalized, URLs kept verbatim. */
 function normalizeSource(source: string): string {
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(source) || source.startsWith('git@'))
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(source) || source.startsWith('git@')) {
     return source
+  }
   return normalize(source)
 }
 
@@ -247,8 +253,9 @@ async function collectSourceFiles(
     catch {
       continue
     }
-    if (size > MAX_FILE_BYTES)
+    if (size > MAX_FILE_BYTES) {
       continue
+    }
     let raw: string
     try {
       raw = await readFile(filePath, 'utf8')
@@ -288,10 +295,12 @@ export async function loadOrBuildIndex(
   const isGit = isGitUrl(source)
 
   const locationOptions: CacheLocationOptions = {}
-  if (baseDir !== undefined)
+  if (baseDir !== undefined) {
     locationOptions.baseDir = baseDir
-  if (ref !== undefined)
+  }
+  if (ref !== undefined) {
     locationOptions.ref = ref
+  }
 
   const cacheDir = resolveCacheDir(source, content, locationOptions)
   ensureCacheDir(cacheDir, baseDir !== undefined ? { baseDir } : {})
@@ -301,14 +310,17 @@ export async function loadOrBuildIndex(
   const sourceHash = isGit ? null : computeContentHash(await collectSourceFiles(source, content))
 
   const cached = await tryReuse(cacheDir, isGit, sourceHash)
-  if (cached !== null)
+  if (cached !== null) {
     return cached
+  }
 
   const buildOptions: { ref?: string, modelPath?: string } = {}
-  if (ref !== undefined)
+  if (ref !== undefined) {
     buildOptions.ref = ref
-  if (modelPath !== undefined)
+  }
+  if (modelPath !== undefined) {
     buildOptions.modelPath = modelPath
+  }
 
   const index = await buildIndex(source, isGit, content, buildOptions)
   await index.save(cacheDir, sourceHash !== null ? { contentHash: sourceHash } : {})
@@ -326,8 +338,9 @@ async function tryReuse(
   sourceHash: string | null,
 ): Promise<CspIndex | null> {
   const manifestPath = join(cacheDir, 'manifest.json')
-  if (!existsSync(manifestPath))
+  if (!existsSync(manifestPath)) {
     return null
+  }
 
   // For local sources, compare the content hash *before* the expensive full
   // load (chunks + bm25 + dense vectors + model). On a cache miss this skips
@@ -342,8 +355,9 @@ async function tryReuse(
       // Corrupt/partial manifest — treat as a miss and rebuild.
       return null
     }
-    if (manifest.contentHash !== sourceHash)
+    if (manifest.contentHash !== sourceHash) {
       return null
+    }
   }
 
   try {
@@ -364,14 +378,17 @@ async function buildIndex(
 ): Promise<CspIndex> {
   if (isGit) {
     const gitOptions: CspIndexFromGitOptions = { content }
-    if (options.ref !== undefined)
+    if (options.ref !== undefined) {
       gitOptions.ref = options.ref
-    if (options.modelPath !== undefined)
+    }
+    if (options.modelPath !== undefined) {
       gitOptions.modelPath = options.modelPath
+    }
     return CspIndex.fromGit(source, gitOptions)
   }
   const fromPathOptions: { content: readonly ContentType[], modelPath?: string } = { content }
-  if (options.modelPath !== undefined)
+  if (options.modelPath !== undefined) {
     fromPathOptions.modelPath = options.modelPath
+  }
   return CspIndex.fromPath(source, fromPathOptions)
 }

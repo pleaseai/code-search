@@ -1,14 +1,14 @@
 // Tests for src/indexing/index.ts (CspIndex)
 
+import type { Chunk } from '../types.ts'
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import type { Chunk } from '../types.ts'
 import { ContentType } from '../types.ts'
+import { makeStubModel, SelectableBasicBackend } from './dense.ts'
 import { CspIndex, DEFAULT_CONTENT } from './index.ts'
-import { SelectableBasicBackend, makeStubModel } from './dense.ts'
 import { Bm25Index } from './sparse.ts'
 
 function makeChunk(
@@ -232,8 +232,9 @@ describe('CspIndex.save', () => {
     const idx = buildIndex(chunks)
     await idx.save(dir)
 
-    for (const name of ['manifest.json', 'chunks.json', 'bm25.json', 'vectors.bin', 'args.json'])
+    for (const name of ['manifest.json', 'chunks.json', 'bm25.json', 'vectors.bin', 'args.json']) {
       expect(existsSync(join(dir, name))).toBe(true)
+    }
   })
 
   it('creates the target directory if it does not exist', async () => {
@@ -291,7 +292,8 @@ describe('CspIndex.save', () => {
       const h1 = (JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as Record<string, unknown>).contentHash
       const h2 = (JSON.parse(readFileSync(join(dir2, 'manifest.json'), 'utf8')) as Record<string, unknown>).contentHash
       expect(h1).toBe(h2)
-    } finally {
+    }
+    finally {
       rmSync(dir2, { recursive: true, force: true })
     }
   })
@@ -344,8 +346,9 @@ describe('CspIndex.fromGit', () => {
       encoding: 'utf8',
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
     })
-    if (res.status !== 0)
+    if (res.status !== 0) {
       throw new Error(`git ${args.join(' ')} failed: ${res.stderr}`)
+    }
   }
 
   /** Count leftover clone temp dirs so we can assert cleanup. */

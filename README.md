@@ -214,7 +214,10 @@ Add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.csp]
 command = "bunx"
-args = ["@pleaseai/csp", "mcp"]
+args = [
+  "@pleaseai/csp",
+  "mcp"
+]
 ```
 
 </details>
@@ -475,10 +478,10 @@ const related = await index.findRelated(results[0], { topK: 3 })
 
 // Each result exposes the matched chunk
 const result = results[0]
-result.chunk.filePath   // "src/model.ts"
-result.chunk.startLine  // 127
-result.chunk.endLine    // 150
-result.chunk.content    // "export function saveCheckpoint(path: string, ..."
+result.chunk.filePath // "src/model.ts"
+result.chunk.startLine // 127
+result.chunk.endLine // 150
+result.chunk.content // "export function saveCheckpoint(path: string, ..."
 ```
 
 </details>

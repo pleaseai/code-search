@@ -92,8 +92,9 @@ export function _mergeAdjacentChunks(
   chunks: readonly ChunkBoundary[],
   desiredLength: number,
 ): ChunkBoundary[] {
-  if (chunks.length === 0)
+  if (chunks.length === 0) {
     return []
+  }
 
   const merged: ChunkBoundary[] = []
 
@@ -129,8 +130,9 @@ function _children(node: TreeSitterNode): TreeSitterNode[] {
   const out: TreeSitterNode[] = []
   for (let i = 0; i < count; i++) {
     const c = node.child(i)
-    if (c !== null)
+    if (c !== null) {
       out.push(c)
+    }
   }
   return out
 }
@@ -183,8 +185,9 @@ export function _mergeNodeInner(
       child = children[index]!
       const childLength = child.endByte() - child.startByte()
 
-      if (runLength + childLength > desiredLength)
+      if (runLength + childLength > desiredLength) {
         break
+      }
 
       end = child.endByte()
       runLength += childLength
@@ -208,8 +211,9 @@ export function _mergeNode(node: TreeSitterNode, desiredLength: number): ChunkBo
  * equivalent to Python's `str.splitlines(keepends=True)`.
  */
 function _splitLinesKeepEnds(text: string): string[] {
-  if (text.length === 0)
+  if (text.length === 0) {
     return []
+  }
 
   const lines: string[] = []
   let start = 0
@@ -233,16 +237,18 @@ function _splitLinesKeepEnds(text: string): string[] {
       }
     }
   }
-  if (start < text.length)
+  if (start < text.length) {
     lines.push(text.slice(start))
+  }
 
   return lines
 }
 
 /** Chunk source code by line. */
 export function chunkLines(text: string, desiredLength: number): ChunkBoundary[] {
-  if (text.trim().length === 0)
+  if (text.trim().length === 0) {
     return []
+  }
 
   const linesAsGroups: ChunkBoundary[] = []
   let index = 0
@@ -265,16 +271,19 @@ export async function chunk(
   language: string,
   desiredLength: number,
 ): Promise<ChunkBoundary[] | null> {
-  if (text.trim().length === 0)
+  if (text.trim().length === 0) {
     return []
+  }
 
   const parser = await _cachedGetParser(language)
-  if (parser === null)
+  if (parser === null) {
     return null
+  }
 
   const tree = parser.parse(text)
-  if (tree === null)
+  if (tree === null) {
     return null
+  }
   const root = tree.rootNode()
 
   const asBytes = new TextEncoder().encode(text)
