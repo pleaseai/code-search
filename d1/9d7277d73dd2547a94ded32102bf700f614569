@@ -1,0 +1,61 @@
+crates/csp/src/search.rs
+  s_4fc351d6f8f5f5::t_89f0d0e9cdc8d9 72-81
+  s_4fc351d6f8f5f5::t_402d3a9eb06871 98,109,185,214,285
+.claude/settings.json
+  s_4fc351d6f8f5f5::t_3a8caee16b2bfb 4
+.github/workflows/rust.yml
+  s_4fc351d6f8f5f5::t_bb740ca4cb3bc9 49
+  s_4fc351d6f8f5f5::t_315c09dc473203 36-37
+crates/csp/src/indexing/create.rs
+  s_4fc351d6f8f5f5::t_1595df6e83f30a 62-66
+crates/csp/src/indexing/cache.rs
+  s_4fc351d6f8f5f5::t_2219f536e22e7b 213-215,221,229
+  s_4fc351d6f8f5f5::t_193d55597975fb 222-224
+  s_4fc351d6f8f5f5::t_a3e6fe6982e4d9 428
+  s_4fc351d6f8f5f5::t_f4ad69bf76f641 417
+.github/workflows/release-rust.yml
+  s_4fc351d6f8f5f5::t_f50f3f37665c55 121-129
+  s_4fc351d6f8f5f5::t_726ef7bad36548 45
+npm/csp/package.json
+  s_4fc351d6f8f5f5::t_199ed54c95550f 32
+.please/docs/tracks/completed/rust-rewrite-20260618/plan.md
+  s_4fc351d6f8f5f5::t_5998ff1b8d4fd3 151
+crates/csp-cli/src/mcp_server.rs
+  s_4fc351d6f8f5f5::t_c1dbd55b615e97 124-130,133
+  s_4fc351d6f8f5f5::t_01471f2cc23716 81
+  s_4fc351d6f8f5f5::t_297ae08644b982 100
+  s_4fc351d6f8f5f5::t_656d917be53628 51,57-61,65
+crates/csp-cli/src/main.rs
+  s_4fc351d6f8f5f5::t_32d687b70022d9 235-237,239-240
+  s_4fc351d6f8f5f5::t_f27596359a8da5 28
+  s_4fc351d6f8f5f5::t_8e87b810505510 281-283,294-297
+  s_4fc351d6f8f5f5::t_d49bd3b74c8ffe 308-312
+  s_4fc351d6f8f5f5::t_9576263e1ee5ab 421-425,428-429
+  s_4fc351d6f8f5f5::t_75f7cb31768350 36
+crates/csp/src/mcp.rs
+  s_4fc351d6f8f5f5::t_14ac48835bd50a 138,149-152,159,161
+  s_4fc351d6f8f5f5::t_331ebd057c5225 170,175
+  s_4fc351d6f8f5f5::t_18c67c12827027 372,380,387-388,394,413,422,429
+  s_4fc351d6f8f5f5::t_8933e6cfe58ce0 197,203
+  s_4fc351d6f8f5f5::t_c1de3af348a7e7 207-209,211-212
+crates/csp/src/indexing/index.rs
+  s_4fc351d6f8f5f5::t_9a130d9fd30470 497
+crates/csp/src/indexing/dense.rs
+  s_4fc351d6f8f5f5::t_6b1dbdaf2f30d8 319-320
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "d19d7277d73dd2547a94ded32102bf700f614569",
+  "prompts": {},
+  "sessions": {
+    "s_4fc351d6f8f5f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d716d4e4-e51c-4bb2-8e56-af1ec7a37a38",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
