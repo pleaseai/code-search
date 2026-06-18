@@ -6,6 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `@pleaseai/csp` (binary: `csp`) is a TypeScript/Bun port of [MinishLab/semble](https://github.com/MinishLab/semble), a Python hybrid code-search library for agents. The current repo is an **initial scaffold only** — `src/index.ts` and `src/cli.ts` are placeholders. The README is the canonical spec for the intended public surface (MCP server, CLI, library).
 
+### Rust rewrite (ADR-0003)
+
+A Rust port lives in `crates/csp` (library) + `crates/csp-cli` (`csp` binary); the TS `src/` stays the source of truth until Rust reaches parity.
+- Quality gate before every Rust commit: `cargo fmt --all && cargo clippy --all-targets --all-features -- -D warnings && cargo test --workspace`.
+- Parity oracle = the TS **test suite** reused as golden fixtures. TS `dense.ts` (Model2Vec) and `search.ts` ranking are deterministic **stubs** (`TODO(integration)`); Rust reproduces them bit-for-bit, so "parity" is fixture-level, not full runtime.
+- CLI/MCP output is a **snake_case** wire dict (`csp::utils::format_results`, mirroring TS `SearchResult.toDict`), distinct from the camelCase `ChunkDict` used for on-disk persistence.
+- rmcp 1.7: the default `#[tool_handler]` rebuilds the router via `Self::tool_router()` and leaves a stored `tool_router` field unread (clippy `dead_code`) — use `#[tool_handler(router = self.tool_router)]`.
+
 When porting modules from semble, fetch the upstream source via `ask`:
 
 ```bash

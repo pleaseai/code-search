@@ -213,3 +213,28 @@ Phase 1 (T001 → {T002,T003,T004} → {T005,T006,T007,T008}) → Phase 2 (T009 
 ## Surprises & Discoveries
 
 _Recorded during implementation._
+
+- The TS `dense.ts` (Model2Vec) and `search.ts` ranking are **deterministic stubs in the TS source itself** (`TODO(integration)`), not real implementations. This unblocked T013/T017 parity — the Rust port reproduces the stubs bit-for-bit against golden fixtures, no model weights needed — but it also means "behavioral parity" is parity with the TS *test fixtures*, not full runtime.
+- CLI/MCP output uses a **snake_case** wire dict (`{content, file_path, start_line, end_line, language, location}`) via `SearchResult.toDict`, distinct from the camelCase `ChunkDict` used for on-disk persistence. Required a separate `utils::format_results` serializer.
+- rmcp 1.7's default `#[tool_handler]` calls `Self::tool_router()` (rebuilds the router per call, leaves a stored `tool_router` field unread → clippy `dead_code`). Use `#[tool_handler(router = self.tool_router)]` to route through the stored field.
+- The track branch was created with plain `git`, so `gt submit` rejected it as untracked — finalize fell back to `gh pr ready`.
+
+## Outcomes & Retrospective
+
+### What Was Shipped
+A Rust Cargo workspace (`crates/csp` library + `crates/csp-cli` `csp` binary) porting Phases 1–7 of ADR-0003. Phases 1–6 are fully implemented and verified (263 tests; the rmcp stdio MCP server verified on the wire via a real JSON-RPC handshake). Phase 7 distribution (release-rust.yml cross-compile, npm `bunx` wrapper, Homebrew formula) is implemented and locally verified; only the publish side-effects (Releases upload, `npm publish`, tap push) remain, as they require secrets + a real release tag.
+
+### What Went Well
+- Leaf-first port with the TS test suite as a golden-fixture oracle kept each phase independently verifiable; the workspace stayed green (`fmt`/`clippy -D warnings`/`test`) at every commit.
+- The MCP transport was verified beyond compilation — driving JSON-RPC into the built binary proved initialize/tools-list/tools-call all match the TS contract, without needing an external MCP client.
+- Distribution was verified locally to the maximum extent (real release build + cross-compile + launcher end-to-end + formula syntax), rather than left as unverified YAML.
+
+### What Could Improve
+- The "behavioral parity" success criterion is ambiguous about runtime vs. test-fixture parity; because the TS oracle itself ships stubs, parity here is fixture-level. A future track should define real-runtime acceptance (model2vec-rs + tree-sitter) explicitly.
+- The track branch should have been created via `gt track` so the stacked-PR finalize path worked without fallback.
+
+### Tech Debt Created
+- Real Model2Vec embeddings (model2vec-rs) and tree-sitter AST chunking are not wired — Rust matches the TS stubs only.
+- `ranking::{apply_query_boost, rerank_top_k}` are ported but unwired (the search pipeline uses inline stubs, mirroring TS).
+- rmcp MCP server has no model pre-warm / file watcher (TS `IndexCache` has both); concurrent in-flight dedup is not modeled (sync cache).
+- Distribution cutover (flip the live npm/Homebrew release from the TS build to the Rust binary) is pending a maintainer runtime-parity decision.
