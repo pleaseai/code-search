@@ -1,0 +1,26 @@
+package.json
+  s_e355b67d122fc3::t_bff525b029cb00 64
+  s_e355b67d122fc3::t_be30da303e13f5 67
+  s_e355b67d122fc3::t_d4c1a0e74a8b89 5,42-45
+eslint.config.ts
+  s_e355b67d122fc3::t_693b51a59f52dc 12-29
+tsconfig.json
+  s_e355b67d122fc3::t_d4c1a0e74a8b89 4,7,9,12-13,15-17,22
+  s_e355b67d122fc3::t_2cf4ee5561fa23 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "8fe9204e56a4f95de40ebf3636720e2d070859ea",
+  "prompts": {},
+  "sessions": {
+    "s_e355b67d122fc3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ac0a2162-839f-4a91-a76b-1cccb8e047f2",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
