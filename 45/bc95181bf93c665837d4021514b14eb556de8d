@@ -1,0 +1,35 @@
+release-please-config.json
+  s_444ae27bd69253::t_68f16917cb2e96 1-30
+README.md
+  s_444ae27bd69253::t_00d4c6e25804c0 74-78,83
+src/cli.ts
+  s_444ae27bd69253::t_c7bc146911a1b8 15
+  s_444ae27bd69253::t_1e52bf90709deb 379-383
+src/version.ts
+  s_444ae27bd69253::t_ccaba91284d028 8-11
+README.ko.md
+  s_444ae27bd69253::t_f26aa349f633be 74-77,83
+src/mcp/server.ts
+  s_444ae27bd69253::t_a97db401a6152a 501
+  s_444ae27bd69253::t_50b0e436c62a01 10
+.github/workflows/release-please.yml
+  s_444ae27bd69253::t_ad43d2e1806f3c 1-232
+.release-please-manifest.json
+  s_444ae27bd69253::t_34dba81d5a4927 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "45bc95181bf93c665837d4021514b14eb556de8d",
+  "prompts": {},
+  "sessions": {
+    "s_444ae27bd69253": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9ba150d8-bfe6-4847-9f5e-b5d596baeb33",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
