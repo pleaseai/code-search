@@ -1,0 +1,35 @@
+# Cargo workspace for the Rust rewrite of @pleaseai/csp (see ADR-0003).
+#
+# Phase 0 scaffold. The TypeScript implementation under `src/` remains the
+# source of truth until the Rust line reaches behavioral parity, at which point
+# it is retired and this becomes the primary tree.
+[workspace]
+resolver = "2"
+members = ["crates/csp", "crates/csp-cli"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/pleaseai/code-search"
+authors = ["csp maintainers"]
+
+# Planned dependency menu (ADR-0003 crate mapping). Member crates opt in
+# phase by phase with `<dep>.workspace = true`; listing here does not fetch.
+[workspace.dependencies]
+csp = { path = "crates/csp" }
+model2vec-rs = "0.2"   # Phase 3 — dense embeddings (official MinishLab port)
+tree-sitter = "0.26"   # Phase 2 — AST chunking
+ignore = "0.4"         # Phase 3 — .gitignore / .cspignore file walking
+rmcp = "1.7"           # Phase 6 — MCP server
+clap = { version = "4", features = ["derive"] }  # Phase 5 — CLI
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+
+# Single-binary release profile (ADR-0003 motivation #1).
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

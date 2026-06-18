@@ -1,0 +1,17 @@
+[package]
+name = "csp-cli"
+description = "csp command-line interface."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "csp"
+path = "src/main.rs"
+
+[dependencies]
+csp = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }

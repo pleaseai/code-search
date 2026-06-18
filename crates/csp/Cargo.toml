@@ -1,0 +1,11 @@
+[package]
+name = "csp"
+description = "Hybrid code search for agents — core library (Rust rewrite of MinishLab/semble)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Populated per the ADR-0003 migration phases.
