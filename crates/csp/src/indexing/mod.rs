@@ -5,6 +5,7 @@
 //! Phase 3.
 
 pub mod cache;
+pub mod dense;
 pub mod file_walker;
 pub mod files;
 pub mod sparse;
