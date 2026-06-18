@@ -1,0 +1,35 @@
+rustfmt.toml
+  s_4fc351d6f8f5f5::t_64e82864f02279 1-2
+crates/csp-cli/Cargo.toml
+  s_4fc351d6f8f5f5::t_abd65e44ef9a68 1-17
+rust-toolchain.toml
+  s_4fc351d6f8f5f5::t_15ef1f079dac69 1-4
+crates/csp/Cargo.toml
+  s_4fc351d6f8f5f5::t_fc5994e2ccf372 1-11
+crates/csp-cli/src/main.rs
+  s_4fc351d6f8f5f5::t_fb61dc9fa20981 1-82
+.github/workflows/rust.yml
+  s_4fc351d6f8f5f5::t_4d9d2ab79e2135 1-47
+Cargo.toml
+  s_4fc351d6f8f5f5::t_f5b6bc41316bfb 1-35
+.gitignore
+  s_4fc351d6f8f5f5::t_ca0c4108a7a181 11-13
+crates/csp/src/lib.rs
+  s_4fc351d6f8f5f5::t_43e18032474f5f 1-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "4ead3c8c5db645bc28b197b57c3256b15c35bff6",
+  "prompts": {},
+  "sessions": {
+    "s_4fc351d6f8f5f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d716d4e4-e51c-4bb2-8e56-af1ec7a37a38",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
