@@ -20,10 +20,10 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, realpathSync, rmSync } f
 import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join, normalize, relative } from 'node:path'
+import { getExtensions } from '../languages.ts'
 import { isGitUrl } from '../utils.ts'
 import { MAX_FILE_BYTES } from './create.ts'
 import { walkFiles } from './file-walker.ts'
-import { getExtensions } from './files.ts'
 import { CspIndex, DEFAULT_CONTENT, parseManifest } from './index.ts'
 
 /** Directory permissions for every cache directory (owner-only). NFR-003. */

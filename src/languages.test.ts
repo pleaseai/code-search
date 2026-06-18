@@ -7,7 +7,7 @@ import {
   DOC_LANGUAGES,
   EXTENSION_TO_LANGUAGE,
   getExtensions,
-} from './files.ts'
+} from './languages.ts'
 
 describe('detectLanguage', () => {
   it('detects typescript from .ts', () => {

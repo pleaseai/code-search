@@ -8,7 +8,7 @@
 // loads even when the package is not yet installed, falling back to the
 // line chunker in that case.
 
-import { ALL_LANGUAGES } from '../indexing/files.ts'
+import { ALL_LANGUAGES } from '../languages.ts'
 
 export const RECURSION_DEPTH = 500
 export const MIN_CHUNK_SIZE = 50
