@@ -59,8 +59,11 @@ pub fn create_index_from_path(
         if size > MAX_FILE_BYTES {
             continue;
         }
-        let source = match std::fs::read_to_string(&file_path) {
-            Ok(text) => text,
+        // Lossy UTF-8 decode (invalid bytes → U+FFFD) to match the TS oracle's
+        // `readFileSync(path, 'utf8')`, which decodes lossily and only skips on
+        // an IO error — `read_to_string` would instead drop the whole file.
+        let source = match std::fs::read(&file_path) {
+            Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
             Err(_) => continue,
         };
         let chunk_path = match &options.display_root {

@@ -33,6 +33,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
 
       # The toolchain (and rustfmt/clippy components) is selected by
       # rust-toolchain.toml via the runner's preinstalled rustup — no
@@ -44,4 +46,4 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Test
-        run: cargo test --all-features --workspace
+        run: cargo test --all-features --locked --workspace

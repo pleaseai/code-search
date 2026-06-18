@@ -210,19 +210,23 @@ fn chain_to(leaf: &Path, home: &Path) -> Vec<PathBuf> {
 
 /// Ensure the `~/.csp → index → leaf` chain exists with 0700 permissions
 /// (Unix), tightening any pre-existing directory in the chain.
-pub fn ensure_cache_dir(dir: &Path, loc: &CacheLocation) {
-    let _ = std::fs::create_dir_all(dir);
+pub fn ensure_cache_dir(dir: &Path, loc: &CacheLocation) -> Result<(), String> {
+    std::fs::create_dir_all(dir)
+        .map_err(|e| format!("failed to create cache dir {}: {e}", dir.display()))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let home = cache_home(loc);
         for segment in chain_to(dir, &home) {
-            let _ =
-                std::fs::set_permissions(&segment, std::fs::Permissions::from_mode(CACHE_DIR_MODE));
+            std::fs::set_permissions(&segment, std::fs::Permissions::from_mode(CACHE_DIR_MODE))
+                .map_err(|e| {
+                    format!("failed to set 0700 on cache dir {}: {e}", segment.display())
+                })?;
         }
     }
     #[cfg(not(unix))]
     let _ = loc;
+    Ok(())
 }
 
 /// Remove the cached-index root (`<home>/index`) and report how many entries it
@@ -410,7 +414,7 @@ mod tests {
         let tmp = tempdir().unwrap();
         let base = tmp.path().join(".csp");
         let leaf = resolve_cache_dir("/repo", &[ContentType::Code], &loc(&base));
-        ensure_cache_dir(&leaf, &loc(&base));
+        ensure_cache_dir(&leaf, &loc(&base)).unwrap();
 
         let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode(&leaf), 0o700);
@@ -421,7 +425,7 @@ mod tests {
         std::fs::set_permissions(&base, std::fs::Permissions::from_mode(0o755)).unwrap();
         std::fs::set_permissions(base.join("index"), std::fs::Permissions::from_mode(0o755))
             .unwrap();
-        ensure_cache_dir(&leaf, &loc(&base));
+        ensure_cache_dir(&leaf, &loc(&base)).unwrap();
         assert_eq!(mode(&base), 0o700);
         assert_eq!(mode(&base.join("index")), 0o700);
     }

@@ -494,7 +494,7 @@ pub fn load_or_build_index(source: &str, options: &LoadOrBuildOptions) -> Result
         base_dir: options.base_dir.clone(),
         git_ref: None,
     };
-    ensure_cache_dir(&cache_dir, &base_only);
+    ensure_cache_dir(&cache_dir, &base_only)?;
 
     // Local sources: the source-file hash is the cache-validity oracle. Git
     // sources are URL+ref keyed (no cheap live hash).

@@ -316,7 +316,8 @@ impl SelectableBasicBackend {
                     (i, 1.0 - dot(&q, &self.vectors[vec_idx]))
                 })
                 .collect();
-            pairs.sort_by(|a, b| a.1.partial_cmp(&b.1).expect("finite cosine distances"));
+            // total_cmp is NaN-safe (a stray NaN distance can't panic the sort).
+            pairs.sort_by(|a, b| a.1.total_cmp(&b.1));
             pairs.truncate(effective_k);
 
             let mapped: Vec<(usize, f64)> = pairs

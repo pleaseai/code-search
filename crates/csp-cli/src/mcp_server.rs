@@ -48,15 +48,21 @@ pub struct FindRelatedParams {
 pub struct CspMcpServer {
     cache: Arc<Mutex<IndexCache>>,
     default_source: Option<String>,
+    default_ref: Option<String>,
     tool_router: ToolRouter<CspMcpServer>,
 }
 
 #[tool_router]
 impl CspMcpServer {
-    fn new(default_source: Option<String>, content: Vec<ContentType>) -> Self {
+    fn new(
+        default_source: Option<String>,
+        default_ref: Option<String>,
+        content: Vec<ContentType>,
+    ) -> Self {
         Self {
             cache: Arc::new(Mutex::new(IndexCache::new(content))),
             default_source,
+            default_ref,
             tool_router: Self::tool_router(),
         }
     }
@@ -72,6 +78,7 @@ impl CspMcpServer {
         let out = search_tool(
             &mut cache,
             self.default_source.as_deref(),
+            self.default_ref.as_deref(),
             &p.query,
             p.repo.as_deref(),
             p.top_k.unwrap_or(5) as usize,
@@ -90,6 +97,7 @@ impl CspMcpServer {
         let out = find_related_tool(
             &mut cache,
             self.default_source.as_deref(),
+            self.default_ref.as_deref(),
             &p.file_path,
             p.line,
             p.repo.as_deref(),
@@ -113,11 +121,16 @@ impl ServerHandler for CspMcpServer {
 /// Start the MCP server on stdio and block until the client disconnects.
 ///
 /// `default_source` is the source indexed when a tool call omits `repo`;
-/// `content` is the content-type filter applied when building indexes.
-pub fn run_mcp(default_source: Option<String>, content: Vec<ContentType>) -> Result<()> {
+/// `default_ref` pins the git revision for that default source (the `--ref`
+/// flag); `content` is the content-type filter applied when building indexes.
+pub fn run_mcp(
+    default_source: Option<String>,
+    default_ref: Option<String>,
+    content: Vec<ContentType>,
+) -> Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async move {
-        let service = CspMcpServer::new(default_source, content)
+        let service = CspMcpServer::new(default_source, default_ref, content)
             .serve(stdio())
             .await?;
         service.waiting().await?;

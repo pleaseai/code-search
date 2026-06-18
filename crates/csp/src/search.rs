@@ -69,8 +69,16 @@ impl VectorBackend for crate::indexing::dense::SelectableBasicBackend {
         k: usize,
         selector: Option<&[u32]>,
     ) -> Vec<Vec<(usize, f64)>> {
-        crate::indexing::dense::SelectableBasicBackend::query(self, vectors, k, selector)
-            .expect("vector backend query")
+        // A backend query error (dimension mismatch, bad selector) is an internal
+        // invariant break, but in the hot search path / long-running MCP server we
+        // degrade to no semantic hits rather than panicking the whole process.
+        match crate::indexing::dense::SelectableBasicBackend::query(self, vectors, k, selector) {
+            Ok(results) => results,
+            Err(e) => {
+                eprintln!("csp: vector backend query failed: {e}");
+                Vec::new()
+            }
+        }
     }
 }
 
@@ -87,7 +95,7 @@ pub fn rrf_scores(scores: &Scores) -> Scores {
         return scores.clone();
     }
     let mut ranked: Vec<(usize, f64)> = scores.iter().map(|(&i, &s)| (i, s)).collect();
-    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).expect("finite scores"));
+    ranked.sort_by(|a, b| b.1.total_cmp(&a.1));
     let mut out = Scores::new();
     for (rank0, (idx, _)) in ranked.into_iter().enumerate() {
         out.insert(idx, 1.0 / (RRF_K as f64 + (rank0 + 1) as f64));
@@ -98,7 +106,7 @@ pub fn rrf_scores(scores: &Scores) -> Scores {
 /// Indices of the top-k largest entries of `arr`, descending; ties by index.
 pub fn sort_top_k(arr: &[f32], top_k: usize) -> Vec<usize> {
     let mut indices: Vec<usize> = (0..arr.len()).collect();
-    indices.sort_by(|&a, &b| arr[b].partial_cmp(&arr[a]).expect("finite scores"));
+    indices.sort_by(|&a, &b| arr[b].total_cmp(&arr[a]));
     indices.truncate(top_k.min(arr.len()));
     indices
 }
@@ -174,7 +182,7 @@ fn rerank_top_k_saturation(scores: &Scores, chunks: &[Chunk], top_k: usize) -> V
         return Vec::new();
     }
     let mut ranked: Vec<(usize, f64)> = scores.iter().map(|(&i, &s)| (i, s)).collect();
-    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).expect("finite scores"));
+    ranked.sort_by(|a, b| b.1.total_cmp(&a.1));
 
     let mut file_selected: IndexMap<String, usize> = IndexMap::new();
     let mut selected: Vec<(f64, usize)> = Vec::new();
@@ -203,7 +211,7 @@ fn rerank_top_k_saturation(scores: &Scores, chunks: &[Chunk], top_k: usize) -> V
         }
     }
 
-    selected.sort_by(|a, b| b.0.partial_cmp(&a.0).expect("finite scores"));
+    selected.sort_by(|a, b| b.0.total_cmp(&a.0));
     selected.truncate(top_k);
     selected
         .into_iter()
@@ -274,7 +282,7 @@ pub fn search(
         rerank_top_k_saturation(&boosted, chunks, top_k)
     } else {
         let mut entries: Vec<(usize, f64)> = combined.iter().map(|(&i, &s)| (i, s)).collect();
-        entries.sort_by(|a, b| b.1.partial_cmp(&a.1).expect("finite scores"));
+        entries.sort_by(|a, b| b.1.total_cmp(&a.1));
         entries.truncate(top_k);
         entries
     };

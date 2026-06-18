@@ -148,7 +148,7 @@ Phase 1 (T001 → {T002,T003,T004} → {T005,T006,T007,T008}) → Phase 2 (T009 
 
 ### T013
 - Happy: model2vec-rs embeddings match TS embedding vectors within tolerance on fixture chunks (see STOP).
-- Error: missing/невалид model path surfaces a clear error.
+- Error: missing/invalid model path surfaces a clear error.
 
 ### T014
 - Happy: BM25 index built from fixture chunks yields the same postings/scores as TS.

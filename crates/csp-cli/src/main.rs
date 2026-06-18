@@ -25,7 +25,7 @@ struct Cli {
     command: Command,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum ContentFilter {
     Code,
     Docs,
@@ -33,7 +33,7 @@ enum ContentFilter {
     All,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum Agent {
     Antigravity,
     Claude,
@@ -232,10 +232,12 @@ fn find_related_output(
     let Ok(line_num) = line.parse::<i64>() else {
         return Err(format!("line must be an integer, got: {line}"));
     };
-    let chunk = if line_num < 0 {
-        None
-    } else {
+    // Guard the full u32 range, not just the lower bound — a line number above
+    // u32::MAX would otherwise wrap on `as u32` and resolve the wrong chunk.
+    let chunk = if (0..=i64::from(u32::MAX)).contains(&line_num) {
         resolve_chunk(&index.chunks, file, line_num as u32)
+    } else {
+        None
     };
     let Some(chunk) = chunk else {
         return Err(format!("No chunk found at {file}:{line_num}."));
@@ -276,6 +278,9 @@ fn run_clear(what: &str) -> ExitCode {
         eprintln!("Invalid clear type: {what}. Choices: {CLEAR_CHOICES}");
         return ExitCode::FAILURE;
     }
+    // Track failures so a maintenance command that couldn't clear the index
+    // reports a non-zero exit status (automation relies on it).
+    let mut failed = false;
     if what == "index" || what == "all" {
         match clear_index_cache(&Default::default()) {
             Ok(r) if r.cleared => {
@@ -286,7 +291,10 @@ fn run_clear(what: &str) -> ExitCode {
                 );
             }
             Ok(r) => println!("No index cache found at `{}`", r.path.display()),
-            Err(e) => eprintln!("{e}"),
+            Err(e) => {
+                eprintln!("{e}");
+                failed = true;
+            }
         }
     }
     if what == "savings" || what == "all" {
@@ -297,7 +305,11 @@ fn run_clear(what: &str) -> ExitCode {
             println!("No savings file found at `{}`", path.display());
         }
     }
-    ExitCode::SUCCESS
+    if failed {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
 }
 
 fn run() -> ExitCode {
@@ -406,10 +418,15 @@ fn run() -> ExitCode {
                 }
             }
         }
-        Command::Mcp { path, content, .. } => {
+        Command::Mcp {
+            path,
+            git_ref,
+            content,
+        } => {
             // `path` is the default source for tool calls that omit `repo`;
             // None when no path was given (the tool then requires an explicit `repo`).
-            match mcp_server::run_mcp(path, resolve_content(&content)) {
+            // `git_ref` (--ref) pins the revision when that default source is a git URL.
+            match mcp_server::run_mcp(path, git_ref, resolve_content(&content)) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(e) => {
                     eprintln!("{e}");

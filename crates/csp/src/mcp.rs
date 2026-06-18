@@ -135,6 +135,7 @@ impl<S: LoadOrBuild> IndexCache<S> {
 pub fn get_index<S: LoadOrBuild>(
     repo: Option<&str>,
     default_source: Option<&str>,
+    default_ref: Option<&str>,
     cache: &mut IndexCache<S>,
 ) -> Result<Arc<CspIndex>, String> {
     if let Some(r) = repo {
@@ -145,14 +146,19 @@ pub fn get_index<S: LoadOrBuild>(
             ));
         }
     }
+    // An explicit per-call `repo` carries no ref; `default_ref` applies only when
+    // falling back to the server's default source (so `csp mcp <url> --ref X`
+    // actually pins the indexed revision instead of being silently ignored).
+    let use_default = repo.filter(|s| !s.is_empty()).is_none();
     let source = repo.or(default_source).filter(|s| !s.is_empty());
     let Some(source) = source else {
         return Err("No repo specified and no default index. \
              Pass an https:// or http:// git URL or local directory path as `repo`."
             .to_string());
     };
+    let git_ref = if use_default { default_ref } else { None };
     cache
-        .get(source, None)
+        .get(source, git_ref)
         .map_err(|e| format!("Failed to index {}: {e}", json!(source)))
 }
 
@@ -161,11 +167,12 @@ pub fn get_index<S: LoadOrBuild>(
 pub fn search_tool<S: LoadOrBuild>(
     cache: &mut IndexCache<S>,
     default_source: Option<&str>,
+    default_ref: Option<&str>,
     query: &str,
     repo: Option<&str>,
     top_k: usize,
 ) -> String {
-    let index = match get_index(repo, default_source, cache) {
+    let index = match get_index(repo, default_source, default_ref, cache) {
         Ok(idx) => idx,
         Err(e) => return e,
     };
@@ -187,19 +194,22 @@ pub fn search_tool<S: LoadOrBuild>(
 pub fn find_related_tool<S: LoadOrBuild>(
     cache: &mut IndexCache<S>,
     default_source: Option<&str>,
+    default_ref: Option<&str>,
     file_path: &str,
     line: i64,
     repo: Option<&str>,
     top_k: usize,
 ) -> String {
-    let index = match get_index(repo, default_source, cache) {
+    let index = match get_index(repo, default_source, default_ref, cache) {
         Ok(idx) => idx,
         Err(e) => return e,
     };
-    let chunk = if line < 0 {
-        None
-    } else {
+    // Guard the full u32 range, not just the lower bound — a line number above
+    // u32::MAX would otherwise wrap on `as u32` and resolve the wrong chunk.
+    let chunk = if (0..=i64::from(u32::MAX)).contains(&line) {
         resolve_chunk(&index.chunks, file_path, line as u32)
+    } else {
+        None
     };
     let Some(chunk) = chunk else {
         return format!(
@@ -359,7 +369,7 @@ mod tests {
             "git://github.com/o/r.git",
             "file:///tmp/x",
         ] {
-            let err = get_index(Some(url), None, &mut cache).unwrap_err();
+            let err = get_index(Some(url), None, None, &mut cache).unwrap_err();
             assert!(err.contains("Only https://, http://"), "{url}: {err}");
         }
     }
@@ -367,21 +377,21 @@ mod tests {
     #[test]
     fn get_index_requires_source() {
         let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
-        let err = get_index(None, None, &mut cache).unwrap_err();
+        let err = get_index(None, None, None, &mut cache).unwrap_err();
         assert!(err.contains("No repo specified"));
     }
 
     #[test]
     fn get_index_allows_https_and_path() {
         let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
-        assert!(get_index(Some("https://github.com/o/r.git"), None, &mut cache).is_ok());
-        assert!(get_index(None, Some("/tmp/default"), &mut cache).is_ok());
+        assert!(get_index(Some("https://github.com/o/r.git"), None, None, &mut cache).is_ok());
+        assert!(get_index(None, Some("/tmp/default"), None, &mut cache).is_ok());
     }
 
     #[test]
     fn search_tool_no_results() {
         let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
-        let out = search_tool(&mut cache, Some("/tmp/repo"), "anything", None, 5);
+        let out = search_tool(&mut cache, Some("/tmp/repo"), None, "anything", None, 5);
         assert_eq!(out, json!({ "error": "No results found." }).to_string());
     }
 
@@ -400,7 +410,7 @@ mod tests {
     #[test]
     fn search_tool_returns_results_json() {
         let mut cache = IndexCache::with_seam(vec![ContentType::Code], OneChunkSeam);
-        let out = search_tool(&mut cache, Some("/tmp/repo"), "main", None, 5);
+        let out = search_tool(&mut cache, Some("/tmp/repo"), None, "main", None, 5);
         let value: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert!(value.get("query").is_some());
         assert!(value["results"].as_array().is_some());
@@ -409,14 +419,14 @@ mod tests {
     #[test]
     fn find_related_no_chunk_message() {
         let mut cache = IndexCache::with_seam(vec![ContentType::Code], OneChunkSeam);
-        let out = find_related_tool(&mut cache, Some("/tmp/repo"), "nope.ts", 1, None, 5);
+        let out = find_related_tool(&mut cache, Some("/tmp/repo"), None, "nope.ts", 1, None, 5);
         assert!(out.contains("No chunk found at nope.ts:1"));
     }
 
     #[test]
     fn find_related_returns_json_for_known_chunk() {
         let mut cache = IndexCache::with_seam(vec![ContentType::Code], OneChunkSeam);
-        let out = find_related_tool(&mut cache, Some("/tmp/repo"), "a.ts", 5, None, 5);
+        let out = find_related_tool(&mut cache, Some("/tmp/repo"), None, "a.ts", 5, None, 5);
         // Either related results or the no-related error — both valid JSON.
         let value: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert!(value.get("query").is_some() || value.get("error").is_some());
