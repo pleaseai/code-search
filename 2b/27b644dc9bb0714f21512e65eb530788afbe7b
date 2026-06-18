@@ -1,0 +1,22 @@
+.github/workflows/rust.yml
+  s_4fc351d6f8f5f5::t_692a328f81407e 9-13,17-21
+eslint.config.ts
+  s_4fc351d6f8f5f5::t_ed734a66d7c76c 20-22
+  s_4fc351d6f8f5f5::t_9d1a474c87d0f7 11-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "2b27b644dc9bb0714f21512e65eb530788afbe7b",
+  "prompts": {},
+  "sessions": {
+    "s_4fc351d6f8f5f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d716d4e4-e51c-4bb2-8e56-af1ec7a37a38",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
