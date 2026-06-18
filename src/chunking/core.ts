@@ -8,10 +8,7 @@
 // loads even when the package is not yet installed, falling back to the
 // line chunker in that case.
 
-// Stub for ALL_LANGUAGES until Unit 4 (language detection) lands.
-// Once `src/indexing/files.ts` exists, replace this with:
-//   import { ALL_LANGUAGES } from '../indexing/files.ts'
-const ALL_LANGUAGES: ReadonlySet<string> = new Set<string>()
+import { ALL_LANGUAGES } from '../indexing/files.ts'
 
 export const RECURSION_DEPTH = 500
 export const MIN_CHUNK_SIZE = 50
