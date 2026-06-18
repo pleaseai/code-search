@@ -26,6 +26,18 @@ pub enum ContentType {
     Config,
 }
 
+impl ContentType {
+    /// The lowercase string form (matches the serde `rename_all = "lowercase"`
+    /// serialization and the TS `String(ContentType.X)` value).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ContentType::Code => "code",
+            ContentType::Docs => "docs",
+            ContentType::Config => "config",
+        }
+    }
+}
+
 /// A single indexable unit of code.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chunk {

@@ -4,6 +4,7 @@
 //! embeddings, the content-hash cache, and on-disk persistence arrive in
 //! Phase 3.
 
+pub mod cache;
 pub mod file_walker;
 pub mod files;
 pub mod sparse;

@@ -30,6 +30,7 @@ thiserror = "2"
 regex = "1"            # Phase 1 — ranking/penalty patterns (no lookarounds)
 fancy-regex = "0.16"   # Phase 1 — boosting definition patterns (lookbehind/lookahead)
 indexmap = "2"         # Phase 1 — insertion-ordered score maps (Map<Chunk,number> parity)
+sha2 = "0.10"          # Phase 3 — content-hash cache keys (sha256, parity with node:crypto)
 
 # Single-binary release profile (ADR-0003 motivation #1).
 [profile.release]
