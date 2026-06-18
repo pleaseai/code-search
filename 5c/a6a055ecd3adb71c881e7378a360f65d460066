@@ -1,0 +1,21 @@
+src/chunking/core.ts
+  s_2f9d58872a5a11::t_972392c561f024 11
+src/chunking/core.test.ts
+  s_2f9d58872a5a11::t_41778e9c514c83 23-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "5ca6a055ecd3adb71c881e7378a360f65d460066",
+  "prompts": {},
+  "sessions": {
+    "s_2f9d58872a5a11": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c49a8a36-14e2-4ae5-bb37-ab930eef1cc6",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
