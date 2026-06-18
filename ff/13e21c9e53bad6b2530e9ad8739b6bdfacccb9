@@ -1,0 +1,21 @@
+.please/docs/decisions/0003-rewrite-in-rust.md
+  s_4fc351d6f8f5f5::t_370ec95d67da7e 1-89
+.please/docs/decisions/index.md
+  s_4fc351d6f8f5f5::t_a5c647dc2a4387 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "ff13e21c9e53bad6b2530e9ad8739b6bdfacccb9",
+  "prompts": {},
+  "sessions": {
+    "s_4fc351d6f8f5f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d716d4e4-e51c-4bb2-8e56-af1ec7a37a38",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
