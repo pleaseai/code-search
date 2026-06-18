@@ -69,6 +69,16 @@ pub struct SearchResultDict {
     pub score: f64,
 }
 
+/// Aggregate index statistics: file count, chunk count, language histogram.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexStats {
+    pub indexed_files: usize,
+    pub total_chunks: usize,
+    /// language → chunk count (sorted for determinism).
+    pub languages: std::collections::BTreeMap<String, usize>,
+}
+
 /// Error raised when reconstructing a [`Chunk`] from untrusted JSON.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 #[error("chunkFromDict: {0}")]

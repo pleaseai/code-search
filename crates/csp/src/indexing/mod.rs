@@ -9,4 +9,5 @@ pub mod create;
 pub mod dense;
 pub mod file_walker;
 pub mod files;
+pub mod index;
 pub mod sparse;
