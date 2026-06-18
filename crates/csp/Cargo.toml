@@ -15,3 +15,7 @@ thiserror = { workspace = true }
 regex = { workspace = true }
 fancy-regex = { workspace = true }
 indexmap = { workspace = true }
+ignore = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
