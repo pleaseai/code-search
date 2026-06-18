@@ -1,20 +1,22 @@
 //! Dense embeddings + cosine vector backend. Port of `src/indexing/dense.ts`
 //! (← semble `index/dense.py`).
 //!
-//! Like the TS source, this ships a **STUB** Model2Vec: `load_model` /
-//! `embed_chunks` produce deterministic hash-seeded vectors rather than running
-//! a real model (the TS `TODO(dense): integrate real Model2Vec` is still open).
-//! Since the behavioral oracle is the TS test suite, the stub is reproduced
-//! bit-for-bit — FNV-1a over UTF-16 units, mulberry32, Box-Muller, and the exact
-//! f64↔f32 narrowing of `stub_embed` — so vectors match the TS output.
+//! [`load_model`] loads a **real** Model2Vec model via `model2vec-rs` (the
+//! official MinishLab Rust port) — `StaticModel::from_pretrained(id_or_path)` +
+//! `encode` — matching semble's `StaticModel`. When the model can't be loaded
+//! (offline, missing weights, bad path) it falls back to a deterministic stub
+//! embedder so indexing still works; the stub reproduces the former TS stub
+//! bit-for-bit (FNV-1a over UTF-16 units, mulberry32, Box-Muller, exact f64↔f32
+//! narrowing) and is also what the offline unit tests use.
 //!
 //! `SelectableBasicBackend` is the in-memory cosine backend with optional
 //! candidate-selector filtering and a csp-local on-disk format.
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
+use model2vec_rs::model::StaticModel;
 use serde::{Deserialize, Serialize};
 
 use crate::types::Chunk;
@@ -81,36 +83,95 @@ fn stub_embed(text: &str, dim: usize) -> Vec<f32> {
     v
 }
 
-/// A loaded model. The real model exposes `.encode(texts)`; the stub matches its
-/// shape plus a `dim`.
-#[derive(Debug, Clone)]
-pub struct Model {
-    pub dim: usize,
+/// A loaded embedding model: either a real Model2Vec model (`model2vec-rs`) or a
+/// deterministic stub (tests / offline fallback). Both expose `.encode(texts)`
+/// and `.dim()`.
+#[derive(Clone)]
+pub enum Model {
+    /// Real Model2Vec. `Arc` keeps `Clone` cheap and the model `Send + Sync`.
+    Static { inner: Arc<StaticModel>, dim: usize },
+    /// Deterministic hash-seeded stub (reproduces the former TS stub bit-for-bit).
+    Stub { dim: usize },
 }
 
-impl Model {
-    pub fn encode(&self, texts: &[String]) -> Vec<Vec<f32>> {
-        texts.iter().map(|t| stub_embed(t, self.dim)).collect()
+impl std::fmt::Debug for Model {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Model::Static { dim, .. } => f.debug_struct("Model::Static").field("dim", dim).finish(),
+            Model::Stub { dim } => f.debug_struct("Model::Stub").field("dim", dim).finish(),
+        }
     }
 }
 
-/// Construct a stub model of the given dimension.
+impl Model {
+    /// Embed each text into a row vector (one row per input).
+    pub fn encode(&self, texts: &[String]) -> Vec<Vec<f32>> {
+        match self {
+            Model::Static { inner, .. } => inner.encode(texts),
+            Model::Stub { dim } => texts.iter().map(|t| stub_embed(t, *dim)).collect(),
+        }
+    }
+
+    /// Embedding dimension.
+    pub fn dim(&self) -> usize {
+        match self {
+            Model::Static { dim, .. } | Model::Stub { dim } => *dim,
+        }
+    }
+}
+
+/// Construct a stub model of the given dimension (tests / offline fallback).
 pub fn make_stub_model(dim: usize) -> Model {
-    Model { dim }
+    Model::Stub { dim }
+}
+
+/// Load a real Model2Vec model from a HF repo id or local directory. Probes the
+/// embedding dimension once via a single-token encode.
+fn load_static(path: &str) -> Result<Model, String> {
+    let inner = StaticModel::from_pretrained(path, None, None, None).map_err(|e| e.to_string())?;
+    let dim = inner.encode_single("a").len();
+    if dim == 0 {
+        return Err(format!(
+            "model '{path}' produced a zero-dimension embedding"
+        ));
+    }
+    Ok(Model::Static {
+        inner: Arc::new(inner),
+        dim,
+    })
 }
 
 static MODEL_CACHE: LazyLock<Mutex<HashMap<String, Model>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Load (and cache) a model by path, defaulting to [`DEFAULT_MODEL_NAME`].
-/// Returns the model and the resolved path.
+/// Returns the model and the resolved path. Falls back to the deterministic stub
+/// (with a warning) when the real model can't be loaded, so indexing degrades
+/// gracefully offline.
 pub fn load_model(model_path: Option<&str>) -> (Model, String) {
+    load_model_with(model_path, load_static)
+}
+
+/// Cache + fallback orchestration with an injectable loader (the seam unit tests
+/// use to stay offline).
+fn load_model_with(
+    model_path: Option<&str>,
+    load: impl Fn(&str) -> Result<Model, String>,
+) -> (Model, String) {
     let resolved = model_path.unwrap_or(DEFAULT_MODEL_NAME).to_string();
     let mut cache = MODEL_CACHE.lock().expect("model cache mutex");
-    let model = cache
-        .entry(resolved.clone())
-        .or_insert_with(|| make_stub_model(DEFAULT_STUB_DIM))
-        .clone();
+    if let Some(model) = cache.get(&resolved) {
+        return (model.clone(), resolved);
+    }
+    let model = load(&resolved).unwrap_or_else(|e| {
+        eprintln!(
+            "csp: could not load Model2Vec model '{resolved}': {e}. \
+             Falling back to the deterministic stub embedder — set --model to a valid \
+             Model2Vec id/path (and ensure network/HF cache) for real embeddings."
+        );
+        make_stub_model(DEFAULT_STUB_DIM)
+    });
+    cache.insert(resolved.clone(), model.clone());
     (model, resolved)
 }
 
@@ -392,18 +453,46 @@ mod tests {
     // --- load_model / embed_chunks ---
 
     #[test]
-    fn load_model_defaults_and_positive_dim() {
-        let (model, path) = load_model(None);
+    fn load_model_defaults_path_via_seam() {
+        // Offline: inject a loader so no network/model download happens.
+        let (model, path) = load_model_with(None, |_| Ok(make_stub_model(7)));
         assert_eq!(path, DEFAULT_MODEL_NAME);
-        assert!(model.dim > 0);
+        assert!(model.dim() > 0);
     }
 
     #[test]
-    fn load_model_distinct_paths() {
-        let (_, a) = load_model(Some("test/path-X"));
-        let (_, b) = load_model(Some("test/path-Y"));
-        assert_eq!(a, "test/path-X");
-        assert_eq!(b, "test/path-Y");
+    fn load_model_resolves_distinct_paths_and_caches() {
+        // Distinct paths each load once; a repeat path is served from cache.
+        let (_, a) = load_model_with(Some("seam/path-X"), |_| Ok(make_stub_model(4)));
+        let (_, b) = load_model_with(Some("seam/path-Y"), |_| Ok(make_stub_model(4)));
+        // The loader must NOT fire for an already-cached path — panic proves it.
+        let (_, a2) = load_model_with(Some("seam/path-X"), |_| {
+            panic!("cached path must not reload")
+        });
+        assert_eq!(a, "seam/path-X");
+        assert_eq!(b, "seam/path-Y");
+        assert_eq!(a2, "seam/path-X");
+    }
+
+    #[test]
+    fn load_model_falls_back_to_stub_on_error() {
+        let (model, path) = load_model_with(Some("seam/will-fail"), |_| Err("boom".to_string()));
+        assert_eq!(path, "seam/will-fail");
+        assert_eq!(model.dim(), DEFAULT_STUB_DIM); // stub fallback
+    }
+
+    /// Real Model2Vec load — downloads `minishlab/potion-code-16M` from HF on
+    /// first run, so it's network-gated and not part of the default suite.
+    /// Run with: `cargo test -p csp -- --ignored real_model2vec`.
+    #[test]
+    #[ignore = "network: downloads potion-code-16M from Hugging Face"]
+    fn real_model2vec_loads_and_embeds() {
+        let model = load_static(DEFAULT_MODEL_NAME).expect("load real model");
+        assert!(model.dim() > 0);
+        let vecs = model.encode(&["fn main() {}".to_string(), "def main(): pass".to_string()]);
+        assert_eq!(vecs.len(), 2);
+        assert_eq!(vecs[0].len(), model.dim());
+        assert_ne!(vecs[0], vecs[1]);
     }
 
     #[test]

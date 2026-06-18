@@ -18,6 +18,8 @@ indexmap = { workspace = true }
 ignore = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
+# Phase 3 — real Model2Vec dense embeddings (official MinishLab Rust port).
+model2vec-rs = { workspace = true }
 # Phase 3 — tree-sitter AST chunking (curated grammar set; statically linked for
 # the single-binary goal — unsupported languages fall back to line chunking).
 tree-sitter = { workspace = true }

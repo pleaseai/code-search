@@ -338,7 +338,7 @@ impl CspIndex {
 
         let (model, model_path) = load_model(Some(&manifest.model_id));
         // Align the query model's dim with the persisted vectors.
-        let model = if model.dim == semantic_index.dim {
+        let model = if model.dim() == semantic_index.dim {
             model
         } else {
             make_stub_model(semantic_index.dim)
