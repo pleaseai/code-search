@@ -1,0 +1,37 @@
+.please/docs/tracks/active/rust-rewrite-20260618/plan.md
+  s_4fc351d6f8f5f5::t_4a27d4867d4b4e 77-78
+  s_4fc351d6f8f5f5::t_9ec68f9aab9942 193
+crates/csp/src/mcp.rs
+  s_4fc351d6f8f5f5::t_165aa11e929894 6-9
+  s_4fc351d6f8f5f5::t_601c7388be6444 65,102,139,305
+  s_4fc351d6f8f5f5::t_ba1f84c5321db2 11
+  s_4fc351d6f8f5f5::t_179a7317e972e7 116
+Cargo.toml
+  s_4fc351d6f8f5f5::t_3890873bce3265 24-26
+crates/csp-cli/src/mcp_server.rs
+  s_4fc351d6f8f5f5::t_fa8ab7e1f1d3f9 102-105
+  s_4fc351d6f8f5f5::t_2754b367c04e32 1-101,106-126
+crates/csp-cli/src/main.rs
+  s_4fc351d6f8f5f5::t_2d7a8ae76e95d3 409-418
+  s_4fc351d6f8f5f5::t_ed60a296b1a2b9 7-8
+Cargo.lock
+  s_4fc351d6f8f5f5::t_703d7541d6ac26 15-22,79-101,142-163,170-181,228-233,300-339,352-357,391-484,531-560,599-609,634-642,655-666,691-710,740-774,788-793,803-828,859-869,894-905,956-1021,1056-1100,1110-1144,1151-1167
+crates/csp-cli/Cargo.toml
+  s_4fc351d6f8f5f5::t_4a6455fb9222b4 19-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "1ff414f6ac328b524166a43b14190983f607e072",
+  "prompts": {},
+  "sessions": {
+    "s_4fc351d6f8f5f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d716d4e4-e51c-4bb2-8e56-af1ec7a37a38",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
