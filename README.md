@@ -71,10 +71,16 @@ It bundles the `csp` MCP server (`search`, `find_related`) plus a `csp-search` s
 Add `csp` usage instructions to your agent's context so it knows when and how to call the CLI. Install the `csp` CLI, then add the snippet below to your `AGENTS.md` or `CLAUDE.md`:
 
 ```bash
-bun add -g @pleaseai/csp    # Install with bun (recommended)
+# Homebrew (macOS / Linux) — standalone binary, no Node/Bun required
+brew install pleaseai/tap/csp
+
+# Or via a JavaScript package manager (needs Bun or Node 22+ on your PATH)
+bun add -g @pleaseai/csp     # Install with bun (recommended)
 npm install -g @pleaseai/csp # Or with npm
 pnpm add -g @pleaseai/csp    # Or with pnpm
 ```
+
+> The Homebrew formula ships a self-contained binary built with `bun build --compile` (tree-sitter and embedding runtimes are bundled). The embedding model is downloaded on first search and cached under `~/.cache`.
 
 <details>
 <summary>AGENTS.md / CLAUDE.md snippet</summary>

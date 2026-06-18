@@ -1,0 +1,232 @@
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+name: release-please
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build-binaries:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # csp embeds platform-specific native addons (onnxruntime-node,
+        # @kreuzberg/tree-sitter-language-pack). `bun build --compile` bundles
+        # the *host* platform's .node files, so each target MUST build on a
+        # native runner — cross-compiling with `--target` produces a binary
+        # with the wrong-arch addons ("bad CPU type in executable").
+        include:
+          - os: macos-13        # Intel
+            target: darwin-x64
+          - os: macos-14        # Apple Silicon
+            target: darwin-arm64
+          - os: ubuntu-latest   # x64
+            target: linux-x64
+          - os: ubuntu-24.04-arm # arm64
+            target: linux-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build binary (native target)
+        run: |
+          bun build src/cli.ts --compile --outfile csp-${{ matrix.target }}
+
+      - name: Smoke test binary
+        run: |
+          ./csp-${{ matrix.target }} --version
+
+      - name: Generate checksum
+        run: |
+          shasum -a 256 csp-${{ matrix.target }} > csp-${{ matrix.target }}.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: csp-${{ matrix.target }}
+          path: |
+            csp-${{ matrix.target }}
+            csp-${{ matrix.target }}.sha256
+
+  upload-release-assets:
+    needs: [release-please, build-binaries]
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -lh release/
+
+      - name: Upload release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload ${{ needs.release-please.outputs.tag_name }} \
+            release/* \
+            --clobber
+
+  update-homebrew-formula:
+    needs: [release-please, upload-release-assets]
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          repositories: |
+            code-search
+            homebrew-tap
+
+      - name: Checkout homebrew-tap repository
+        uses: actions/checkout@v4
+        with:
+          repository: pleaseai/homebrew-tap
+          token: ${{ steps.app-token.outputs.token }}
+          path: homebrew-tap
+
+      - name: Configure git
+        run: |
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update Formula
+        run: |
+          VERSION=${{ needs.release-please.outputs.tag_name }}
+          VERSION_NO_V=${VERSION#v}
+
+          # Download checksums
+          curl -L -o darwin-x64.sha256 \
+            "https://github.com/${{ github.repository }}/releases/download/${VERSION}/csp-darwin-x64.sha256"
+          curl -L -o darwin-arm64.sha256 \
+            "https://github.com/${{ github.repository }}/releases/download/${VERSION}/csp-darwin-arm64.sha256"
+          curl -L -o linux-x64.sha256 \
+            "https://github.com/${{ github.repository }}/releases/download/${VERSION}/csp-linux-x64.sha256"
+          curl -L -o linux-arm64.sha256 \
+            "https://github.com/${{ github.repository }}/releases/download/${VERSION}/csp-linux-arm64.sha256"
+
+          # Extract checksums
+          DARWIN_X64_SHA256=$(cat darwin-x64.sha256 | awk '{print $1}')
+          DARWIN_ARM64_SHA256=$(cat darwin-arm64.sha256 | awk '{print $1}')
+          LINUX_X64_SHA256=$(cat linux-x64.sha256 | awk '{print $1}')
+          LINUX_ARM64_SHA256=$(cat linux-arm64.sha256 | awk '{print $1}')
+
+          # Create or update Formula
+          cd homebrew-tap
+          cat > csp.rb << 'FORMULA_EOF'
+          class Csp < Formula
+            desc "Fast and accurate hybrid code search for agents"
+            homepage "https://github.com/pleaseai/code-search"
+            version "VERSION_PLACEHOLDER"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/pleaseai/code-search/releases/download/vVERSION_PLACEHOLDER/csp-darwin-arm64"
+                sha256 "SHA256_DARWIN_ARM64_PLACEHOLDER"
+              else
+                url "https://github.com/pleaseai/code-search/releases/download/vVERSION_PLACEHOLDER/csp-darwin-x64"
+                sha256 "SHA256_DARWIN_X64_PLACEHOLDER"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/pleaseai/code-search/releases/download/vVERSION_PLACEHOLDER/csp-linux-arm64"
+                sha256 "SHA256_LINUX_ARM64_PLACEHOLDER"
+              else
+                url "https://github.com/pleaseai/code-search/releases/download/vVERSION_PLACEHOLDER/csp-linux-x64"
+                sha256 "SHA256_LINUX_X64_PLACEHOLDER"
+              end
+            end
+
+            def install
+              if OS.mac?
+                if Hardware::CPU.arm?
+                  bin.install "csp-darwin-arm64" => "csp"
+                else
+                  bin.install "csp-darwin-x64" => "csp"
+                end
+              else
+                if Hardware::CPU.arm?
+                  bin.install "csp-linux-arm64" => "csp"
+                else
+                  bin.install "csp-linux-x64" => "csp"
+                end
+              end
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/csp --version")
+            end
+          end
+          FORMULA_EOF
+
+          # Replace placeholders
+          sed -i "s/VERSION_PLACEHOLDER/${VERSION_NO_V}/g" csp.rb
+          sed -i "s/SHA256_DARWIN_X64_PLACEHOLDER/${DARWIN_X64_SHA256}/" csp.rb
+          sed -i "s/SHA256_DARWIN_ARM64_PLACEHOLDER/${DARWIN_ARM64_SHA256}/" csp.rb
+          sed -i "s/SHA256_LINUX_X64_PLACEHOLDER/${LINUX_X64_SHA256}/" csp.rb
+          sed -i "s/SHA256_LINUX_ARM64_PLACEHOLDER/${LINUX_ARM64_SHA256}/" csp.rb
+
+          # Check if there are changes
+          if git diff --quiet csp.rb 2>/dev/null; then
+            echo "No changes to Formula"
+            exit 0
+          fi
+
+          # Commit and push
+          git add csp.rb
+          git commit -m "chore: update csp to ${VERSION}"
+          git push origin main
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}

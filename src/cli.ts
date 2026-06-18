@@ -12,6 +12,7 @@ import { serve } from './mcp/server.ts'
 import { clearSavings, formatSavingsReport } from './stats.ts'
 import { ContentType } from './types.ts'
 import { formatResults, isGitUrl, resolveChunk } from './utils.ts'
+import { version } from './version.ts'
 
 export enum Agent {
   Antigravity = 'antigravity',
@@ -372,6 +373,11 @@ export async function runCli(argv: string[], options: RunOptions = {}): Promise<
 
   if (argv[0] === '-h' || argv[0] === '--help') {
     _printHelp()
+    return 0
+  }
+
+  if (argv[0] === '-V' || argv[0] === '--version') {
+    process.stdout.write(`csp ${version}\n`)
     return 0
   }
 
