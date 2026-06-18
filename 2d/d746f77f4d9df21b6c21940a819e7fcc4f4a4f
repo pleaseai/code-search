@@ -1,0 +1,28 @@
+Cargo.lock
+  s_4fc351d6f8f5f5::t_8af1c9977e2af6 291-304,890,921-926,1043-1190
+crates/csp/src/chunking/core.rs
+  s_4fc351d6f8f5f5::t_a98729f724168f 341-344,487-490,494-497
+  s_4fc351d6f8f5f5::t_e4be18f6a264f8 57-87
+  s_4fc351d6f8f5f5::t_d058c901691ff4 4-11,16-41
+  s_4fc351d6f8f5f5::t_5a9fa81a2e74f6 247-248,250-253,257-272
+  s_4fc351d6f8f5f5::t_767e7a1bffba7f 323-340,345,347
+  s_4fc351d6f8f5f5::t_7146190be81f7a 478-486,491-493,498-509
+crates/csp/Cargo.toml
+  s_4fc351d6f8f5f5::t_3303de8022fefc 21-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "2dd746f77f4d9df21b6c21940a819e7fcc4f4a4f",
+  "prompts": {},
+  "sessions": {
+    "s_4fc351d6f8f5f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d716d4e4-e51c-4bb2-8e56-af1ec7a37a38",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
