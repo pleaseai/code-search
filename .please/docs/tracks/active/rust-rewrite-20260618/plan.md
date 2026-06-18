@@ -48,9 +48,9 @@ Incremental over big-bang: the dependency-ordered phases each merge behind a pas
 
 ### Phase 2: Chunking
 
-- [ ] T009 Port chunking core — tree-sitter AST chunking, 1500-char target, MIN_CHUNK_SIZE=50, RECURSION_DEPTH=500, line fallback (file: crates/csp/src/chunking/core.rs) (depends on T002)
+- [x] T009 Port chunking core — merge algorithm (generic over AstNode), chunk_lines, 1500-char target, MIN_CHUNK_SIZE=50, RECURSION_DEPTH=500, line fallback (file: crates/csp/src/chunking/core.rs) (depends on T002) — tree-sitter grammar registration activates with the language map (T012), matching the TS ALL_LANGUAGES stub
   STOP: if a grammar crate's node types differ from the Python/TS tree-sitter pack such that chunk boundaries shift, reconcile the extension→language map before continuing.
-- [ ] T010 Port chunk-source + extension→language map (file: crates/csp/src/chunking/source.rs) (depends on T009)
+- [x] T010 Port chunk-source entry point — line-number resolution, language fallback (file: crates/csp/src/chunking/source.rs) (depends on T009) — extension→language map lands with files (T012)
 
 ### Phase 3: Indexing
 
@@ -190,7 +190,8 @@ Phase 1 (T001 → {T002,T003,T004} → {T005,T006,T007,T008}) → Phase 2 (T009 
 - 2026-06-18: **T002/T003/T004 done** — ported `types`, `tokens` (camelCase splitter reimplemented as a state machine, since Rust `regex` lacks the upstream lookahead), and `utils` (`is_git_url`, `resolve_chunk`) into `crates/csp`. 32 equivalence tests (mirroring the TS test vectors) pass; `cargo fmt`/`clippy -D warnings`/`test` green.
 - 2026-06-18: **T005/T007 done + T006 partial** — added the `ranking` module: `weighting` (`resolve_alpha`), `penalties` (`file_path_penalty` + `rerank_top_k` with file-saturation decay), and `boosting::is_symbol_query`. Score maps use `IndexMap<usize, f64>` (chunk-index keys, insertion-ordered) as the Rust analogue of TS `Map<Chunk, number>`. 58 tests total pass.
 - 2026-06-18: **T008 done** — ported the BM25 scoring core into `indexing/sparse` (`enrich_for_bm25`, `selector_to_mask`, `Bm25Index::{build, get_scores}`). Reproduced two subtle parity points: per-add `f32` rounding (Float32Array semantics) and first-appearance unique-term ordering, both of which affect exact scores. 73 tests total pass.
-- 2026-06-18: **T006 done → PHASE 1 COMPLETE.** Ported the full `boosting` module: `apply_query_boost` (symbol-definition / embedded-symbol / stem-match boosts), `boost_multi_chunk_files`, and definition detection. Definition patterns use `fancy-regex` (the upstream `(?<=\s)` lookbehind is unsupported by the `regex` crate) with the patterns transcribed verbatim and cached per symbol name. 88 tests total pass; fmt / clippy -D warnings / test green. **Next: Phase 2 (tree-sitter chunking, T009/T010) — first external-crate integration.**
+- 2026-06-18: **T006 done → PHASE 1 COMPLETE.** Ported the full `boosting` module: `apply_query_boost` (symbol-definition / embedded-symbol / stem-match boosts), `boost_multi_chunk_files`, and definition detection. Definition patterns use `fancy-regex` (the upstream `(?<=\s)` lookbehind is unsupported by the `regex` crate) with the patterns transcribed verbatim and cached per symbol name. 88 tests total pass; fmt / clippy -D warnings / test green.
+- 2026-06-18: **T009/T010 done → PHASE 2 COMPLETE.** Ported the `chunking` module: the merge algorithm (`merge_node_inner`/`merge_node`/`merge_adjacent_chunks`) generic over an `AstNode` trait (unit-tested with mock nodes), `chunk_lines` (CRLF-aware, char offsets), and `chunk_source` (1-indexed line numbering, language fallback). At parity with the current TS, `is_supported_language` is a `false` stub and real tree-sitter grammar parsing activates with the language map (T012). 115 tests total pass. **Next: Phase 3 — file walking (ignore crate), then the model2vec-rs embedding (STOP-gated parity risk) and the content-hash cache.**
 - T001 (shared cross-language fixture harness) deferred to the heavier modules (chunking/search/embeddings); for these pure modules the TS test vectors are inlined directly as Rust unit tests, which is sufficient equivalence coverage.
 
 ## Decision Log

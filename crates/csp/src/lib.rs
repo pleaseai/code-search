@@ -7,13 +7,11 @@
 //! Phase 1 (pure core) modules land first; later phases add chunking, indexing,
 //! and search per the ADR-0003 roadmap.
 
+pub mod chunking;
 pub mod indexing;
 pub mod ranking;
 pub mod tokens;
 pub mod types;
 pub mod utils;
-
-// Upcoming phases:
-// pub mod chunking;   // Phase 2
 // pub mod indexing;   // Phase 3
 // pub mod search;     // Phase 4
