@@ -101,7 +101,7 @@ Not endorsements — open questions surfaced by the comparison:
 1. **Incremental delta indexing + daemon.** CocoIndex's headline feature is re-embedding only
    changed chunks against a warm index. csp currently caches by content hash and rebuilds; a
    chunk-level delta + optional daemon is the natural next perf step if/when real embeddings land
-   (the stub makes re-embedding cost moot today — see [[dense-embedding-is-a-stub]]).
+   (the stub makes re-embedding cost moot today — see `dense-embedding-is-a-stub`).
 2. **Asymmetric query vs. index embedding params** (`indexing_params`/`query_params`). Relevant
    once csp wires real Model2Vec — many code-retrieval models want a query prefix.
 3. **Structured MCP filters** (`languages`, `paths`, `limit`, `offset`). csp's `search` tool could

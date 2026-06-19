@@ -5,7 +5,7 @@
 > direct dependency, not a port source** — Model2Vec *is* csp's dense-retrieval leg. semble uses the
 > `minishlab/potion-code-16M` static model; the csp Rust port (`crates/csp/src/indexing/dense.rs`)
 > wires the official `model2vec-rs` `StaticModel`, with a deterministic stub fallback until
-> integration lands (see [[dense-embedding-is-a-stub]]). This doc captures how the embeddings are
+> integration lands (see `dense-embedding-is-a-stub`). This doc captures how the embeddings are
 > produced, which model csp uses, the published benchmarks, and the Rust crate's API/limits.
 >
 > **Analyzed at**: GitHub READMEs + HF model cards, 2026-06-19. `model2vec-rs` `0.2.1` (May 2026).
@@ -99,7 +99,7 @@ let embeddings = model.encode(&["where do we embed chunks".to_string()]);
 
 `crates/csp/src/indexing/dense.rs` exposes a `Model` enum wrapping `model2vec-rs` `StaticModel`
 (real path) **and** a deterministic stub (`TODO(integration)`), so the Rust port reproduces the TS
-stub bit-for-bit for fixture-level parity (see [semble.md §4.6](semble.md), [[dense-embedding-is-a-stub]]).
+stub bit-for-bit for fixture-level parity (see [semble.md §4.6](semble.md), `dense-embedding-is-a-stub`).
 `SelectableBasicBackend` does cosine kNN over the resulting matrix. When the stub is swapped for real
 `potion-code-16M` weights, the dense leg becomes the table above; the BM25 leg and ranking are
 unchanged.
