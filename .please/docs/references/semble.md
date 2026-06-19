@@ -371,7 +371,7 @@ Clean two-layer split:
 3. Re-read any changed module and update the matching §4 section + §5 constants table.
 4. When a stub gets wired (TD-002) or grammars are added, move the item out of §6.2 and update
    §4.10 / §4.3. Bump the baseline in `index.md` and this file's header.
-5. Cross-check against the [upstream-semble-sync-baseline] and [rust-rewrite-track-status]
+5. Cross-check against the `upstream-semble-sync-baseline` and `rust-rewrite-track-status`
    memories and `CLAUDE.md` (Rust rewrite section).
 
 ---
