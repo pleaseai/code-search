@@ -1,0 +1,49 @@
+name: Rust
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'crates/**'
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - rustfmt.toml
+      - .github/workflows/rust.yml
+  pull_request:
+    paths:
+      - 'crates/**'
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - rustfmt.toml
+      - .github/workflows/rust.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      # The toolchain (and rustfmt/clippy components) is selected by
+      # rust-toolchain.toml via the runner's preinstalled rustup — no
+      # third-party action needed.
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test --all-features --locked --workspace

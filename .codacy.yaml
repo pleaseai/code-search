@@ -1,0 +1,12 @@
+---
+# Codacy configuration.
+#
+# Exclude the npm distribution wrapper: a hand-written CommonJS launcher and a
+# release-time platform-package generator. Codacy's security patterns flag the
+# generator's dynamic `node:fs` path arguments and `stderr.write` calls, but
+# those run only at release time over a controlled, in-repo target list — not
+# over untrusted input. This tooling is governed like the Rust crates (cargo) and
+# is excluded from the JS app's static analysis. See eslint.config.ts for the
+# matching eslint ignore.
+exclude_paths:
+  - 'npm/**'

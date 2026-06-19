@@ -1,0 +1,129 @@
+# Rust release pipeline (ADR-0003 / track rust-rewrite-20260618, T022).
+#
+# This builds the cross-compiled `csp` binaries from the Rust workspace
+# (crates/csp-cli). It is **manually triggered** (workflow_dispatch) and does NOT
+# fire on release, so it coexists with the live TypeScript release pipeline in
+# release-please.yml without overriding it. Flipping the published product from
+# the Bun-compiled binary to the Rust binary is a deliberate, separate cut-over
+# (T023/T024) gated on full runtime parity — not something this workflow does on
+# its own.
+#
+# Unlike the TS pipeline (which must build on native runners because
+# `bun build --compile` bundles host-platform native addons), the Rust binary is
+# pure-Rust, so it cross-compiles from a single host where the linker is
+# available. macOS/Windows still use native runners; Linux gnu+musl build on
+# ubuntu. Artifact names match the TS pipeline (`csp-<target>`) so the existing
+# Homebrew formula keeps working unchanged after cut-over.
+
+name: Release (Rust)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to upload assets to (e.g. v0.1.0). Leave blank to only build + upload artifacts.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-rust-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14 # Apple Silicon
+            target: aarch64-apple-darwin
+            asset: csp-darwin-arm64
+          - os: macos-15-intel # Intel (macos-13 retired Dec 2025)
+            target: x86_64-apple-darwin
+            asset: csp-darwin-x64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            asset: csp-linux-x64
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            asset: csp-linux-arm64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            asset: csp-linux-x64-musl
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset: csp-windows-x64.exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      # rust-toolchain.toml pins the toolchain; rustup honors it. Add the target
+      # triple so cross-target builds resolve their std.
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Install musl tools
+        if: ${{ endsWith(matrix.target, '-musl') }}
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build release binary
+        run: cargo build --release --locked -p csp-cli --target ${{ matrix.target }}
+
+      - name: Stage asset (unix)
+        if: ${{ !startsWith(matrix.os, 'windows') }}
+        run: |
+          cp "target/${{ matrix.target }}/release/csp" "${{ matrix.asset }}"
+          ./${{ matrix.asset }} --version
+          shasum -a 256 "${{ matrix.asset }}" > "${{ matrix.asset }}.sha256"
+
+      - name: Stage asset (windows)
+        if: ${{ startsWith(matrix.os, 'windows') }}
+        shell: bash
+        run: |
+          cp "target/${{ matrix.target }}/release/csp.exe" "${{ matrix.asset }}"
+          ./${{ matrix.asset }} --version
+          sha256sum "${{ matrix.asset }}" > "${{ matrix.asset }}.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.asset }}
+          path: |
+            ${{ matrix.asset }}
+            ${{ matrix.asset }}.sha256
+
+  upload-release-assets:
+    needs: build
+    if: ${{ inputs.tag != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -lh release/
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          # Pass the tag via env and validate its format before use, so an
+          # untrusted dispatch input can't inject shell into the run step.
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] || {
+            echo "Invalid release tag format: $RELEASE_TAG" >&2
+            exit 1
+          }
+          gh release upload "$RELEASE_TAG" release/* --clobber

@@ -1,1 +1,2 @@
 {"id":"cspindex-orchestrator-20260617","type":"feature","status":"in_progress","phase":"implement","issue":"#18","created":"2026-06-17","section":"active"}
+{"id":"rust-rewrite-20260618","type":"refactor","status":"planned","phase":"spec","issue":"#33","created":"2026-06-18","section":"active"}

@@ -8,6 +8,9 @@ dist/
 build/
 *.tsbuildinfo
 
+# Rust
+/target/
+
 # Caches
 .cache/
 .eslintcache
@@ -52,3 +55,6 @@ bun.lockb
 
 # Orca agent worktrees (local only)
 .claude/worktrees/
+
+# Generated npm platform packages (release artifact)
+npm/dist/

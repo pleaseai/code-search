@@ -1,6 +1,7 @@
 {
   "enabledPlugins": {
     "typescript-lsp@code-intelligence": true,
+    "rust-analyzer-lsp@code-intelligence": true,    
     "eslint-lsp@code-intelligence": true,
     "bun@pleaseai": true,
     "claude-md-management@claude-plugins-official": true,
