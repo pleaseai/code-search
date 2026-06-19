@@ -1,0 +1,23 @@
+.please/docs/references/cocoindex.md
+  s_29468bcf2c18fe::t_ab24cf1599f7fb 103-107
+  s_29468bcf2c18fe::t_b31e5890a1fdab 40
+.please/docs/references/model2vec.md
+  s_29468bcf2c18fe::t_30bf9ea0e0f7a1 7-9
+  s_29468bcf2c18fe::t_684392bb770edf 101-108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "e22e340dfa433385094388f88c388d4f0cfdabc7",
+  "prompts": {},
+  "sessions": {
+    "s_29468bcf2c18fe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4a3cc72-fd19-4f44-ab4c-7ce326fcb02f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
