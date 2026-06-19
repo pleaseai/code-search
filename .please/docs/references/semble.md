@@ -99,10 +99,12 @@ into `search.rs`, mirroring the TS source's current state (see §4.10/§6).
 - `ContentType { Code, Docs, Config }` and `CallType { Search, FindRelated }` are serde enums;
   `ContentType::as_str()` yields the wire value (`"code"`…).
 - **Two distinct dict representations** (the single most important port-time structural choice):
-  - `ChunkDict` — **camelCase** (`filePath, startLine, endLine`), used for **on-disk
-    persistence** (`chunk_to_dict` / `chunk_from_dict`), matching the camelCase public API.
-  - `SearchResultDict` — **snake_case** (`file_path, start_line…`), the **CLI/MCP wire format**
-    (`search_result_to_dict`, mirroring the TS `SearchResult.toDict`).
+  - `ChunkDict` / `SearchResultDict` — **camelCase** (`filePath, startLine, endLine`; both are
+    `#[serde(rename_all = "camelCase")]`), used for **on-disk persistence** (`chunk_to_dict` /
+    `chunk_from_dict` / `search_result_to_dict`), matching the camelCase public API.
+  - `utils::result_to_dict` / `format_results` — **snake_case** (`file_path, start_line,
+    end_line`), the **CLI/MCP wire format** (built with the `json!` macro, mirroring the TS
+    `SearchResult.toDict`).
 - `chunk_from_dict` returns `Result<Chunk, ChunkFromDictError>` (`thiserror`) instead of throwing.
 - `chunk_location(chunk)` → `"{file_path}:{start}-{end}"`.
 
@@ -332,7 +334,8 @@ Clean two-layer split:
    keyed by the `Chunk` object. Same semantics, different key type.
 2. **Trait seams** — `EmbeddingModel`/`VectorBackend`/`SparseBackend` for DI/testability.
 3. **`Model` enum** (real `model2vec-rs` `Static` + offline `Stub`), graceful stub fallback.
-4. **Two serde shapes** — camelCase `ChunkDict` (disk) vs snake_case `SearchResultDict` (wire).
+4. **Two serde shapes** — camelCase `ChunkDict`/`SearchResultDict` (disk persistence) vs
+   snake_case `utils::result_to_dict`/`format_results` (CLI/MCP wire).
 5. **Error handling** — `Result` + `thiserror`; backend errors degrade instead of panicking.
 6. **MCP split** — testable core in `csp::mcp`, rmcp 1.7 transport in `csp-cli::mcp_server`.
 7. **Storage** — fixed `~/.csp/index/` (0700) + `~/.csp/savings.jsonl` (ADR-0002), not the OS
