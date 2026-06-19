@@ -3,10 +3,13 @@
 //!
 //! The merge algorithm is generic over [`AstNode`] so it can be unit-tested with
 //! mock nodes; in production it is driven by [`tree_sitter::Node`] via [`TsNode`].
-//! A curated set of grammars is statically linked (see [`language_for`]); a
-//! language with no bundled grammar makes [`chunk`] return `None` and callers
-//! fall back to [`chunk_lines`] — exactly the upstream behavior when
-//! `tree_sitter_language_pack` has no parser for the language.
+//! Grammars come from [`tree_sitter_language_pack`] (306 languages, full upstream
+//! parity — semble uses the Python `tree_sitter_language_pack`; see ADR-0004).
+//! Parsers are fetched from GitHub releases on first use and cached on disk; a
+//! language with no available grammar — or an offline fetch failure — makes
+//! [`language_for`] return `None`, so [`chunk`] returns `None` and callers fall
+//! back to [`chunk_lines`], exactly the upstream behavior when the language pack
+//! has no parser for the language.
 
 use tree_sitter::{Language, Parser};
 
@@ -14,30 +17,17 @@ pub const RECURSION_DEPTH: usize = 500;
 pub const MIN_CHUNK_SIZE: usize = 50;
 
 /// Resolve a semble language name (the values in
-/// [`crate::indexing::files`]'s `EXTENSION_TO_LANGUAGE`) to a statically-linked
-/// tree-sitter grammar, or `None` when no grammar is bundled for it.
+/// [`crate::indexing::files`]'s `EXTENSION_TO_LANGUAGE`) to a tree-sitter grammar
+/// from the language pack, or `None` when the pack has no grammar for it.
 ///
-/// The curated set covers the common code languages; everything else falls back
-/// to line chunking. Add a grammar crate + an arm here to extend coverage.
+/// This calls [`tree_sitter_language_pack::get_language`], which downloads the
+/// parser from GitHub releases on first use and caches it on disk; later calls
+/// hit the in-process registry. A network failure (offline) or an unknown
+/// language degrades to `None` → line chunking. Use [`is_supported_language`]
+/// (a metadata-only check) when you only need to know whether a grammar *exists*
+/// without triggering a download.
 pub fn language_for(language: &str) -> Option<Language> {
-    let lang: Language = match language {
-        "rust" => tree_sitter_rust::LANGUAGE.into(),
-        "python" => tree_sitter_python::LANGUAGE.into(),
-        "javascript" => tree_sitter_javascript::LANGUAGE.into(),
-        "typescript" => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
-        "tsx" => tree_sitter_typescript::LANGUAGE_TSX.into(),
-        "go" => tree_sitter_go::LANGUAGE.into(),
-        "java" => tree_sitter_java::LANGUAGE.into(),
-        "c" => tree_sitter_c::LANGUAGE.into(),
-        "cpp" => tree_sitter_cpp::LANGUAGE.into(),
-        "ruby" => tree_sitter_ruby::LANGUAGE.into(),
-        "json" => tree_sitter_json::LANGUAGE.into(),
-        "bash" => tree_sitter_bash::LANGUAGE.into(),
-        "html" => tree_sitter_html::LANGUAGE.into(),
-        "css" => tree_sitter_css::LANGUAGE.into(),
-        _ => return None,
-    };
-    Some(lang)
+    tree_sitter_language_pack::get_language(language).ok()
 }
 
 /// A half-open `[start, end)` boundary in character offsets.
@@ -54,9 +44,15 @@ pub trait AstNode: Sized {
     fn children(&self) -> Vec<Self>;
 }
 
-/// Check if the language has a bundled tree-sitter grammar.
+/// Check whether the language pack knows a grammar for `language`.
+///
+/// This is a metadata-only lookup ([`tree_sitter_language_pack::has_language`],
+/// resolving aliases) — unlike [`language_for`] it does **not** download the
+/// parser, so [`crate::chunking::source::chunk_source`] can gate AST chunking
+/// cheaply before paying for a fetch. A recognized language can still fall back
+/// to line chunking later if the actual download fails (e.g. offline).
 pub fn is_supported_language(language: &str) -> bool {
-    language_for(language).is_some()
+    tree_sitter_language_pack::has_language(language)
 }
 
 /// [`AstNode`] adapter over a real [`tree_sitter::Node`]. `Node` is `Copy` and
@@ -320,7 +316,8 @@ mod tests {
     }
 
     #[test]
-    fn supported_languages_resolve_grammars() {
+    fn recognizes_expanded_language_set() {
+        // The original curated set stays supported...
         for lang in [
             "rust",
             "python",
@@ -338,13 +335,20 @@ mod tests {
             "css",
         ] {
             assert!(is_supported_language(lang), "{lang} should be supported");
+        }
+        // ...plus the languages that used to fall through to line chunking and
+        // now resolve to a language-pack grammar (full upstream parity). This is
+        // a metadata-only check (`has_language`) — it does not download parsers.
+        for lang in [
+            "kotlin", "swift", "php", "scala", "lua", "csharp", "dart", "elixir", "haskell",
+            "ocaml", "zig", "nix", "perl", "r", "julia", "clojure",
+        ] {
             assert!(
-                language_for(lang).is_some(),
-                "{lang} grammar should resolve"
+                is_supported_language(lang),
+                "{lang} should be supported by the language pack"
             );
         }
         assert!(!is_supported_language("not-a-real-language"));
-        assert!(language_for("not-a-real-language").is_none());
     }
 
     // --- merge_adjacent_chunks ---
@@ -470,13 +474,21 @@ mod tests {
 
     #[test]
     fn chunk_returns_none_without_parser() {
+        // An unknown language is rejected by the language pack's bundled manifest
+        // without any network access, so `chunk` returns `None` → line fallback.
         assert_eq!(
             chunk("let x = 1\n", "__definitely_not_a_real_language__", 1500),
             None
         );
     }
 
+    // The remaining `chunk(...)` tests parse real source, which makes the language
+    // pack download the grammar from GitHub releases on first use (then cache it).
+    // They are `#[ignore]`d so the default `cargo test` stays offline; run them
+    // with `cargo test -- --ignored` where network is available.
+
     #[test]
+    #[ignore = "downloads a tree-sitter grammar from GitHub releases"]
     fn chunk_parses_real_rust_into_covering_boundaries() {
         let src = "fn a() {\n    let x = 1;\n}\n\nfn b() {\n    let y = 2;\n}\n";
         let boundaries = chunk(src, "rust", 1500).expect("rust is supported → Some");
@@ -498,6 +510,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "downloads a tree-sitter grammar from GitHub releases"]
     fn chunk_byte_to_char_handles_multibyte() {
         // A multibyte comment ensures byte→char conversion doesn't over-count.
         let src = "// café ☕ a comment\nfn z() {}\n";
@@ -505,6 +518,45 @@ mod tests {
         let n = src.chars().count();
         for b in &boundaries {
             assert!(b.end <= n, "char boundary {b:?} exceeds char count {n}");
+        }
+    }
+
+    #[test]
+    #[ignore = "downloads tree-sitter grammars from GitHub releases"]
+    fn newly_supported_languages_are_ast_chunked() {
+        // Languages outside the old curated set now AST-chunk instead of falling
+        // back to line chunking. A small `desired_length` forces a split that the
+        // AST honors at declaration boundaries.
+        let cases = [
+            (
+                "kotlin",
+                "fun a() {\n    val x = 1\n}\n\nfun b() {\n    val y = 2\n}\n",
+            ),
+            (
+                "swift",
+                "func a() {\n    let x = 1\n}\n\nfunc b() {\n    let y = 2\n}\n",
+            ),
+            (
+                "php",
+                "<?php\nfunction a() {\n    $x = 1;\n}\nfunction b() {\n    $y = 2;\n}\n",
+            ),
+        ];
+        for (lang, src) in cases {
+            let boundaries = chunk(src, lang, 1500)
+                .unwrap_or_else(|| panic!("{lang} should AST-chunk → Some, not line fallback"));
+            assert!(!boundaries.is_empty(), "{lang}: expected boundaries");
+            let n = src.chars().count();
+            for b in &boundaries {
+                assert!(
+                    b.start <= b.end && b.end <= n,
+                    "{lang}: boundary {b:?} out of range (n={n})"
+                );
+            }
+            let split = chunk(src, lang, 20).expect("Some");
+            assert!(
+                split.len() >= 2,
+                "{lang}: small desired_length should split: {split:?}"
+            );
         }
     }
 }
