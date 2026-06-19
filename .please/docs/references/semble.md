@@ -6,11 +6,14 @@
 > captures the load-bearing algorithm + its constants, the Rust-specific structure/idioms, and
 > where the port diverges.
 >
-> **Analyzed at**: upstream semble `136b6f7` (2026-06-18); Rust port at repo `2f2baa2`
-> (PR #34 "Rust rewrite foundation"). **Parity oracle**: the TS `src/` test suite reused as
-> golden fixtures — Rust reproduces the TS module behavior bit-for-bit, so "parity" is
-> *fixture-level*, not full-runtime. The TS `src/` stays the source of truth until Rust reaches
-> parity (per ADR-0003).
+> **Analyzed at**: upstream semble `136b6f7` (2026-06-18); Rust port baseline `2f2baa2`
+> (PR #34 "Rust rewrite foundation"), since advanced by PR #37 (ranking wired + chunk 750).
+> **Source of truth**: the **Python upstream** (`MinishLab/semble`) — the Rust port targets
+> behavioral equivalence with it. The TS `src/` is **deprecated** (slated for deletion, kept
+> only as a historical/reference implementation) and is no longer the parity oracle; its test
+> suite remains usable as language-neutral golden fixtures for already-ported modules, but where
+> the Rust port has moved past the old TS stubs (real dense embeddings, wired ranking, chunk
+> length 750) the upstream Python is authoritative.
 > **Upstream layout**: Python `src/semble/`. **Port layout**: `crates/csp/src/` (lib) +
 > `crates/csp-cli/src/` (bin).
 

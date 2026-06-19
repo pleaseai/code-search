@@ -72,7 +72,7 @@ Adding napi-rs *now* would directly conflict with motivation #1 (single binary),
 
 - [ADR 0001](0001-native-tree-sitter.md)'s native-vs-WASM tension dissolves — tree-sitter is a native Rust crate. ADR 0001 stays accepted for the TS lineage but no longer constrains the Rust line.
 - [ADR 0002](0002-index-storage-cache-model.md)'s global `~/.csp/index/` cache model is language-agnostic and carries over unchanged.
-- The existing TS test suite becomes **golden fixtures** for verifying the Rust rewrite's behavioral equivalence, then is retired with the TS code.
+- The **Python upstream** (`MinishLab/semble`) is the equivalence oracle for the Rust rewrite; the existing TS test suite is reused as convenient language-neutral **golden fixtures** for already-ported modules, then retired with the TS code. *(Clarified 2026-06-19: the TS `src/` is the source of truth no longer — it is deprecated and slated for deletion. Where the Rust port has moved past the old TS stubs — real dense embeddings, wired ranking, chunk length 750 — the upstream Python is authoritative, not the TS source.)*
 
 ## Alternatives considered
 

@@ -8,19 +8,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Rust rewrite (ADR-0003)
 
-A Rust port lives in `crates/csp` (library) + `crates/csp-cli` (`csp` binary); the TS `src/` stays the source of truth until Rust reaches parity.
+A Rust port lives in `crates/csp` (library) + `crates/csp-cli` (`csp` binary). **The Python upstream ([MinishLab/semble](https://github.com/MinishLab/semble)) is the source of truth** — the Rust port targets behavioral equivalence with the upstream Python. The TS `src/` is **deprecated**: slated for deletion and retained only as a historical/reference implementation; it is **no longer** the source of truth or the parity oracle.
 - Quality gate before every Rust commit: `cargo fmt --all && cargo clippy --all-targets --all-features -- -D warnings && cargo test --workspace`.
-- Parity oracle = the TS **test suite** reused as golden fixtures. TS `dense.ts` (Model2Vec) and `search.ts` ranking are deterministic **stubs** (`TODO(integration)`); Rust reproduces them bit-for-bit, so "parity" is fixture-level, not full runtime.
+- Parity oracle = the **Python upstream** behavior (read the source directly — see the fetch note below). The TS test suite stays usable as language-neutral golden fixtures for already-ported modules, but is not authoritative where it disagrees with upstream. The Rust port has intentionally moved **past the old TS stubs** to match upstream: dense embeddings are real (`model2vec-rs`, not the deterministic stub), the ranking pipeline is wired (query boosts + path penalties + file saturation), and the chunk length is `750`. The TS `src/` still carries the older stubs/values until it is removed.
 - CLI/MCP output is a **snake_case** wire dict (`csp::utils::format_results`, mirroring TS `SearchResult.toDict`), distinct from the camelCase `ChunkDict` used for on-disk persistence.
 - rmcp 1.7: the default `#[tool_handler]` rebuilds the router via `Self::tool_router()` and leaves a stored `tool_router` field unread (clippy `dead_code`) — use `#[tool_handler(router = self.tool_router)]`.
 
-When porting modules from semble, fetch the upstream source via `ask`:
+When porting modules from semble, fetch the upstream source and read the Python directly:
 
 ```bash
-ask src github:MinishLab/semble@main    # absolute path to the cached checkout
+ask src github:MinishLab/semble@main    # absolute path to the cached checkout (if `ask` is installed)
+# Fallback when `ask` is unavailable — fetch a raw file straight from GitHub:
+curl -fsSL https://raw.githubusercontent.com/MinishLab/semble/main/src/semble/search.py
 ```
 
-Read the Python source there directly — do not infer behavior from the README. Key upstream modules and their target TS counterparts live under `src/semble/` (Python): `types.py`, `tokens.py`, `chunking/`, `index/` (files, file_walker, dense, sparse, create, index), `ranking/` (boosting, penalties, weighting), `search.py`, `mcp.py`, `cli.py`, `cache.py`, `stats.py`, `utils.py`.
+Read the Python source directly — do not infer behavior from the README. Key upstream modules and their target TS counterparts live under `src/semble/` (Python): `types.py`, `tokens.py`, `chunking/`, `index/` (files, file_walker, dense, sparse, create, index), `ranking/` (boosting, penalties, weighting), `search.py`, `mcp.py`, `cli.py`, `cache.py`, `stats.py`, `utils.py`.
 
 ## Stack
 
