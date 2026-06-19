@@ -5,6 +5,7 @@
 // distribution launcher (ADR-0003 / T023).
 
 const { spawnSync } = require('node:child_process')
+const process = require('node:process')
 
 /**
  * Map the current platform/arch (plus libc on Linux) to the optional-dependency
@@ -17,14 +18,16 @@ function resolvePlatformPackage() {
     if (arch === 'x64') {
       return { pkg: '@pleaseai/csp-win32-x64', binary: 'csp.exe' }
     }
-  } else if (platform === 'darwin') {
+  }
+  else if (platform === 'darwin') {
     if (arch === 'arm64') {
       return { pkg: '@pleaseai/csp-darwin-arm64', binary: 'csp' }
     }
     if (arch === 'x64') {
       return { pkg: '@pleaseai/csp-darwin-x64', binary: 'csp' }
     }
-  } else if (platform === 'linux') {
+  }
+  else if (platform === 'linux') {
     const musl = isMusl()
     if (arch === 'x64') {
       return musl

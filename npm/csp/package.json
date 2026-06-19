@@ -2,6 +2,7 @@
   "name": "@pleaseai/csp",
   "version": "0.0.0",
   "description": "Fast and accurate hybrid code search for agents (Rust binary, npm-distributed).",
+  "license": "MIT",
   "homepage": "https://github.com/pleaseai/code-search",
   "repository": {
     "type": "git",
@@ -10,7 +11,6 @@
   "bugs": {
     "url": "https://github.com/pleaseai/code-search/issues"
   },
-  "license": "MIT",
   "keywords": [
     "code-search",
     "hybrid-search",
@@ -34,8 +34,8 @@
   "optionalDependencies": {
     "@pleaseai/csp-darwin-arm64": "0.0.0",
     "@pleaseai/csp-darwin-x64": "0.0.0",
-    "@pleaseai/csp-linux-x64": "0.0.0",
     "@pleaseai/csp-linux-arm64": "0.0.0",
+    "@pleaseai/csp-linux-x64": "0.0.0",
     "@pleaseai/csp-linux-x64-musl": "0.0.0",
     "@pleaseai/csp-win32-x64": "0.0.0"
   }
