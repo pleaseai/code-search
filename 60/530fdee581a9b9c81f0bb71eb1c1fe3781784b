@@ -1,0 +1,25 @@
+crates/csp/src/chunking/core.rs
+  s_74aeb9bdd70e59::t_daf8317eef1391 14-16,22-25
+  s_74aeb9bdd70e59::t_3ef81b718fc761 34-37,39-54
+.github/workflows/rust.yml
+  s_74aeb9bdd70e59::t_e054557264b2ea 55-70
+  s_74aeb9bdd70e59::t_3901cb20912eb4 22-26
+.please/docs/references/semble.md
+  s_74aeb9bdd70e59::t_475f35f8e77829 139-142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "60530fdee581a9b9c81f0bb71eb1c1fe3781784b",
+  "prompts": {},
+  "sessions": {
+    "s_74aeb9bdd70e59": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7c18eb64-9c8f-4d8d-b7fc-a505af1dd256",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
