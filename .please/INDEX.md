@@ -21,7 +21,7 @@
 | `docs/decisions/` | Architecture Decision Records → [Decisions Index](docs/decisions/index.md) |
 | `docs/investigations/` | Bug investigation reports |
 | `docs/research/` | Research documents |
-| `docs/references/` | External reference materials (-llms.txt etc.) |
+| `docs/references/` | External reference materials & upstream analyses → [References Index](docs/references/index.md) |
 | `docs/knowledge/` | Stable project context (product, tech-stack, guidelines, workflow) |
 | `templates/` | Workflow templates (plugin-provided) |
 | `scripts/` | Utility scripts (plugin-provided) |

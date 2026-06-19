@@ -96,5 +96,9 @@ For full file listing with workspace artifacts, use `Skill("please:project-knowl
 
 ### Decision Records
 - `.please/docs/decisions/` — Architecture Decision Records (ADR)
+
+### Reference Analyses (.please/docs/references/)
+- `index.md` — index of upstream-library analyses (scales as more libraries are adopted)
+- `semble.md` — module-by-module analysis of MinishLab/semble mapped to the **Rust port** (`crates/csp`), with algorithms, constants, and drift tracking
 <!-- /please:knowledge -->
 
