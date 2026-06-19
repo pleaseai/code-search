@@ -37,7 +37,7 @@ Two layers, easy to conflate:
 | Aspect | **CocoIndex Code** | **csp / semble** |
 |---|---|---|
 | Retrieval signal | **Dense-only** semantic vectors (no BM25) | **Hybrid** dense + BM25, fused via RRF (`k=60`) |
-| Embeddings | **Real** models: `Snowflake/snowflake-arctic-embed-xs` local (SentenceTransformers), or 100+ cloud providers via LiteLLM | Model2Vec static embeddings (`potion-code-16M`); TS/Rust ship a deterministic **stub** until integration |
+| Embeddings | **Real** models: `Snowflake/snowflake-arctic-embed-xs` local (SentenceTransformers), or 100+ cloud providers via LiteLLM | Model2Vec static embeddings (`potion-code-16M`); the Rust port loads `model2vec-rs::StaticModel` with a deterministic **stub** fallback on load failure, the TS port is still a stub |
 | Chunking | tree-sitter AST via `SplitRecursively` (`chunk_size=1000`, `chunk_overlap=300` in the canonical example) | tree-sitter AST, **no overlap**, target 1500 chars, `_MIN_CHUNK_SIZE=50`, line-fallback |
 | Indexing model | **Incremental delta** — diff vs. prior AST, re-embed only changed chunks, "80–90% cache hit"; optional **daemon** keeps index warm | Content-hash cache at `~/.csp/index/` (ADR-0002); rebuild on change, no long-running daemon |
 | Storage | **SQLite** (`cocoindex.db` + `target_sqlite.db`) under `<project>/.cocoindex_code/` | JSON/serde index files under global `~/.csp/index/` |
@@ -100,10 +100,11 @@ Not endorsements — open questions surfaced by the comparison:
 
 1. **Incremental delta indexing + daemon.** CocoIndex's headline feature is re-embedding only
    changed chunks against a warm index. csp currently caches by content hash and rebuilds; a
-   chunk-level delta + optional daemon is the natural next perf step if/when real embeddings land
-   (the stub makes re-embedding cost moot today — see `dense-embedding-is-a-stub`).
-2. **Asymmetric query vs. index embedding params** (`indexing_params`/`query_params`). Relevant
-   once csp wires real Model2Vec — many code-retrieval models want a query prefix.
+   chunk-level delta + optional daemon is the natural next perf step now that the Rust port loads
+   real embeddings (under the stub fallback, re-embedding is cheap and the win is smaller — see
+   `dense-embedding-is-a-stub`).
+2. **Asymmetric query vs. index embedding params** (`indexing_params`/`query_params`). Relevant to
+   csp's real Model2Vec path (Rust) — many code-retrieval models want a query prefix.
 3. **Structured MCP filters** (`languages`, `paths`, `limit`, `offset`). csp's `search` tool could
    adopt these cheaply; they map onto existing chunk metadata.
 4. **Chunk overlap** (`chunk_overlap=300`). semble/csp use **no** overlap; worth measuring whether
