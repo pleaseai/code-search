@@ -1,0 +1,19 @@
+.please/docs/references/semble.md
+  s_006da0c113c654::t_77c64741abe3f7 374
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "224ee86b5883625b833eedec51ac27d264ac9cc6",
+  "prompts": {},
+  "sessions": {
+    "s_006da0c113c654": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "be217a82-be79-469a-a249-3d8d36964828",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
