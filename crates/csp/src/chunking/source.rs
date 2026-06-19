@@ -9,8 +9,8 @@
 use super::core::{chunk as chunk_ast, chunk_lines, is_supported_language, ChunkBoundary};
 use crate::types::Chunk;
 
-/// The desired length of chunks in characters.
-pub const DESIRED_CHUNK_LENGTH_CHARS: usize = 1500;
+/// The desired length of chunks in characters (semble `_DESIRED_CHUNK_LENGTH_CHARS`).
+pub const DESIRED_CHUNK_LENGTH_CHARS: usize = 750;
 
 /// Chunk pre-read source text.
 pub fn chunk_source(source: &str, file_path: &str, language: Option<&str>) -> Vec<Chunk> {

@@ -51,14 +51,15 @@ They are fused with **Reciprocal Rank Fusion** and then reranked with code-speci
    (dense matrix)              ("{content} {stem}           ▼
        │                        {stem} {dir[-3:]}")  rerank (if CODE):
        ▼                        → tokenize → BM25       boost_multi_chunk_files   (wired)
-  SelectableBasicBackend        index                  apply_query_boost          (⚠ identity stub)
-  (cosine)                                             rerank_top_k               (⚠ saturation-only stub)
+  SelectableBasicBackend        index                  apply_query_boost          (wired)
+  (cosine)                                             rerank_top_k               (wired, path penalties + saturation)
                                                               ▼
                                                        top_k SearchResult → ~/.csp/savings.jsonl
 ```
 
-⚠ = TD-002: the full ranking lives in `ranking::{boosting,penalties}` but is **not yet wired**
-into `search.rs`, mirroring the TS source's current state (see §4.10/§6).
+The full ranking in `ranking::{boosting,penalties}` is now **wired** into `search.rs`
+(query-type boosts + path penalties + file saturation), matching the upstream
+`search.search` pipeline order (see §4.10).
 
 ---
 
@@ -69,7 +70,7 @@ into `search.rs`, mirroring the TS source's current state (see §4.10/§6).
 | `types.py` | `csp/src/types.rs` | ported | `Chunk`, `ContentType`, `CallType` enums; `ChunkDict`/`SearchResultDict` serde |
 | `tokens.py` | `csp/src/tokens.rs` | ported | identifier-aware tokenizer (BM25 input) |
 | `chunking/core.py` | `csp/src/chunking/core.rs` | ported (real tree-sitter) | node-merge + line-fallback boundary algorithm; `TsNode` bridge |
-| `chunking/chunking.py` | `csp/src/chunking/source.rs` | ported (⚠ param drift) | `chunk_source` → `Vec<Chunk>`; char↔line conversion |
+| `chunking/chunking.py` | `csp/src/chunking/source.rs` | ported | `chunk_source` → `Vec<Chunk>`; char↔line conversion (chunk length 750) |
 | `index/file_walker.py` | `csp/src/indexing/file_walker.rs` | ported (`.cspignore`) | gitignore-aware recursive walk (`ignore` crate idioms) |
 | `index/files.py` | `csp/src/indexing/files.rs` | ported | ext→language map, content-type sets, file status checks |
 | `index/dense.py` | `csp/src/indexing/dense.rs` | ported (real + stub) | `Model` enum, `embed_chunks`, `SelectableBasicBackend` cosine |
@@ -77,10 +78,10 @@ into `search.rs`, mirroring the TS source's current state (see §4.10/§6).
 | `index/create.py` | `csp/src/indexing/create.rs` | ported | build BM25 + dense + chunks from a path |
 | `index/index.py` | `csp/src/indexing/index.rs` | ported | `CspIndex` orchestrator (from_path/from_git/search/find_related/save/load) + `load_or_build_index` |
 | `cache.py` | `csp/src/indexing/cache.rs` | adapted | content-hash cache at `~/.csp/index/` (ADR-0002), 0700 perms |
-| `search.py` | `csp/src/search.rs` | ported (⚠ ranking stub) | hybrid RRF + alpha blend; trait seams |
+| `search.py` | `csp/src/search.rs` | ported (ranking wired) | hybrid RRF + alpha blend; trait seams |
 | `ranking/weighting.py` | `csp/src/ranking/weighting.rs` | ported | adaptive alpha |
-| `ranking/boosting.py` | `csp/src/ranking/boosting.rs` | ported (boost_multi wired; others unwired) | query-type detection + definition/stem/embedded boosts |
-| `ranking/penalties.py` | `csp/src/ranking/penalties.rs` | ported (unwired) | path penalties + file-saturation rerank |
+| `ranking/boosting.py` | `csp/src/ranking/boosting.rs` | ported (wired) | query-type detection + definition/stem/embedded boosts |
+| `ranking/penalties.py` | `csp/src/ranking/penalties.rs` | ported (wired) | path penalties + file-saturation rerank |
 | `stats.py` | `csp/src/stats.rs` | adapted | `~/.csp/savings.jsonl` read/write + report formatting |
 | `mcp.py` | `csp/src/mcp.rs` (core) + `csp-cli/src/mcp_server.rs` (rmcp transport) | ported | MCP `search` / `find_related` tools |
 | `cli.py` | `csp-cli/src/main.rs` | adapted (clap) | subcommands: search / find-related / index / savings / clear / init / mcp |
@@ -131,7 +132,9 @@ Same contract as semble `tokens.py`:
   shape as semble. Byte offsets are converted to char offsets for multibyte safety.
 
 **`source.rs`** (`chunk_source`):
-- `DESIRED_CHUNK_LENGTH_CHARS = 1500` (⚠ upstream is now **750** — see §6).
+- `DESIRED_CHUNK_LENGTH_CHARS = 750` (matches upstream `_DESIRED_CHUNK_LENGTH_CHARS`).
+  The value is also recorded in the index manifest (`chunk_size`) so a cache built
+  with a different target length is auto-invalidated (see §4.9/§4.14).
 - AST chunking when `language_for(lang).is_some()`, else line fallback. Char offsets → 1-indexed
   line numbers; clamps end to avoid the zero-length off-by-one.
 
@@ -193,7 +196,7 @@ The public façade (parallels `SembleIndex`):
   `~/.csp/index/<hash>` on a validated hit, else build and persist.
 - Builds file→indices and language→indices maps for selectors and stats.
 
-### 4.10 `search.rs` — hybrid retrieval & fusion (with TD-002 stub)
+### 4.10 `search.rs` — hybrid retrieval & fusion
 
 The heart of ranking. `search(query, model, semantic_index, bm25_index, chunks, top_k, options)`:
 1. `resolve_alpha(query, options.alpha)`; `rerank = options.rerank.unwrap_or(true)`.
@@ -204,9 +207,10 @@ The heart of ranking. `search(query, model, semantic_index, bm25_index, chunks, 
    `1/(RRF_K + rank)`, `RRF_K = 60`, rank from 1.
 6. Union of indices, **sorted by `start_line`** to neutralize hash-iteration nondeterminism;
    `combined = α·rrf_semantic + (1-α)·rrf_bm25`.
-7. If `rerank`: `boost_multi_chunk_files` (**wired**, shared impl) → `apply_query_boost_identity`
-   (⚠ stub) → `rerank_top_k_saturation` (⚠ stub: file-saturation decay only, path penalties
-   **not applied**, `penalise_paths` ignored). Else plain sort + truncate.
+7. If `rerank`: `boost_multi_chunk_files` → `ranking::boosting::apply_query_boost` →
+   `ranking::penalties::rerank_top_k(.., penalise_paths = alpha_weight < 1.0)` — the real
+   ranking functions, matching the upstream `search.search` order (path penalties apply only
+   when BM25 contributes). Else plain sort + truncate.
 
 **Rust idioms / structure**:
 - **Trait seams** for testability: `EmbeddingModel`, `VectorBackend`, `SparseBackend`,
@@ -220,23 +224,23 @@ The heart of ranking. `search(query, model, semantic_index, bm25_index, chunks, 
   than panicking — matters for the long-running MCP server.
 - `SearchOptions` struct (`alpha`, `selector`, `rerank`) instead of Python kwargs.
 
-> **TD-002**: `ranking::boosting::apply_query_boost` and `ranking::penalties::rerank_top_k` are
-> fully ported (with tests) but **not wired** into `search.rs` — exactly as in the TS source,
-> which still uses the inline stubs (`TODO(integration)`). So search-ranking parity is
-> fixture-level. `FILE_SATURATION_THRESHOLD`/`DECAY` are therefore defined **twice** (the inline
-> stub in `search.rs` and the real one in `ranking/penalties.rs`).
+> **TD-002 (resolved)**: `ranking::boosting::apply_query_boost` and
+> `ranking::penalties::rerank_top_k` are now wired into `search.rs`, so the full ranking
+> (query-type boosts + path penalties + file-saturation decay) runs in the search path.
+> The duplicate inline `FILE_SATURATION_THRESHOLD`/`DECAY` stub constants in `search.rs` were
+> removed; the canonical definitions live only in `ranking/penalties.rs`.
 
 ### 4.11 `ranking/weighting.rs` — adaptive alpha
 
 `resolve_alpha(query, alpha)`: explicit wins; else `ALPHA_SYMBOL = 0.3` (BM25-leaning) for symbol
 queries vs `ALPHA_NL = 0.5` for NL, decided by `is_symbol_query`.
 
-### 4.12 `ranking/boosting.rs` — query-type detection & boosts (mostly unwired)
+### 4.12 `ranking/boosting.rs` — query-type detection & boosts (wired)
 
 Ported faithfully (`LazyLock<Regex>` for the static patterns, `RefCell<HashMap>` LRU for
 `definition_pattern` cache):
 - `SYMBOL_QUERY_RE` / `EMBEDDED_SYMBOL_RE` — symbol vs NL classification.
-- `apply_query_boost` (unwired): symbol → `_boost_symbol_definitions` (definition regex per
+- `apply_query_boost` (wired into `search.rs`): symbol → `_boost_symbol_definitions` (definition regex per
   keyword set: `class def fn func struct enum trait type …` case-sensitive + SQL DDL
   case-insensitive; `DEFINITION_BOOST_MULTIPLIER = 3.0`, ×1.5 on stem match); NL →
   `_boost_stem_matches` (`STEM_BOOST_MULTIPLIER = 1.0`, ≥0.10 ratio, prefix-match morphology) +
@@ -244,9 +248,9 @@ Ported faithfully (`LazyLock<Regex>` for the static patterns, `RefCell<HashMap>`
 - `boost_multi_chunk_files` (**wired** into search): top chunk per file boosted by
   `max_score * FILE_COHERENCE_BOOST_FRAC` (=0.2) × (file score sum / max file sum).
 
-### 4.13 `ranking/penalties.rs` — path penalties & saturation rerank (unwired)
+### 4.13 `ranking/penalties.rs` — path penalties & saturation rerank (wired)
 
-`rerank_top_k(scores, chunks, top_k, penalise_paths)` ported but unwired:
+`rerank_top_k(scores, chunks, top_k, penalise_paths)` ported and wired into `search.rs`:
 - Path penalties (multiplicative): test files/dirs `STRONG_PENALTY = 0.3`; compat/legacy +
   examples/docs `0.3`; re-export barrels (`__init__.py`, `package-info.java`)
   `MODERATE_PENALTY = 0.5`; `.d.ts` `MILD_PENALTY = 0.7`.
@@ -260,6 +264,11 @@ Ported faithfully (`LazyLock<Regex>` for the static patterns, `RefCell<HashMap>`
   (NFR-003), tightening pre-existing dirs on Unix.
 - `clear_index_cache` removes only the index dir — never the `~/.csp` home (which also holds
   `savings.jsonl`).
+- **Cache validity** (`try_reuse`): a cached index is reused only when the manifest's
+  `chunk_size` equals the current `DESIRED_CHUNK_LENGTH_CHARS` (a manifest predating the field
+  → `None` → rebuild) **and**, for local sources, the live source-file content hash matches.
+  This mirrors upstream `_metadata_matches`, which gained a `chunk_size` check so the 1500→750
+  change auto-invalidates stale caches.
 - **Divergence from upstream**: semble uses the OS cache dir (`~/Library/Caches/semble`, XDG,
   `%LOCALAPPDATA%`) + `SEMBLE_CACHE_LOCATION`; csp fixes a global `~/.csp/index/` per ADR-0002.
 
@@ -309,7 +318,7 @@ Clean two-layer split:
 | RRF k | `60` | `60` | `search.rs RRF_K` |
 | α symbol / NL | `0.3` / `0.5` | `0.3` / `0.5` | `ranking/weighting.rs` |
 | candidate over-fetch | `top_k * 5` | `top_k * 5` | `search.rs` |
-| desired chunk length | **`750`** | **`1500`** ⚠ | `chunking/source.rs` |
+| desired chunk length | `750` | `750` | `chunking/source.rs` |
 | min chunk size | `50` | `50` | `chunking/core.rs` |
 | recursion depth | `500` | `500` | `chunking/core.rs` |
 | definition boost × | `3.0` | `3.0` | `ranking/boosting.rs` |
@@ -318,7 +327,7 @@ Clean two-layer split:
 | stem boost × | `1.0` | `1.0` | `ranking/boosting.rs` |
 | file-coherence frac | `0.2` | `0.2` | `ranking/boosting.rs` |
 | strong / moderate / mild penalty | `0.3` / `0.5` / `0.7` | same | `ranking/penalties.rs` |
-| file saturation threshold / decay | `1` / `0.5` | `1` / `0.5` (defined **twice**, see §4.10) | `search.rs` + `ranking/penalties.rs` |
+| file saturation threshold / decay | `1` / `0.5` | `1` / `0.5` | `ranking/penalties.rs` |
 | max file bytes | `1_000_000` | `1_000_000` | `index/files.py` / `indexing/create.rs` |
 | default model | `minishlab/potion-code-16M` | same (real + stub) | `utils.py` / `indexing/dense.rs` |
 | MCP in-mem LRU | `10` | `10` | `mcp.py` / `csp::mcp` |
@@ -344,10 +353,6 @@ Clean two-layer split:
 
 ### 6.2 Open stubs & gaps (verify before claiming runtime parity)
 
-- **TD-002 — ranking not wired**: `search.rs` uses `apply_query_boost_identity` +
-  `rerank_top_k_saturation`; the real `ranking::{boosting::apply_query_boost,
-  penalties::rerank_top_k}` are ported but unwired (matches the TS source). Search-ranking parity
-  is fixture-level only. Saturation constants are duplicated as a result.
 - **Curated tree-sitter set** — only ~14 grammars are statically linked (`language_for`); upstream
   uses `tree_sitter_language_pack` (≈all languages). Languages outside the curated set are
   recognized by the extension map but **line-chunked**, not AST-chunked. This is a real behavioral
@@ -355,13 +360,11 @@ Clean two-layer split:
 
 ### 6.3 Upstream drift since the review baseline (`eacbe43` → `136b6f7`)
 
-> ⚠ **Action item**: reconcile before claiming parity.
-
-- **Chunk length changed to 750** upstream (`chunking/chunking.py`), while the Rust port (and the
-  TS source it mirrors) still use **1500**. Upstream also added a `chunk_size` field to index
-  metadata + cache validation so the change auto-invalidates stale caches. Decide whether csp
-  follows 750 (and adds the metadata field to both TS and Rust) or documents 1500 as a deliberate
-  divergence.
+- **Chunk length 750 (reconciled)** — the Rust port now uses `DESIRED_CHUNK_LENGTH_CHARS = 750`
+  (was 1500), matching upstream `chunking/chunking.py`. The value is recorded in the index
+  manifest as `chunk_size` and validated in `try_reuse`, so the change auto-invalidates stale
+  caches (mirrors upstream's added metadata field + cache check). The TS source still uses 1500,
+  but per the current direction Python upstream — not TS — is the source of truth.
 
 ---
 

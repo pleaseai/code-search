@@ -10,6 +10,7 @@ use std::process::Command;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::chunking::source::DESIRED_CHUNK_LENGTH_CHARS;
 use crate::indexing::cache::{
     compute_content_hash, ensure_cache_dir, resolve_cache_dir, CacheFile, CacheLocation,
 };
@@ -40,6 +41,11 @@ pub struct IndexManifest {
     pub source_id: Option<String>,
     pub content: Vec<ContentType>,
     pub model_id: String,
+    /// Target chunk length the index was built with. Changing it alters every
+    /// chunk boundary, so a cache built with a different value must be rebuilt
+    /// (mirrors semble `_metadata_matches`). `None` = built before this field
+    /// existed → treated as a mismatch.
+    pub chunk_size: Option<u32>,
 }
 
 /// Query options for [`CspIndex::search`] / [`CspIndex::find_related`].
@@ -289,6 +295,7 @@ impl CspIndex {
             source_id: self.root.clone(),
             content: self.content.clone(),
             model_id: self.model_path.clone(),
+            chunk_size: Some(DESIRED_CHUNK_LENGTH_CHARS as u32),
         };
         let manifest_json = serde_json::to_string(&manifest).map_err(|e| e.to_string())?;
         std::fs::write(dir.join("manifest.json"), manifest_json).map_err(|e| e.to_string())
@@ -424,6 +431,16 @@ pub fn parse_manifest(raw: &serde_json::Value) -> Result<IndexManifest, String> 
         .and_then(serde_json::Value::as_str)
         .ok_or("Invalid manifest: modelId must be a string")?
         .to_string();
+    // Absent/null = built before the field existed → None (treated as a cache
+    // mismatch by `try_reuse`). A present-but-non-numeric value is malformed.
+    let chunk_size = match obj.get("chunkSize") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(v) => Some(
+            v.as_u64()
+                .and_then(|n| u32::try_from(n).ok())
+                .ok_or("Invalid manifest: chunkSize must be a u32")?,
+        ),
+    };
     let content_arr = obj
         .get("content")
         .and_then(serde_json::Value::as_array)
@@ -442,6 +459,7 @@ pub fn parse_manifest(raw: &serde_json::Value) -> Result<IndexManifest, String> 
         source_id,
         content,
         model_id,
+        chunk_size,
     })
 }
 
@@ -530,13 +548,18 @@ fn try_reuse(cache_dir: &Path, is_git: bool, source_hash: Option<&str>) -> Optio
     if !manifest_path.exists() {
         return None;
     }
-    if !is_git {
-        let raw = std::fs::read_to_string(&manifest_path).ok()?;
-        let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
-        let manifest = parse_manifest(&value).ok()?;
-        if Some(manifest.content_hash.as_str()) != source_hash {
-            return None;
-        }
+    let raw = std::fs::read_to_string(&manifest_path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let manifest = parse_manifest(&value).ok()?;
+    // A chunk_size change re-chunks every file, so a cache built with a different
+    // target length is stale even if the source files are byte-identical.
+    if manifest.chunk_size != Some(DESIRED_CHUNK_LENGTH_CHARS as u32) {
+        return None;
+    }
+    // Local sources additionally validate the live source-file hash; git sources
+    // are URL+ref keyed (no cheap live hash).
+    if !is_git && Some(manifest.content_hash.as_str()) != source_hash {
+        return None;
     }
     CspIndex::load_from_disk(cache_dir).ok()
 }
@@ -737,6 +760,35 @@ mod tests {
         assert_eq!(value["modelId"], "test-model");
         assert_eq!(value["content"], serde_json::json!(["code"]));
         assert!(value["contentHash"].as_str().unwrap().len() == 64);
+        assert_eq!(
+            value["chunkSize"].as_u64(),
+            Some(u64::from(DESIRED_CHUNK_LENGTH_CHARS as u32))
+        );
+    }
+
+    #[test]
+    fn try_reuse_rejects_stale_chunk_size() {
+        let chunks = vec![make_chunk("a.ts", 1, 10, Some("typescript"), "A")];
+        let idx = build_index(chunks);
+        let dir = tempdir().unwrap();
+        idx.save(dir.path(), Some("deadbeef")).unwrap();
+
+        // Fresh cache (matching hash + current chunk_size) is reused.
+        assert!(try_reuse(dir.path(), false, Some("deadbeef")).is_some());
+
+        // Rewrite the manifest with a different chunk_size → stale → rebuild.
+        let manifest_path = dir.path().join("manifest.json");
+        let raw = std::fs::read_to_string(&manifest_path).unwrap();
+        let mut value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        value["chunkSize"] = serde_json::json!(9999);
+        std::fs::write(&manifest_path, value.to_string()).unwrap();
+        assert!(try_reuse(dir.path(), false, Some("deadbeef")).is_none());
+
+        // A manifest predating the field (absent chunkSize) is also stale.
+        let mut value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        value.as_object_mut().unwrap().remove("chunkSize");
+        std::fs::write(&manifest_path, value.to_string()).unwrap();
+        assert!(try_reuse(dir.path(), false, Some("deadbeef")).is_none());
     }
 
     #[test]
