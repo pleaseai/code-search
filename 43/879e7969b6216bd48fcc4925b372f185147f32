@@ -1,0 +1,46 @@
+.please/docs/references/semble.md
+  s_f70b7859e7e39a::t_657a8c6df52490 199
+  s_f70b7859e7e39a::t_e21b68b9cd4561 73
+  s_f70b7859e7e39a::t_58dcf3d0d3d976 321
+  s_f70b7859e7e39a::t_4fd75a7f198456 238
+  s_f70b7859e7e39a::t_3ed0b86a10caf7 210-213
+  s_f70b7859e7e39a::t_965ab17410bb14 81,83-84
+  s_f70b7859e7e39a::t_b5169c0751b796 135-137
+  s_f70b7859e7e39a::t_3d70e31e81369e 251,253
+  s_f70b7859e7e39a::t_d38ecb8cbb4788 54-55,60-62
+  s_f70b7859e7e39a::t_e40ae2d1379dd0 267-271
+  s_f70b7859e7e39a::t_7ede1a2c519181 330
+  s_f70b7859e7e39a::t_8e0e1d2eec0661 363-367
+  s_f70b7859e7e39a::t_34c53cde598e0a 243
+  s_f70b7859e7e39a::t_e778e679f4d45d 227-231
+crates/csp/src/chunking/source.rs
+  s_f70b7859e7e39a::t_bd59280271555e 12-13
+crates/csp/src/search.rs
+  s_f70b7859e7e39a::t_8d2a396ddb62a2 1,12-13
+  s_f70b7859e7e39a::t_7e3ef126068f6a 4-7
+  s_f70b7859e7e39a::t_6ba5aae39b5d8d 221-223
+crates/csp/src/indexing/index.rs
+  s_f70b7859e7e39a::t_b009718a9ae4d4 13
+  s_f70b7859e7e39a::t_a26343402ca66e 298
+  s_f70b7859e7e39a::t_3575b5f936bf3f 434-443
+  s_f70b7859e7e39a::t_78b6fb5d058b83 462
+  s_f70b7859e7e39a::t_4c24c94d9c41fc 44-48
+  s_f70b7859e7e39a::t_54a0968614ba52 551-562
+  s_f70b7859e7e39a::t_0c659c93cfe8d6 763-791
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "43879e7969b6216bd48fcc4925b372f185147f32",
+  "prompts": {},
+  "sessions": {
+    "s_f70b7859e7e39a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7e78a43-7f2b-4441-adee-06ee377254d1",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
