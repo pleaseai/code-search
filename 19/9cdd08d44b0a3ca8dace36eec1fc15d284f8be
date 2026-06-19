@@ -1,0 +1,28 @@
+.please/docs/references/model2vec.md
+  s_29468bcf2c18fe::t_267d91024e068e 1-126
+.please/docs/references/index.md
+  s_29468bcf2c18fe::t_deefce81202f2b 17
+  s_29468bcf2c18fe::t_470d8472fef59c 30
+  s_29468bcf2c18fe::t_6b95ce6d5d054a 31
+  s_29468bcf2c18fe::t_91d980249fc1b7 18
+.please/docs/references/cocoindex.md
+  s_29468bcf2c18fe::t_edf9e71f692808 56-67
+  s_29468bcf2c18fe::t_0526508fb5f13c 1-45,47-55,68-125
+  s_29468bcf2c18fe::t_de61c0a14d17db 46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "199cdd08d44b0a3ca8dace36eec1fc15d284f8be",
+  "prompts": {},
+  "sessions": {
+    "s_29468bcf2c18fe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4a3cc72-fd19-4f44-ab4c-7ce326fcb02f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
