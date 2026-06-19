@@ -11,10 +11,18 @@
 //! back to [`chunk_lines`], exactly the upstream behavior when the language pack
 //! has no parser for the language.
 
+use std::collections::HashSet;
+use std::sync::{LazyLock, Mutex};
+
 use tree_sitter::{Language, Parser};
 
 pub const RECURSION_DEPTH: usize = 500;
 pub const MIN_CHUNK_SIZE: usize = 50;
+
+/// Languages we've already warned about failing to resolve, so a polyglot
+/// offline index degrades quietly after the first notice per language.
+static WARNED_LANGUAGES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 
 /// Resolve a semble language name (the values in
 /// [`crate::indexing::files`]'s `EXTENSION_TO_LANGUAGE`) to a tree-sitter grammar
@@ -23,11 +31,27 @@ pub const MIN_CHUNK_SIZE: usize = 50;
 /// This calls [`tree_sitter_language_pack::get_language`], which downloads the
 /// parser from GitHub releases on first use and caches it on disk; later calls
 /// hit the in-process registry. A network failure (offline) or an unknown
-/// language degrades to `None` → line chunking. Use [`is_supported_language`]
-/// (a metadata-only check) when you only need to know whether a grammar *exists*
-/// without triggering a download.
+/// language degrades to `None` → line chunking, with a one-time stderr warning
+/// per language so the cause is visible without spamming a polyglot index. Use
+/// [`is_supported_language`] (a metadata-only check) when you only need to know
+/// whether a grammar *exists* without triggering a download.
 pub fn language_for(language: &str) -> Option<Language> {
-    tree_sitter_language_pack::get_language(language).ok()
+    match tree_sitter_language_pack::get_language(language) {
+        Ok(lang) => Some(lang),
+        Err(err) => {
+            // Don't swallow the error silently: warn once per language, then
+            // fall back to line chunking (the caller treats `None` that way).
+            if let Ok(mut warned) = WARNED_LANGUAGES.lock() {
+                if warned.insert(language.to_string()) {
+                    eprintln!(
+                        "csp: could not load tree-sitter grammar for '{language}': {err}. \
+                         Falling back to line-based chunking for this language."
+                    );
+                }
+            }
+            None
+        }
+    }
 }
 
 /// A half-open `[start, end)` boundary in character offsets.

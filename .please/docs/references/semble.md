@@ -136,8 +136,10 @@ Same contract as semble `tokens.py`:
 
 **`source.rs`** (`chunk_source`):
 - `DESIRED_CHUNK_LENGTH_CHARS = 1500` (⚠ upstream is now **750** — see §6).
-- AST chunking when `language_for(lang).is_some()`, else line fallback. Char offsets → 1-indexed
-  line numbers; clamps end to avoid the zero-length off-by-one.
+- AST chunking is gated by `is_supported_language(lang)` (metadata-only, no download); the
+  subsequent `chunk(...)` may still return `None` (e.g. an offline grammar fetch failure),
+  falling back to line chunking. Char offsets → 1-indexed line numbers; clamps end to avoid the
+  zero-length off-by-one.
 
 ### 4.4 `indexing/file_walker.rs` — gitignore-aware walk
 
