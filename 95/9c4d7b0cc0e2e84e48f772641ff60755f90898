@@ -1,0 +1,34 @@
+crates/csp/Cargo.toml
+  s_74aeb9bdd70e59::t_609ae99fd9fe03 23-28,30
+.please/docs/decisions/0004-rust-grammar-coverage-language-pack.md
+  s_74aeb9bdd70e59::t_becc1746d26a5b 1-69
+.please/docs/references/semble.md
+  s_74aeb9bdd70e59::t_ec994d00c68d7d 126-133
+  s_74aeb9bdd70e59::t_bcfec6c09ebd86 355-360
+  s_74aeb9bdd70e59::t_93ad0ae7dcd826 153-155
+crates/csp/src/chunking/core.rs
+  s_74aeb9bdd70e59::t_043cd0c0cc7d17 477-478,485-489,491
+  s_74aeb9bdd70e59::t_56f6cffdd806c6 531-542
+  s_74aeb9bdd70e59::t_ad084303f4f0f0 319-320,338-345,347-348
+  s_74aeb9bdd70e59::t_7b68123da50882 513,523-530,543-559
+  s_74aeb9bdd70e59::t_e394101a8d006e 47-53,55
+  s_74aeb9bdd70e59::t_6ceb1da47c751b 6-12,20-21,23-28,30
+.please/docs/decisions/index.md
+  s_74aeb9bdd70e59::t_4c292bbd0db429 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "959c4d7b0cc0e2e84e48f772641ff60755f90898",
+  "prompts": {},
+  "sessions": {
+    "s_74aeb9bdd70e59": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7c18eb64-9c8f-4d8d-b7fc-a505af1dd256",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
