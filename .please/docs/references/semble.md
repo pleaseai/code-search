@@ -123,17 +123,23 @@ Same contract as semble `tokens.py`:
 **`core.rs`** (boundary algorithm, byte-based; `RECURSION_DEPTH = 500`, `MIN_CHUNK_SIZE = 50`):
 - The merge algorithm is generic over a node trait so tests can drive it with mock nodes; in
   production a **`TsNode` bridge** adapts `tree_sitter::Node` to it.
-- `language_for(language)` returns a statically-linked `tree_sitter::Language` for a **curated
-  grammar set**: rust, python, javascript, typescript, tsx, go, java, c, cpp, ruby, json, bash,
-  html, css. Unsupported languages → `None` → line fallback. ⚠ This is **narrower than upstream**,
-  which uses `tree_sitter_language_pack` (≈all languages); see §6.
+- `language_for(language)` returns a `tree_sitter::Language` from
+  **`tree_sitter_language_pack`** (306 grammars — full upstream parity; semble uses the Python
+  package of the same name). Parsers download from GitHub releases on first use and cache on disk;
+  unknown language or an offline fetch failure → `None` → line fallback. `is_supported_language`
+  uses `has_language` — a **metadata-only** check (no download) — so `chunk_source` gates AST
+  chunking before paying for a fetch. 264/265 `EXTENSION_TO_LANGUAGE` names resolve (`wolfram` is
+  the sole gap). See [ADR-0004](../decisions/0004-rust-grammar-coverage-language-pack.md) for the
+  single-binary ↔ runtime-cache trade-off.
 - `_merge_node_inner` (greedy pack), `_merge_adjacent_chunks`, `chunk_lines` fallback — same
   shape as semble. Byte offsets are converted to char offsets for multibyte safety.
 
 **`source.rs`** (`chunk_source`):
 - `DESIRED_CHUNK_LENGTH_CHARS = 1500` (⚠ upstream is now **750** — see §6).
-- AST chunking when `language_for(lang).is_some()`, else line fallback. Char offsets → 1-indexed
-  line numbers; clamps end to avoid the zero-length off-by-one.
+- AST chunking is gated by `is_supported_language(lang)` (metadata-only, no download); the
+  subsequent `chunk(...)` may still return `None` (e.g. an offline grammar fetch failure),
+  falling back to line chunking. Char offsets → 1-indexed line numbers; clamps end to avoid the
+  zero-length off-by-one.
 
 ### 4.4 `indexing/file_walker.rs` — gitignore-aware walk
 
@@ -146,9 +152,9 @@ Same contract as semble `tokens.py`:
 ### 4.5 `indexing/files.rs` — language detection & file gating
 
 - `EXTENSION_TO_LANGUAGE` — `&[(&str, &str)]` table (~350 entries). `detect_language(name)`
-  lowercases the suffix and looks it up. Note: this recognizes far more extensions than the
-  curated tree-sitter set in §4.3 — recognized-but-unparsed languages still get **walked and
-  line-chunked**.
+  lowercases the suffix and looks it up. Since §4.3 now resolves grammars through
+  `tree_sitter_language_pack` (306 grammars), 264/265 of these language names AST-chunk; only
+  `wolfram` (and any extension the pack can't fetch) falls back to line chunking.
 - Content-type partition: `DOC_LANGUAGES`, `CONFIG_LANGUAGES`, `DATA_LANGUAGES`; code = all minus
   those. `get_extensions(types, extra)` inverts the map; the **`extra`** param (custom extensions)
   is a small Rust-side API addition.
@@ -348,10 +354,12 @@ Clean two-layer split:
   `rerank_top_k_saturation`; the real `ranking::{boosting::apply_query_boost,
   penalties::rerank_top_k}` are ported but unwired (matches the TS source). Search-ranking parity
   is fixture-level only. Saturation constants are duplicated as a result.
-- **Curated tree-sitter set** — only ~14 grammars are statically linked (`language_for`); upstream
-  uses `tree_sitter_language_pack` (≈all languages). Languages outside the curated set are
-  recognized by the extension map but **line-chunked**, not AST-chunked. This is a real behavioral
-  narrowing vs upstream.
+- ~~**Curated tree-sitter set**~~ — **closed** ([ADR-0004](../decisions/0004-rust-grammar-coverage-language-pack.md),
+  [#38](https://github.com/pleaseai/code-search/issues/38)). `language_for` now resolves through
+  `tree_sitter_language_pack` (306 grammars, full upstream parity; 264/265 `EXTENSION_TO_LANGUAGE`
+  names AST-chunk, `wolfram` excepted). Trade-off recorded in ADR-0004: parsers download on first
+  use and cache on disk, so AST chunking is no longer fully offline/self-contained — it degrades
+  gracefully to line chunking when offline, exactly as an unsupported language already did.
 
 ### 6.3 Upstream drift since the review baseline (`eacbe43` → `136b6f7`)
 
