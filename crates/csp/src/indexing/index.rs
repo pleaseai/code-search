@@ -433,14 +433,15 @@ pub fn parse_manifest(raw: &serde_json::Value) -> Result<IndexManifest, String> 
         .to_string();
     // Absent/null = built before the field existed → None (treated as a cache
     // mismatch by `try_reuse`). A present-but-non-numeric value is malformed.
-    let chunk_size = match obj.get("chunkSize") {
-        None | Some(serde_json::Value::Null) => None,
-        Some(v) => Some(
+    let chunk_size = obj
+        .get("chunkSize")
+        .filter(|v| !v.is_null())
+        .map(|v| {
             v.as_u64()
                 .and_then(|n| u32::try_from(n).ok())
-                .ok_or("Invalid manifest: chunkSize must be a u32")?,
-        ),
-    };
+                .ok_or("Invalid manifest: chunkSize must be a u32")
+        })
+        .transpose()?;
     let content_arr = obj
         .get("content")
         .and_then(serde_json::Value::as_array)
