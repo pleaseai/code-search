@@ -1,0 +1,21 @@
+release-please-config.json
+  s_322ba70b9710f0::t_262bc3af5e3063 34-37
+.github/workflows/release-please.yml
+  s_322ba70b9710f0::t_34c3d302d5dfb5 93-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "92f504fa400c980ce365ebcbef5e318471ee57ec",
+  "prompts": {},
+  "sessions": {
+    "s_322ba70b9710f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "45abfaff-51a0-472b-9a15-bee022b13534",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
