@@ -1,0 +1,38 @@
+crates/csp/src/chunking/core.rs
+  s_3b54d83911c0f3::t_036c731eaa4813 6-15,22-26,28-29,31-37,39-54,71-77,79,343-344,362-369,371-372,501-502,509-513,515,537,547-585
+.please/docs/decisions/0004-rust-grammar-coverage-language-pack.md
+  s_3b54d83911c0f3::t_036c731eaa4813 1-69
+.please/docs/references/semble.md
+  s_3b54d83911c0f3::t_e4336de6364a6d 365-369
+  s_3b54d83911c0f3::t_036c731eaa4813 130-137,145-148,161-163,370-375
+.please/docs/references/model2vec.md
+  s_3b54d83911c0f3::t_036c731eaa4813 1-129
+.github/workflows/rust.yml
+  s_3b54d83911c0f3::t_036c731eaa4813 22-26,55-70
+.please/docs/decisions/index.md
+  s_3b54d83911c0f3::t_036c731eaa4813 10
+.please/docs/references/cocoindex.md
+  s_3b54d83911c0f3::t_036c731eaa4813 1-126
+.please/docs/references/index.md
+  s_3b54d83911c0f3::t_036c731eaa4813 17-18,30-31
+release-please-config.json
+  s_3b54d83911c0f3::t_036c731eaa4813 9-10
+crates/csp/Cargo.toml
+  s_3b54d83911c0f3::t_036c731eaa4813 23-28,30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "db32bafcb51839f53b0462c3559e21ed5ac6e742",
+  "prompts": {},
+  "sessions": {
+    "s_3b54d83911c0f3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a46c88ac-151e-4ce5-b8f3-13684de055e2",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
