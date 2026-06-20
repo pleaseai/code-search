@@ -1,0 +1,19 @@
+release-please-config.json
+  s_e82d809c7e1f7e::t_d66ca230acf375 9-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "5c45f2da2a5fb05ad4b04f91c9c79d3edeb64497",
+  "prompts": {},
+  "sessions": {
+    "s_e82d809c7e1f7e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d9620a5e-7c8e-4ebf-9a14-b8c1bb4868b7",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
