@@ -6,6 +6,7 @@
       "package-name": "@pleaseai/csp",
       "include-component-in-tag": false,
       "include-v-in-tag": true,
+      "initial-version": "0.1.0",
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
       "changelog-sections": [
@@ -22,6 +23,15 @@
         { "type": "ci", "section": "Continuous Integration", "hidden": true }
       ],
       "extra-files": [
+        {
+          "type": "json",
+          "path": "npm/csp/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "generic",
+          "path": "Cargo.toml"
+        },
         {
           "type": "generic",
           "path": "src/version.ts"

@@ -1,12 +1,11 @@
 # Rust release pipeline (ADR-0003 / track rust-rewrite-20260618, T022).
 #
 # This builds the cross-compiled `csp` binaries from the Rust workspace
-# (crates/csp-cli). It is **manually triggered** (workflow_dispatch) and does NOT
-# fire on release, so it coexists with the live TypeScript release pipeline in
-# release-please.yml without overriding it. Flipping the published product from
-# the Bun-compiled binary to the Rust binary is a deliberate, separate cut-over
-# (T023/T024) gated on full runtime parity — not something this workflow does on
-# its own.
+# (crates/csp-cli). It runs in two ways: **manually** (workflow_dispatch) for
+# ad-hoc rebuilds, and **as a reusable workflow** (workflow_call) invoked by
+# release-please.yml on release_created — the latter is the live cut-over
+# (T023/T024) that makes Rust the published product (GitHub release assets +
+# npm-distributed binary), replacing the former Bun-compiled TypeScript binary.
 #
 # Unlike the TS pipeline (which must build on native runners because
 # `bun build --compile` bundles host-platform native addons), the Rust binary is
@@ -22,6 +21,14 @@ on:
     inputs:
       tag:
         description: 'Release tag to upload assets to (e.g. v0.1.0). Leave blank to only build + upload artifacts.'
+        required: false
+        type: string
+  # Reused by release-please.yml on release_created to build the Rust binaries
+  # and upload them to the freshly-created GitHub release (ADR-0003 cut-over).
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to upload assets to (e.g. v0.1.0).
         required: false
         type: string
 
