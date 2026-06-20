@@ -1,0 +1,21 @@
+CLAUDE.md
+  s_3b54d83911c0f3::t_71582e79ddd940 67
+crates/csp/src/indexing/index.rs
+  s_3b54d83911c0f3::t_d9f0a5dfcfa987 436-439,442-444
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "40a5f1144db527dad5aad7c4c99dc0d509cda311",
+  "prompts": {},
+  "sessions": {
+    "s_3b54d83911c0f3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a46c88ac-151e-4ce5-b8f3-13684de055e2",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
