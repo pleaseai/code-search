@@ -1,22 +1,16 @@
-//! Hybrid search pipeline. Port of `src/search.ts` (← semble `search.py`).
+//! Hybrid search pipeline. Port of semble `search.py`.
 //!
 //! semantic + BM25 → per-list RRF (`k=60`) → alpha-weighted combine → optional
-//! rerank (multi-chunk file boost → query boost → top-k with file saturation).
-//!
-//! Parity note: like `search.ts`, this reproduces the module's *current* inline
-//! ranking — `apply_query_boost` is an identity pass and `rerank_top_k` applies
-//! only file-saturation decay (no path penalties). The fuller
-//! `ranking::{boosting::apply_query_boost, penalties::rerank_top_k}` are ported
-//! (T006/T007) but, exactly as in the TS source, are not yet wired into the
-//! search pipeline (`TODO(integration)`). `boost_multi_chunk_files` *is* the
-//! shared ranking implementation (identical to the TS inline version).
+//! rerank. The rerank stage mirrors the upstream `search.search` order:
+//! multi-chunk file boost (`boost_multi_chunk_files`), then query-type boost
+//! (`apply_query_boost`), then top-k with path penalties + file saturation
+//! (`rerank_top_k`, with `penalise_paths = alpha_weight < 1.0`).
 
 use std::collections::HashSet;
 
-use indexmap::IndexMap;
-
 use crate::indexing::sparse::selector_to_mask;
-use crate::ranking::boosting::boost_multi_chunk_files;
+use crate::ranking::boosting::{apply_query_boost, boost_multi_chunk_files};
+use crate::ranking::penalties::rerank_top_k;
 use crate::ranking::weighting::resolve_alpha;
 use crate::ranking::Scores;
 use crate::tokens::tokenize;
@@ -24,9 +18,6 @@ use crate::types::Chunk;
 
 /// Reciprocal Rank Fusion constant.
 pub const RRF_K: usize = 60;
-
-const FILE_SATURATION_THRESHOLD: usize = 1;
-const FILE_SATURATION_DECAY: f64 = 0.5;
 
 /// A scored search hit.
 #[derive(Debug, Clone, PartialEq)]
@@ -168,57 +159,6 @@ pub struct SearchOptions {
     pub rerank: Option<bool>,
 }
 
-/// Identity query boost — mirrors the current `search.ts` inline stub. (The full
-/// `ranking::boosting::apply_query_boost` is ported but not yet wired here.)
-fn apply_query_boost_identity(scores: &Scores) -> Scores {
-    scores.clone()
-}
-
-/// Top-k rerank with file-saturation decay only — mirrors the current `search.ts`
-/// inline stub (path penalties not applied; the `penalise_paths` flag is ignored,
-/// matching the TS `void options`).
-fn rerank_top_k_saturation(scores: &Scores, chunks: &[Chunk], top_k: usize) -> Vec<(usize, f64)> {
-    if scores.is_empty() {
-        return Vec::new();
-    }
-    let mut ranked: Vec<(usize, f64)> = scores.iter().map(|(&i, &s)| (i, s)).collect();
-    ranked.sort_by(|a, b| b.1.total_cmp(&a.1));
-
-    let mut file_selected: IndexMap<String, usize> = IndexMap::new();
-    let mut selected: Vec<(f64, usize)> = Vec::new();
-    let mut min_selected = f64::INFINITY;
-
-    for (idx, pen_score) in ranked {
-        if selected.len() >= top_k && pen_score <= min_selected {
-            break;
-        }
-        let already = file_selected
-            .get(&chunks[idx].file_path)
-            .copied()
-            .unwrap_or(0);
-        let mut eff_score = pen_score;
-        if already >= FILE_SATURATION_THRESHOLD {
-            let excess = already - FILE_SATURATION_THRESHOLD + 1;
-            eff_score *= FILE_SATURATION_DECAY.powi(excess as i32);
-        }
-        selected.push((eff_score, idx));
-        file_selected.insert(chunks[idx].file_path.clone(), already + 1);
-        if selected.len() >= top_k {
-            min_selected = selected
-                .iter()
-                .map(|&(s, _)| s)
-                .fold(f64::INFINITY, f64::min);
-        }
-    }
-
-    selected.sort_by(|a, b| b.0.total_cmp(&a.0));
-    selected.truncate(top_k);
-    selected
-        .into_iter()
-        .map(|(score, idx)| (idx, score))
-        .collect()
-}
-
 /// Hybrid search: alpha-weighted combination of RRF-normalised semantic and BM25
 /// scores, with optional code-tuned reranking.
 pub fn search(
@@ -278,8 +218,9 @@ pub fn search(
 
     let ranked: Vec<(usize, f64)> = if rerank {
         boost_multi_chunk_files(&mut combined, chunks);
-        let boosted = apply_query_boost_identity(&combined);
-        rerank_top_k_saturation(&boosted, chunks, top_k)
+        let boosted = apply_query_boost(&combined, query, chunks);
+        // Path penalties apply only when BM25 contributes (alpha_weight < 1.0).
+        rerank_top_k(&boosted, chunks, top_k, alpha_weight < 1.0)
     } else {
         let mut entries: Vec<(usize, f64)> = combined.iter().map(|(&i, &s)| (i, s)).collect();
         entries.sort_by(|a, b| b.1.total_cmp(&a.1));
