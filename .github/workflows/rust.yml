@@ -19,6 +19,11 @@ on:
       - rust-toolchain.toml
       - rustfmt.toml
       - .github/workflows/rust.yml
+  # The `ignored-tests` job below is network-gated; run it manually or weekly so
+  # the PR gate stays offline. See ADR-0004.
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
 
 permissions:
   contents: read
@@ -47,3 +52,19 @@ jobs:
 
       - name: Test
         run: cargo test --all-features --locked --workspace
+
+  ignored-tests:
+    # Network-gated: these tests download tree-sitter grammars from GitHub
+    # releases (see ADR-0004). Kept off the PR/push gate so it stays offline and
+    # flake-free; runs on manual dispatch or the weekly schedule to catch
+    # grammar-fetch / parser-compat regressions.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Test (ignored / network-gated)
+        run: cargo test --all-features --locked --workspace -- --ignored

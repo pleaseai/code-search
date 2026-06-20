@@ -20,19 +20,11 @@ sha2 = { workspace = true }
 tempfile = { workspace = true }
 # Phase 3 — real Model2Vec dense embeddings (official MinishLab Rust port).
 model2vec-rs = { workspace = true }
-# Phase 3 — tree-sitter AST chunking (curated grammar set; statically linked for
-# the single-binary goal — unsupported languages fall back to line chunking).
+# Phase 3 — tree-sitter AST chunking. Full upstream-parity grammar coverage via
+# `tree-sitter-language-pack` (306 languages), replacing the earlier ~14-grammar
+# curated static set (see ADR-0004). Parsers are fetched from GitHub releases on
+# first use and cached on disk (`dynamic-loading` + `download`, the crate
+# defaults); a language with no available grammar (or an offline fetch failure)
+# degrades to line chunking exactly as before.
 tree-sitter = { workspace = true }
-tree-sitter-rust = "0.24"
-tree-sitter-python = "0.25"
-tree-sitter-javascript = "0.25"
-tree-sitter-typescript = "0.23"
-tree-sitter-go = "0.25"
-tree-sitter-java = "0.23"
-tree-sitter-c = "0.24"
-tree-sitter-cpp = "0.23"
-tree-sitter-ruby = "0.23"
-tree-sitter-json = "0.24"
-tree-sitter-bash = "0.25"
-tree-sitter-html = "0.23"
-tree-sitter-css = "0.25"
+tree-sitter-language-pack = "1.9"
