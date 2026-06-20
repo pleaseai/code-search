@@ -1,0 +1,24 @@
+.please/docs/references/semble.md
+  s_f70b7859e7e39a::t_9028c69e848d86 9-16
+CLAUDE.md
+  s_f70b7859e7e39a::t_57b54cf831b6b8 11,13
+  s_f70b7859e7e39a::t_505dad4cc658f3 17,20-22,25
+.please/docs/decisions/0003-rewrite-in-rust.md
+  s_f70b7859e7e39a::t_b1d038acef62b5 75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "941a77ff5540f32e9a4ac4200d2f5fad065b611a",
+  "prompts": {},
+  "sessions": {
+    "s_f70b7859e7e39a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7e78a43-7f2b-4441-adee-06ee377254d1",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
