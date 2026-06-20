@@ -73,7 +73,6 @@ jobs:
     uses: ./.github/workflows/release-rust.yml
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
-    secrets: inherit
 
   # Generate the per-platform npm packages from the released binaries and
   # publish the wrapper + platform packages via npm Trusted Publishing (OIDC).
@@ -91,6 +90,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          # This job only reads + publishes to npm; it never pushes to git, so
+          # don't leave the checkout token persisted in .git/config.
+          persist-credentials: false
 
       # Trusted Publishing requires npm >= 11.5.1; ubuntu-latest ships npm 10.x
       # with Node 22, so upgrade the CLI before publishing.

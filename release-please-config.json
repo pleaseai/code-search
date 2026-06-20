@@ -31,6 +31,10 @@
         {
           "type": "generic",
           "path": "Cargo.toml"
+        },
+        {
+          "type": "generic",
+          "path": "src/version.ts"
         }
       ]
     }
