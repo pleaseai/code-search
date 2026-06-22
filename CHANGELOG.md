@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/pleaseai/code-search/compare/v0.1.3...v0.1.4) (2026-06-22)
+
+
+### Bug Fixes
+
+* **release:** sudo npm install -g for Trusted Publishing upgrade ([#50](https://github.com/pleaseai/code-search/issues/50)) ([ad9d1f0](https://github.com/pleaseai/code-search/commit/ad9d1f02d24ba6705765639afe528ca235764622))
+
 ## [0.1.3](https://github.com/pleaseai/code-search/compare/v0.1.2...v0.1.3) (2026-06-22)
 
 
