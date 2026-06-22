@@ -442,7 +442,12 @@ csp clear all      # 인덱스 캐시와 savings 모두 삭제
 <details>
 <summary>라이브러리 사용</summary>
 
-`csp`는 Rust 라이브러리 크레이트(`csp`, [`crates/csp`](crates/csp))로도 사용할 수 있습니다. 자체 도구를 만들거나 검색을 Rust 코드에 직접 통합할 때 유용합니다. `CspIndex`(`from_path` / `from_git` / `search` / `find_related`)와 `ContentType` enum, 랭킹 파이프라인을 노출합니다.
+`csp`는 Rust 라이브러리 크레이트로도 사용할 수 있습니다. 짧은 이름 `csp`가 이미 선점되어 [crates.io](https://crates.io/crates/code-search-please)에는 **`code-search-please`** 로 배포됩니다. 라이브러리 이름은 `csp` 그대로이므로 의존성은 `code-search-please`로 추가하되 코드에서는 `use csp::...`를 씁니다. `CspIndex`(`from_path` / `from_git` / `search` / `find_related`)와 `ContentType` enum, 랭킹 파이프라인을 노출합니다.
+
+```toml
+[dependencies]
+code-search-please = "0.1"
+```
 
 ```rust
 use std::path::Path;
@@ -457,7 +462,7 @@ for r in &results {
 }
 ```
 
-> 크레이트의 [crates.io](https://crates.io) 배포는 예정되어 있습니다. 그 전까지는 path 또는 git 의존으로 사용하세요. (npm 패키지는 `csp` 바이너리를 런처 뒤에 담아 배포할 뿐, JavaScript API를 노출하지 않습니다.)
+> 크레이트는 crates.io에 [`code-search-please`](https://crates.io/crates/code-search-please)로 배포되며 라이브러리 이름은 `csp`입니다. (npm 패키지는 `csp` 바이너리를 런처 뒤에 담아 배포할 뿐, JavaScript API를 노출하지 않습니다.)
 
 </details>
 

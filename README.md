@@ -442,7 +442,12 @@ Explicit index paths written with `csp index -o <path>` are not part of the auto
 <details>
 <summary>Library usage</summary>
 
-`csp` is also a Rust library crate (`csp`, in [`crates/csp`](crates/csp)), useful when building custom tooling or integrating search directly into your own Rust code. It exposes `CspIndex` with `from_path` / `from_git` / `search` / `find_related`, plus the `ContentType` enum and the ranking pipeline.
+`csp` is also a Rust library crate, published on [crates.io](https://crates.io/crates/code-search-please) as **`code-search-please`** (the short name `csp` was already taken). The library name stays `csp`, so you depend on `code-search-please` but still write `use csp::...`. It exposes `CspIndex` with `from_path` / `from_git` / `search` / `find_related`, plus the `ContentType` enum and the ranking pipeline.
+
+```toml
+[dependencies]
+code-search-please = "0.1"
+```
 
 ```rust
 use std::path::Path;
@@ -457,7 +462,7 @@ for r in &results {
 }
 ```
 
-> Publishing the crate to [crates.io](https://crates.io) is planned; until then, depend on it by path or git. (The npm package ships only the `csp` binary behind a launcher — it does not expose a JavaScript API.)
+> The crate is published on crates.io as [`code-search-please`](https://crates.io/crates/code-search-please) with the library name `csp`. (The npm package ships only the `csp` binary behind a launcher — it does not expose a JavaScript API.)
 
 </details>
 
