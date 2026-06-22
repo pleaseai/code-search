@@ -158,6 +158,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
+          GH_REPO: ${{ github.repository }}
         run: |
           # Pass the tag via env and validate its format before use, so an
           # untrusted dispatch input can't inject shell into the run step.
@@ -165,4 +166,6 @@ jobs:
             echo "Invalid release tag format: $RELEASE_TAG" >&2
             exit 1
           }
+          # This job does not check out the repo, so gh can't infer the target
+          # from a local .git — pass it explicitly via GH_REPO (gh reads it).
           gh release upload "$RELEASE_TAG" release/* --clobber
