@@ -74,12 +74,28 @@ jobs:
       - name: Add target
         run: rustup target add ${{ matrix.target }}
 
-      - name: Install musl tools
+      # The musl target pulls C/C++ deps (esaxx-rs C++ via tokenizers, onig/zstd
+      # C) but musl-tools only ships musl-gcc, not musl-g++, so esaxx-rs fails to
+      # build. cargo-zigbuild uses zig as a full C/C++ cross toolchain (clang +
+      # musl + libc++), which builds the whole native set. zig is installed from
+      # the official tarball, so no extra pinned third-party action is needed.
+      - name: Set up cargo-zigbuild (musl)
         if: ${{ endsWith(matrix.target, '-musl') }}
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+        run: |
+          ZIG_VERSION=0.13.0
+          curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" \
+            | tar -xJ -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/zig-linux-x86_64-${ZIG_VERSION}" >> "$GITHUB_PATH"
+          cargo install --locked cargo-zigbuild --version '^0.19'
 
       - name: Build release binary
-        run: cargo build --release --locked -p csp-cli --target ${{ matrix.target }}
+        shell: bash
+        run: |
+          if [[ "${{ matrix.target }}" == *-musl ]]; then
+            cargo zigbuild --release --locked -p csp-cli --target "${{ matrix.target }}"
+          else
+            cargo build --release --locked -p csp-cli --target "${{ matrix.target }}"
+          fi
 
       - name: Stage asset (unix)
         if: ${{ !startsWith(matrix.os, 'windows') }}
@@ -104,9 +120,11 @@ jobs:
             ${{ matrix.asset }}
             ${{ matrix.asset }}.sha256
 
+  # Resilient by design: runs even if some build legs failed (always()), so the
+  # targets that did build still reach the release. Fails only if NOTHING built.
   upload-release-assets:
     needs: build
-    if: ${{ inputs.tag != '' }}
+    if: ${{ always() && inputs.tag != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -119,8 +137,14 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release
-          find artifacts -type f -exec cp {} release/ \;
-          ls -lh release/
+          find artifacts -type f -exec cp {} release/ \; 2>/dev/null || true
+          count=$(find release -type f | wc -l | tr -d ' ')
+          echo "staged $count asset file(s):"
+          ls -lh release/ || true
+          if [ "$count" -eq 0 ]; then
+            echo "::error::no built assets to upload — every build leg failed" >&2
+            exit 1
+          fi
 
       - name: Upload to release
         env:

@@ -100,7 +100,10 @@ jobs:
   # npmjs.com pointing at this repo + workflow (release-please.yml).
   publish-npm:
     needs: [release-please, build-and-upload]
-    if: ${{ needs.release-please.outputs.release_created }}
+    # always(): publish whatever targets reached the release even if one build
+    # leg failed. The generator is partial-matrix-tolerant (only present targets
+    # are pinned in optionalDependencies) and fails loudly if nothing built.
+    if: ${{ always() && needs.release-please.outputs.release_created }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -149,7 +152,9 @@ jobs:
 
   update-homebrew-formula:
     needs: [release-please, build-and-upload]
-    if: ${{ needs.release-please.outputs.release_created }}
+    # always(): the formula only needs the 4 darwin/linux-gnu assets, so a musl
+    # build failure shouldn't block it. Fails on its own if a core asset is missing.
+    if: ${{ always() && needs.release-please.outputs.release_created }}
     runs-on: ubuntu-latest
 
     steps:
