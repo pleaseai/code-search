@@ -38,6 +38,9 @@ if (!version || !assetsDir) {
 const distRoot = join(npmRoot, 'dist')
 mkdirSync(distRoot, { recursive: true })
 
+// Repo root holds the README + LICENSE shipped inside the published packages.
+const repoRoot = resolve(npmRoot, '..')
+
 const base = JSON.parse(readFileSync(join(npmRoot, 'csp', 'package.json'), 'utf8'))
 
 // Generate a package per target whose asset is present. A missing asset is
@@ -71,6 +74,10 @@ for (const t of TARGETS) {
   const dest = join(outDir, t.binary)
   copyFileSync(src, dest)
   chmodSync(dest, 0o755)
+  // Ship LICENSE in each platform package too — these are published
+  // independently, and license-compliance scanners (FOSSA, Snyk, …) look for a
+  // LICENSE file in every package directory.
+  copyFileSync(join(repoRoot, 'LICENSE'), join(outDir, 'LICENSE'))
   generated.push(t)
   process.stdout.write(`wrote ${t.pkg}@${version} (${t.asset} -> ${t.binary})\n`)
 }
@@ -95,7 +102,6 @@ copyFileSync(join(npmRoot, 'csp', 'bin', 'csp.js'), join(wrapperDir, 'bin', 'csp
 // Ship the user-facing README + LICENSE in the published wrapper so the npm
 // package page renders docs (without these, npm shows "No README data found").
 // npm always includes README.md / LICENSE regardless of the `files` allowlist.
-const repoRoot = resolve(npmRoot, '..')
 copyFileSync(join(repoRoot, 'README.md'), join(wrapperDir, 'README.md'))
 copyFileSync(join(repoRoot, 'LICENSE'), join(wrapperDir, 'LICENSE'))
 process.stdout.write(`wrote wrapper @pleaseai/csp@${version}\n`)
