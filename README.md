@@ -6,7 +6,10 @@
 
 <div align="center">
   <h2>
-    <a href="https://www.npmjs.com/package/@pleaseai/csp"><img src="https://img.shields.io/npm/v/@pleaseai/csp?color=%23007ec6&label=npm%20package" alt="Package version"></a>
+    <a href="https://www.npmjs.com/package/@pleaseai/csp"><img src="https://img.shields.io/npm/v/@pleaseai/csp?color=%23007ec6&label=npm" alt="npm version"></a>
+    <a href="https://crates.io/crates/code-search-please"><img src="https://img.shields.io/crates/v/code-search-please?color=%23dea584&label=crates.io" alt="crates.io version"></a>
+    <a href="https://codecov.io/gh/pleaseai/code-search"><img src="https://img.shields.io/codecov/c/github/pleaseai/code-search?label=coverage" alt="Coverage"></a>
+    <a href="https://socket.dev/npm/package/@pleaseai/csp"><img src="https://socket.dev/api/badge/npm/package/@pleaseai/csp" alt="Socket Badge"></a>
     <a href="https://github.com/pleaseai/code-search/blob/main/LICENSE">
       <img src="https://img.shields.io/badge/license-MIT-green" alt="License - MIT">
     </a>
@@ -442,7 +445,12 @@ Explicit index paths written with `csp index -o <path>` are not part of the auto
 <details>
 <summary>Library usage</summary>
 
-`csp` is also a Rust library crate (`csp`, in [`crates/csp`](crates/csp)), useful when building custom tooling or integrating search directly into your own Rust code. It exposes `CspIndex` with `from_path` / `from_git` / `search` / `find_related`, plus the `ContentType` enum and the ranking pipeline.
+`csp` is also a Rust library crate, published on crates.io as [**`code-search-please`**](https://crates.io/crates/code-search-please) (the short name `csp` was already taken). The library name stays `csp`, so you depend on `code-search-please` but still write `use csp::...`. It exposes `CspIndex` with `from_path` / `from_git` / `search` / `find_related`, plus the `ContentType` enum and the ranking pipeline.
+
+```toml
+[dependencies]
+code-search-please = "0.1"
+```
 
 ```rust
 use std::path::Path;
@@ -457,7 +465,7 @@ for r in &results {
 }
 ```
 
-> Publishing the crate to [crates.io](https://crates.io) is planned; until then, depend on it by path or git. (The npm package ships only the `csp` binary behind a launcher — it does not expose a JavaScript API.)
+> The crate is published on crates.io as [`code-search-please`](https://crates.io/crates/code-search-please) with the library name `csp`. (The npm package ships only the `csp` binary behind a launcher — it does not expose a JavaScript API.)
 
 </details>
 
