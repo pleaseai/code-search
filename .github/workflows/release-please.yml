@@ -100,7 +100,10 @@ jobs:
   # npmjs.com pointing at this repo + workflow (release-please.yml).
   publish-npm:
     needs: [release-please, build-and-upload]
-    if: ${{ needs.release-please.outputs.release_created }}
+    # always(): publish whatever targets reached the release even if one build
+    # leg failed. The generator is partial-matrix-tolerant (only present targets
+    # are pinned in optionalDependencies) and fails loudly if nothing built.
+    if: ${{ always() && needs.release-please.outputs.release_created }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -149,7 +152,9 @@ jobs:
 
   update-homebrew-formula:
     needs: [release-please, build-and-upload]
-    if: ${{ needs.release-please.outputs.release_created }}
+    # always(): the formula only needs the 4 darwin/linux-gnu assets, so a musl
+    # build failure shouldn't block it. Fails on its own if a core asset is missing.
+    if: ${{ always() && needs.release-please.outputs.release_created }}
     runs-on: ubuntu-latest
 
     steps:
@@ -180,14 +185,17 @@ jobs:
           VERSION=${{ needs.release-please.outputs.tag_name }}
           VERSION_NO_V=${VERSION#v}
 
-          # Download checksums
-          curl -L -o darwin-x64.sha256 \
+          # Download checksums. -f makes curl fail (non-zero) on a 404 instead of
+          # writing an HTML error page into the .sha256 file — so when a core
+          # target is missing under always(), this job hard-fails rather than
+          # baking a corrupt checksum into the formula.
+          curl -fLsS -o darwin-x64.sha256 \
             "https://github.com/${{ github.repository }}/releases/download/${VERSION}/csp-darwin-x64.sha256"
-          curl -L -o darwin-arm64.sha256 \
+          curl -fLsS -o darwin-arm64.sha256 \
             "https://github.com/${{ github.repository }}/releases/download/${VERSION}/csp-darwin-arm64.sha256"
-          curl -L -o linux-x64.sha256 \
+          curl -fLsS -o linux-x64.sha256 \
             "https://github.com/${{ github.repository }}/releases/download/${VERSION}/csp-linux-x64.sha256"
-          curl -L -o linux-arm64.sha256 \
+          curl -fLsS -o linux-arm64.sha256 \
             "https://github.com/${{ github.repository }}/releases/download/${VERSION}/csp-linux-arm64.sha256"
 
           # Extract checksums
