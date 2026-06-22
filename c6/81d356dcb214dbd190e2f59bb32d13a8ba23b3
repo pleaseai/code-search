@@ -1,0 +1,21 @@
+.github/workflows/release-please.yml
+  s_322ba70b9710f0::t_5e037062875049 188-192,194,196,198
+.github/workflows/release-rust.yml
+  s_322ba70b9710f0::t_2707d63d1f41d4 86-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "c681d356dcb214dbd190e2f59bb32d13a8ba23b3",
+  "prompts": {},
+  "sessions": {
+    "s_322ba70b9710f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "45abfaff-51a0-472b-9a15-bee022b13534",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
