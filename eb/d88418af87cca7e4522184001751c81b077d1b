@@ -1,0 +1,22 @@
+npm/scripts/generate-platform-packages.mjs
+  s_322ba70b9710f0::t_b4ead2a3d84f77 94-100
+npm/README.md
+  s_322ba70b9710f0::t_6d074f9efab782 40,44-45,47-49
+  s_322ba70b9710f0::t_bea410cfb7a80d 1,3-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "ebd88418af87cca7e4522184001751c81b077d1b",
+  "prompts": {},
+  "sessions": {
+    "s_322ba70b9710f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "45abfaff-51a0-472b-9a15-bee022b13534",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
