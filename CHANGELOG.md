@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/pleaseai/code-search/compare/v0.1.0...v0.1.1) (2026-06-22)
+
+
+### Bug Fixes
+
+* **release:** sync Cargo.lock on release so --locked builds pass ([#43](https://github.com/pleaseai/code-search/issues/43)) ([257378c](https://github.com/pleaseai/code-search/commit/257378c0ca1ebcfca7615be3283b53ac95b1f3a1))
+
 ## 0.1.0 (2026-06-20)
 
 
