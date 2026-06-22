@@ -6,7 +6,8 @@
 
 <div align="center">
   <h2>
-    <a href="https://www.npmjs.com/package/@pleaseai/csp"><img src="https://img.shields.io/npm/v/@pleaseai/csp?color=%23007ec6&label=npm%20package" alt="Package version"></a>
+    <a href="https://www.npmjs.com/package/@pleaseai/csp"><img src="https://img.shields.io/npm/v/@pleaseai/csp?color=%23007ec6&label=npm" alt="npm version"></a>
+    <a href="https://crates.io/crates/code-search-please"><img src="https://img.shields.io/crates/v/code-search-please?color=%23dea584&label=crates.io" alt="crates.io version"></a>
     <a href="https://github.com/pleaseai/code-search/blob/main/LICENSE">
       <img src="https://img.shields.io/badge/license-MIT-green" alt="License - MIT">
     </a>
