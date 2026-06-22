@@ -8,7 +8,7 @@ resolver = "2"
 members = ["crates/csp", "crates/csp-cli"]
 
 [workspace.package]
-version = "0.1.3" # x-release-please-version
+version = "0.1.4" # x-release-please-version
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/pleaseai/code-search"
