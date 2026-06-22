@@ -8,4 +8,4 @@
 // Kept in sync with `package.json#version` by release-please via the
 // `x-release-please-version` annotation below (see release-please-config.json
 // `extra-files`).
-export const version = '0.1.1' // x-release-please-version
+export const version = '0.1.2' // x-release-please-version
