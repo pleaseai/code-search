@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/pleaseai/code-search/compare/v0.1.1...v0.1.2) (2026-06-22)
+
+
+### Bug Fixes
+
+* **release:** build musl via cargo-zigbuild + make release resilient ([#46](https://github.com/pleaseai/code-search/issues/46)) ([ec7fbb3](https://github.com/pleaseai/code-search/commit/ec7fbb3b82d32e29ec9635066ad7d5f2b4d5a5ac))
+
 ## [0.1.1](https://github.com/pleaseai/code-search/compare/v0.1.0...v0.1.1) (2026-06-22)
 
 
