@@ -445,7 +445,7 @@ csp clear all      # 인덱스 캐시와 savings 모두 삭제
 <details>
 <summary>라이브러리 사용</summary>
 
-`csp`는 Rust 라이브러리 크레이트로도 사용할 수 있습니다. 짧은 이름 `csp`가 이미 선점되어 [crates.io](https://crates.io/crates/code-search-please)에는 **`code-search-please`** 로 배포됩니다. 라이브러리 이름은 `csp` 그대로이므로 의존성은 `code-search-please`로 추가하되 코드에서는 `use csp::...`를 씁니다. `CspIndex`(`from_path` / `from_git` / `search` / `find_related`)와 `ContentType` enum, 랭킹 파이프라인을 노출합니다.
+`csp`는 Rust 라이브러리 크레이트로도 사용할 수 있습니다. 짧은 이름 `csp`가 이미 선점되어 있어 crates.io에는 [**`code-search-please`**](https://crates.io/crates/code-search-please)로 배포됩니다. 라이브러리 이름은 `csp` 그대로이므로 의존성은 `code-search-please`로 추가하되 코드에서는 `use csp::...`를 씁니다. `CspIndex`(`from_path` / `from_git` / `search` / `find_related`)와 `ContentType` enum, 랭킹 파이프라인을 노출합니다.
 
 ```toml
 [dependencies]
