@@ -61,6 +61,25 @@ jobs:
             git push origin HEAD:${{ fromJson(steps.release.outputs.pr).headBranchName }}
           fi
 
+      # release-please bumps the workspace version in Cargo.toml (via the
+      # x-release-please-version annotation) but does not touch Cargo.lock, so
+      # the csp/csp-cli entries stay at the previous version and the release
+      # build's `cargo build --locked` fails. Refresh the member versions in the
+      # lockfile and commit it into the release PR. Mirrors the bun.lock sync.
+      - name: Sync Cargo.lock
+        if: ${{ steps.release.outputs.pr }}
+        run: |
+          cargo update -p csp -p csp-cli
+          if git diff --quiet Cargo.lock; then
+            echo "Cargo.lock already in sync"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add Cargo.lock
+            git commit -m "chore: sync Cargo.lock"
+            git push origin HEAD:${{ fromJson(steps.release.outputs.pr).headBranchName }}
+          fi
+
   # Build the Rust binaries (6 targets) and upload them to the release that
   # release-please just created. Reuses release-rust.yml so the cross-compile
   # matrix lives in one place (ADR-0003 cut-over — this replaces the former
