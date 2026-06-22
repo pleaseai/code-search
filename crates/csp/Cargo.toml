@@ -1,11 +1,23 @@
+# Published to crates.io as `code-search-please` because the short name `csp`
+# is already taken by an unrelated crate. The library name stays `csp` (see
+# `[lib]`), so downstream code still writes `use csp::...` — matching the README
+# example and the `@pleaseai/csp` npm package.
 [package]
-name = "csp"
+name = "code-search-please"
 description = "Hybrid code search for agents — core library (Rust rewrite of MinishLab/semble)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+homepage = "https://github.com/pleaseai/code-search"
+documentation = "https://docs.rs/code-search-please"
+readme = "README.md"
+keywords = ["code-search", "search", "embeddings", "bm25", "agents"]
+categories = ["development-tools", "text-processing"]
+
+[lib]
+name = "csp"
 
 [dependencies]
 # Populated per the ADR-0003 migration phases.

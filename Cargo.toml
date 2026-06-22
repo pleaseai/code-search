@@ -17,7 +17,9 @@ authors = ["csp maintainers"]
 # Planned dependency menu (ADR-0003 crate mapping). Member crates opt in
 # phase by phase with `<dep>.workspace = true`; listing here does not fetch.
 [workspace.dependencies]
-csp = { path = "crates/csp" }
+# Published as `code-search-please`; the `csp` key keeps `use csp::...` working
+# in member crates (the lib name stays `csp` via crates/csp `[lib]`).
+csp = { path = "crates/csp", package = "code-search-please" }
 model2vec-rs = "0.2"   # Phase 3 — dense embeddings (official MinishLab port)
 tree-sitter = "0.26"   # Phase 2 — AST chunking
 ignore = "0.4"         # Phase 3 — .gitignore / .cspignore file walking
