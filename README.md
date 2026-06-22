@@ -22,7 +22,7 @@ English | [한국어](./README.ko.md)
 
 </div>
 
-> **TypeScript port.** `csp` is a TypeScript/Bun port of [MinishLab/semble](https://github.com/MinishLab/semble) — an excellent code search library originally written in Python. All credit for the algorithm and design goes to the Semble authors. This port focuses on shipping the same capabilities to the JavaScript/TypeScript ecosystem.
+> **Rust port.** `csp` is a Rust port of [MinishLab/semble](https://github.com/MinishLab/semble) — an excellent code search library originally written in Python. All credit for the algorithm and design goes to the Semble authors. The Rust binary is distributed as a self-contained executable via Homebrew and npm (no runtime required for the Homebrew build).
 
 `csp` is a code search library built for agents. It returns the exact code snippets they need instantly, using ~98% fewer tokens than grep+read. Indexing and searching a full codebase end-to-end takes under a second. Everything runs locally on CPU with no API keys, GPU, or external services. Run it as an [MCP server](#mcp-server) or call it from the shell via [AGENTS.md](#agentsmd) and any agent (Claude Code, Cursor, Codex, OpenCode, etc.) gets instant access to any repo.
 
@@ -80,7 +80,7 @@ npm install -g @pleaseai/csp # Or with npm
 pnpm add -g @pleaseai/csp    # Or with pnpm
 ```
 
-> The Homebrew formula ships a self-contained binary built with `bun build --compile` (tree-sitter and embedding runtimes are bundled). Indexes are cached under `~/.csp/` (see [ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md)).
+> The Homebrew formula ships a self-contained Rust binary (`cargo build --release`; tree-sitter grammars and the embedding runtime are built in), so it needs no Node/Bun at runtime. The npm package ships the same binary behind a small Node launcher, so the `npm`/`bun`/`pnpm` install path needs Bun or Node 22+ on your `PATH`. Indexes are cached under `~/.csp/` (see [ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md)).
 
 <details>
 <summary>AGENTS.md / CLAUDE.md snippet</summary>
@@ -171,7 +171,7 @@ pnpm update -g @pleaseai/csp         # with pnpm
 - **Zero setup**: runs on CPU with no API keys, GPU, or external services required.
 - **MCP server**: works with Claude Code, Cursor, Codex, OpenCode, VS Code, and any other MCP-compatible agent.
 - **Local and remote**: pass a local path or a git URL.
-- **Bun-native**: built and tested on [Bun](https://bun.com); runs on Node.js 22+ as well.
+- **Single binary**: a self-contained [Rust](https://www.rust-lang.org/) executable — install via Homebrew with no runtime, or via npm/bun/pnpm (Node 22+ or Bun on `PATH`).
 
 ## MCP Server
 
@@ -442,47 +442,21 @@ Explicit index paths written with `csp index -o <path>` are not part of the auto
 <details>
 <summary>Library usage</summary>
 
-`csp` can also be used as a TypeScript/JavaScript library for programmatic access, useful when building custom tooling or integrating search directly into your own code.
+`csp` is also a Rust library crate (`csp`, in [`crates/csp`](crates/csp)), useful when building custom tooling or integrating search directly into your own Rust code. It exposes `CspIndex` with `from_path` / `from_git` / `search` / `find_related`, plus the `ContentType` enum and the ranking pipeline.
 
-```ts
-import { ContentType, CspIndex } from '@pleaseai/csp'
+```rust
+use csp::indexing::index::{CspIndex, LoadOptions, QueryOptions};
 
-// Index a local directory (code only, the default)
-const index = await CspIndex.fromPath('./my-project')
+// Index a local directory and search it
+let index = CspIndex::from_path("./my-project".as_ref(), &LoadOptions::default())?;
+let results = index.search("save model to disk", &QueryOptions { top_k: 3, ..Default::default() });
 
-// Index docs and prose (markdown, rst, etc.)
-const docsIndex = await CspIndex.fromPath('./my-project', {
-  content: ContentType.DOCS,
-})
-
-// Index everything (code, docs, and config)
-const allIndex = await CspIndex.fromPath('./my-project', {
-  content: [ContentType.CODE, ContentType.DOCS, ContentType.CONFIG],
-})
-
-// Index code and docs together
-const codeDocsIndex = await CspIndex.fromPath('./my-project', {
-  content: [ContentType.CODE, ContentType.DOCS],
-})
-
-// Index a remote git repository
-const remoteIndex = await CspIndex.fromGit(
-  'https://github.com/MinishLab/model2vec',
-)
-
-// Search the index with a natural-language or code query
-const results = await index.search('save model to disk', { topK: 3 })
-
-// Find code similar to a specific result
-const related = await index.findRelated(results[0], { topK: 3 })
-
-// Each result exposes the matched chunk
-const result = results[0]
-result.chunk.filePath // "src/model.ts"
-result.chunk.startLine // 127
-result.chunk.endLine // 150
-result.chunk.content // "export function saveCheckpoint(path: string, ..."
+for r in &results {
+    println!("{}:{}-{}", r.chunk.file_path, r.chunk.start_line, r.chunk.end_line);
+}
 ```
+
+> Publishing the crate to [crates.io](https://crates.io) is planned; until then, depend on it by path or git. (The npm package ships only the `csp` binary behind a launcher — it does not expose a JavaScript API.)
 
 </details>
 
@@ -507,17 +481,18 @@ Because the embedding model is static with no transformer forward pass at query 
 
 ## Development
 
+The library and `csp` binary are a Cargo workspace (`crates/csp`, `crates/csp-cli`):
+
 ```bash
-bun install        # install dependencies
-bun run build      # build with tsdown
-bun run typecheck  # type check
-bun run lint       # lint with @pleaseai/eslint-config
-bun test           # run tests
+cargo build --release          # build the csp binary
+cargo test --workspace         # run tests
+cargo fmt --all                # format
+cargo clippy --all-targets --all-features -- -D warnings   # lint
 ```
 
 ## Credits
 
-`csp` is a TypeScript port of [Semble](https://github.com/MinishLab/semble) by [Thomas van Dongen](https://github.com/Pringled) and [Stéphan Tulkens](https://github.com/stephantul) at [MinishLab](https://github.com/MinishLab). The algorithm, ranking signals, and overall architecture are theirs; this project simply brings them to the JavaScript/TypeScript ecosystem.
+`csp` is a Rust port of [Semble](https://github.com/MinishLab/semble) by [Thomas van Dongen](https://github.com/Pringled) and [Stéphan Tulkens](https://github.com/stephantul) at [MinishLab](https://github.com/MinishLab). The algorithm, ranking signals, and overall architecture are theirs; this project simply brings them to Rust.
 
 If you use the underlying ideas in your research, please cite the original Semble paper:
 

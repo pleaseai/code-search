@@ -22,7 +22,7 @@
 
 </div>
 
-> **TypeScript 포트.** `csp`는 Python으로 작성된 [MinishLab/semble](https://github.com/MinishLab/semble)의 TypeScript/Bun 포트입니다. 알고리즘과 설계의 모든 공로는 원저자에게 있으며, 본 프로젝트는 동일한 기능을 JavaScript/TypeScript 생태계로 이식하는 데 목적이 있습니다.
+> **Rust 포트.** `csp`는 Python으로 작성된 [MinishLab/semble](https://github.com/MinishLab/semble)의 Rust 포트입니다. 알고리즘과 설계의 모든 공로는 원저자에게 있습니다. Rust 바이너리는 Homebrew와 npm으로 배포되는 자체 완결형 실행 파일입니다(Homebrew 빌드는 런타임이 필요 없음).
 
 `csp`는 에이전트를 위해 설계된 코드 검색 라이브러리입니다. 필요한 코드 스니펫을 즉시 반환하며, `grep` + `read` 조합 대비 약 **98% 적은 토큰**만 사용합니다. 전체 코드베이스의 인덱싱과 검색이 1초 이내에 끝나며, API 키, GPU, 외부 서비스 없이 CPU 위에서만 동작합니다. [MCP 서버](#mcp-서버)로 실행하거나 [AGENTS.md](#agentsmd) 안내로 셸에서 호출하면 Claude Code, Cursor, Codex, OpenCode 등 어떤 에이전트라도 임의의 리포지토리에 즉시 접근할 수 있습니다.
 
@@ -80,7 +80,7 @@ npm install -g @pleaseai/csp # 또는 npm
 pnpm add -g @pleaseai/csp    # 또는 pnpm
 ```
 
-> Homebrew formula는 `bun build --compile`로 만든 자체 완결형 바이너리를 제공합니다(tree-sitter·임베딩 런타임 내장). 인덱스는 `~/.csp/`에 캐시됩니다([ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md) 참고).
+> Homebrew formula는 자체 완결형 Rust 바이너리를 제공합니다(`cargo build --release`; tree-sitter 문법·임베딩 런타임 내장)므로 런타임에 Node/Bun이 필요 없습니다. npm 패키지는 동일한 바이너리를 작은 Node 런처 뒤에 담아 배포하므로, `npm`/`bun`/`pnpm` 설치 경로는 `PATH`에 Bun 또는 Node 22+가 필요합니다. 인덱스는 `~/.csp/`에 캐시됩니다([ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md) 참고).
 
 <details>
 <summary>AGENTS.md / CLAUDE.md 스니펫</summary>
@@ -171,7 +171,7 @@ pnpm update -g @pleaseai/csp    # pnpm
 - **제로 셋업**: API 키, GPU, 외부 서비스 없이 CPU에서 동작합니다.
 - **MCP 서버**: Claude Code, Cursor, Codex, OpenCode, VS Code 등 MCP 호환 에이전트와 함께 사용 가능합니다.
 - **로컬 / 원격**: 로컬 경로 또는 git URL을 모두 받습니다.
-- **Bun 친화**: [Bun](https://bun.com)으로 빌드되고 테스트되며, Node.js 22+에서도 동작합니다.
+- **단일 바이너리**: 자체 완결형 [Rust](https://www.rust-lang.org/) 실행 파일 — Homebrew로는 런타임 없이 설치하거나, npm/bun/pnpm으로 설치(`PATH`에 Node 22+ 또는 Bun 필요).
 
 ## MCP 서버
 
@@ -442,47 +442,21 @@ csp clear all      # 인덱스 캐시와 savings 모두 삭제
 <details>
 <summary>라이브러리 사용</summary>
 
-`csp`는 TypeScript/JavaScript 라이브러리로도 사용할 수 있습니다. 자체 도구를 만들거나 검색을 코드에 직접 통합할 때 유용합니다.
+`csp`는 Rust 라이브러리 크레이트(`csp`, [`crates/csp`](crates/csp))로도 사용할 수 있습니다. 자체 도구를 만들거나 검색을 Rust 코드에 직접 통합할 때 유용합니다. `CspIndex`(`from_path` / `from_git` / `search` / `find_related`)와 `ContentType` enum, 랭킹 파이프라인을 노출합니다.
 
-```ts
-import { ContentType, CspIndex } from '@pleaseai/csp'
+```rust
+use csp::indexing::index::{CspIndex, LoadOptions, QueryOptions};
 
-// 로컬 디렉터리 인덱싱 (기본: 코드만)
-const index = await CspIndex.fromPath('./my-project')
+// 로컬 디렉터리를 인덱싱하고 검색
+let index = CspIndex::from_path("./my-project".as_ref(), &LoadOptions::default())?;
+let results = index.search("save model to disk", &QueryOptions { top_k: 3, ..Default::default() });
 
-// 문서와 산문 인덱싱 (markdown, rst 등)
-const docsIndex = await CspIndex.fromPath('./my-project', {
-  content: ContentType.DOCS,
-})
-
-// 전체 인덱싱 (코드 + 문서 + 설정)
-const allIndex = await CspIndex.fromPath('./my-project', {
-  content: [ContentType.CODE, ContentType.DOCS, ContentType.CONFIG],
-})
-
-// 코드와 문서만 함께
-const codeDocsIndex = await CspIndex.fromPath('./my-project', {
-  content: [ContentType.CODE, ContentType.DOCS],
-})
-
-// 원격 git 리포지토리 인덱싱
-const remoteIndex = await CspIndex.fromGit(
-  'https://github.com/MinishLab/model2vec',
-)
-
-// 자연어 또는 코드 쿼리로 검색
-const results = await index.search('save model to disk', { topK: 3 })
-
-// 특정 결과와 비슷한 코드 찾기
-const related = await index.findRelated(results[0], { topK: 3 })
-
-// 각 결과는 매칭된 청크를 노출합니다
-const result = results[0]
-result.chunk.filePath // "src/model.ts"
-result.chunk.startLine // 127
-result.chunk.endLine // 150
-result.chunk.content // "export function saveCheckpoint(path: string, ..."
+for r in &results {
+    println!("{}:{}-{}", r.chunk.file_path, r.chunk.start_line, r.chunk.end_line);
+}
 ```
+
+> 크레이트의 [crates.io](https://crates.io) 배포는 예정되어 있습니다. 그 전까지는 path 또는 git 의존으로 사용하세요. (npm 패키지는 `csp` 바이너리를 런처 뒤에 담아 배포할 뿐, JavaScript API를 노출하지 않습니다.)
 
 </details>
 
@@ -507,17 +481,18 @@ result.chunk.content // "export function saveCheckpoint(path: string, ..."
 
 ## 개발
 
+라이브러리와 `csp` 바이너리는 Cargo 워크스페이스입니다(`crates/csp`, `crates/csp-cli`):
+
 ```bash
-bun install        # 의존성 설치
-bun run build      # tsdown으로 빌드
-bun run typecheck  # 타입 체크
-bun run lint       # @pleaseai/eslint-config로 린트
-bun test           # 테스트 실행
+cargo build --release          # csp 바이너리 빌드
+cargo test --workspace         # 테스트 실행
+cargo fmt --all                # 포맷
+cargo clippy --all-targets --all-features -- -D warnings   # 린트
 ```
 
 ## 크레딧
 
-`csp`는 [MinishLab](https://github.com/MinishLab)의 [Thomas van Dongen](https://github.com/Pringled)과 [Stéphan Tulkens](https://github.com/stephantul)가 만든 [Semble](https://github.com/MinishLab/semble)의 TypeScript 포트입니다. 알고리즘, 랭킹 신호, 전체 아키텍처의 공로는 모두 원저자에게 있으며, 본 프로젝트는 이를 JavaScript/TypeScript 생태계로 이식한 것입니다.
+`csp`는 [MinishLab](https://github.com/MinishLab)의 [Thomas van Dongen](https://github.com/Pringled)과 [Stéphan Tulkens](https://github.com/stephantul)가 만든 [Semble](https://github.com/MinishLab/semble)의 Rust 포트입니다. 알고리즘, 랭킹 신호, 전체 아키텍처의 공로는 모두 원저자에게 있으며, 본 프로젝트는 이를 Rust로 이식한 것입니다.
 
 연구에서 핵심 아이디어를 인용하시려면 원본 Semble 논문을 인용해 주세요.
 
