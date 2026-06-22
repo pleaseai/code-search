@@ -445,11 +445,12 @@ csp clear all      # 인덱스 캐시와 savings 모두 삭제
 `csp`는 Rust 라이브러리 크레이트(`csp`, [`crates/csp`](crates/csp))로도 사용할 수 있습니다. 자체 도구를 만들거나 검색을 Rust 코드에 직접 통합할 때 유용합니다. `CspIndex`(`from_path` / `from_git` / `search` / `find_related`)와 `ContentType` enum, 랭킹 파이프라인을 노출합니다.
 
 ```rust
+use std::path::Path;
 use csp::indexing::index::{CspIndex, LoadOptions, QueryOptions};
 
 // 로컬 디렉터리를 인덱싱하고 검색
-let index = CspIndex::from_path("./my-project".as_ref(), &LoadOptions::default())?;
-let results = index.search("save model to disk", &QueryOptions { top_k: 3, ..Default::default() });
+let index = CspIndex::from_path(Path::new("./my-project"), &LoadOptions::default())?;
+let results = index.search("save model to disk", &QueryOptions { top_k: Some(3), ..Default::default() });
 
 for r in &results {
     println!("{}:{}-{}", r.chunk.file_path, r.chunk.start_line, r.chunk.end_line);

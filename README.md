@@ -445,11 +445,12 @@ Explicit index paths written with `csp index -o <path>` are not part of the auto
 `csp` is also a Rust library crate (`csp`, in [`crates/csp`](crates/csp)), useful when building custom tooling or integrating search directly into your own Rust code. It exposes `CspIndex` with `from_path` / `from_git` / `search` / `find_related`, plus the `ContentType` enum and the ranking pipeline.
 
 ```rust
+use std::path::Path;
 use csp::indexing::index::{CspIndex, LoadOptions, QueryOptions};
 
 // Index a local directory and search it
-let index = CspIndex::from_path("./my-project".as_ref(), &LoadOptions::default())?;
-let results = index.search("save model to disk", &QueryOptions { top_k: 3, ..Default::default() });
+let index = CspIndex::from_path(Path::new("./my-project"), &LoadOptions::default())?;
+let results = index.search("save model to disk", &QueryOptions { top_k: Some(3), ..Default::default() });
 
 for r in &results {
     println!("{}:{}-{}", r.chunk.file_path, r.chunk.start_line, r.chunk.end_line);
