@@ -1,0 +1,25 @@
+.github/workflows/release-please.yml
+  s_322ba70b9710f0::t_e434040e473391 279-310
+crates/csp/Cargo.toml
+  s_322ba70b9710f0::t_bdff499b4958bf 1-4,6,13-20
+Cargo.toml
+  s_322ba70b9710f0::t_7843abcbe4df32 20-22
+crates/csp/README.md
+  s_322ba70b9710f0::t_f6b3d621076e4e 1-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "ceefff12e045fd0f0207ed87f1790ea61f87d1d9",
+  "prompts": {},
+  "sessions": {
+    "s_322ba70b9710f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "45abfaff-51a0-472b-9a15-bee022b13534",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
