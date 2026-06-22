@@ -118,9 +118,11 @@ jobs:
           persist-credentials: false
 
       # Trusted Publishing requires npm >= 11.5.1; ubuntu-latest ships npm 10.x
-      # with Node 22, so upgrade the CLI before publishing.
+      # with Node 22, so upgrade the CLI before publishing. The global prefix
+      # (/usr/local) is root-owned, so installing a new global npm needs sudo —
+      # without it npm fails with EACCES on /usr/local/share/man.
       - name: Upgrade npm for Trusted Publishing
-        run: npm install -g npm@latest
+        run: sudo npm install -g npm@latest
 
       - name: Download released binaries
         env:
