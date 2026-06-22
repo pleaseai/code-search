@@ -1,0 +1,20 @@
+npm/scripts/generate-platform-packages.mjs
+  s_322ba70b9710f0::t_b12cdf59fed055 77-80
+  s_322ba70b9710f0::t_d3ecffae825621 41-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "51d2f2ce5f978a0b67fee319a7dbfc362ee8e3c1",
+  "prompts": {},
+  "sessions": {
+    "s_322ba70b9710f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "45abfaff-51a0-472b-9a15-bee022b13534",
+        "model": "unknown"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
