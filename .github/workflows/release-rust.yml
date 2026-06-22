@@ -83,8 +83,16 @@ jobs:
         if: ${{ endsWith(matrix.target, '-musl') }}
         run: |
           ZIG_VERSION=0.13.0
-          curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" \
-            | tar -xJ -C "$RUNNER_TEMP"
+          # Zig signs releases with minisign (not SHA checksums). Verify the
+          # tarball against the official ziglang.org public key before extracting
+          # and executing it, so a compromised mirror/MITM can't inject a binary.
+          ZIG_PUBKEY="RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U"
+          TARBALL="zig-linux-x86_64-${ZIG_VERSION}.tar.xz"
+          sudo apt-get update && sudo apt-get install -y minisign
+          curl -fsSLO "https://ziglang.org/download/${ZIG_VERSION}/${TARBALL}"
+          curl -fsSLO "https://ziglang.org/download/${ZIG_VERSION}/${TARBALL}.minisig"
+          minisign -Vm "${TARBALL}" -P "${ZIG_PUBKEY}"
+          tar -xJf "${TARBALL}" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/zig-linux-x86_64-${ZIG_VERSION}" >> "$GITHUB_PATH"
           cargo install --locked cargo-zigbuild --version '^0.19'
 

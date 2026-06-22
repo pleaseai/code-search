@@ -185,14 +185,17 @@ jobs:
           VERSION=${{ needs.release-please.outputs.tag_name }}
           VERSION_NO_V=${VERSION#v}
 
-          # Download checksums
-          curl -L -o darwin-x64.sha256 \
+          # Download checksums. -f makes curl fail (non-zero) on a 404 instead of
+          # writing an HTML error page into the .sha256 file — so when a core
+          # target is missing under always(), this job hard-fails rather than
+          # baking a corrupt checksum into the formula.
+          curl -fLsS -o darwin-x64.sha256 \
             "https://github.com/${{ github.repository }}/releases/download/${VERSION}/csp-darwin-x64.sha256"
-          curl -L -o darwin-arm64.sha256 \
+          curl -fLsS -o darwin-arm64.sha256 \
             "https://github.com/${{ github.repository }}/releases/download/${VERSION}/csp-darwin-arm64.sha256"
-          curl -L -o linux-x64.sha256 \
+          curl -fLsS -o linux-x64.sha256 \
             "https://github.com/${{ github.repository }}/releases/download/${VERSION}/csp-linux-x64.sha256"
-          curl -L -o linux-arm64.sha256 \
+          curl -fLsS -o linux-arm64.sha256 \
             "https://github.com/${{ github.repository }}/releases/download/${VERSION}/csp-linux-arm64.sha256"
 
           # Extract checksums
