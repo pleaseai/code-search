@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/pleaseai/code-search/compare/v0.1.2...v0.1.3) (2026-06-22)
+
+
+### Bug Fixes
+
+* **release:** set GH_REPO so upload-release-assets can find the repo ([#48](https://github.com/pleaseai/code-search/issues/48)) ([dcfd873](https://github.com/pleaseai/code-search/commit/dcfd87350df7ee01b8df47b970d739234b9c0fdf))
+
 ## [0.1.2](https://github.com/pleaseai/code-search/compare/v0.1.1...v0.1.2) (2026-06-22)
 
 
