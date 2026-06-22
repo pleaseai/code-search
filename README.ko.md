@@ -9,6 +9,7 @@
     <a href="https://www.npmjs.com/package/@pleaseai/csp"><img src="https://img.shields.io/npm/v/@pleaseai/csp?color=%23007ec6&label=npm" alt="npm version"></a>
     <a href="https://crates.io/crates/code-search-please"><img src="https://img.shields.io/crates/v/code-search-please?color=%23dea584&label=crates.io" alt="crates.io version"></a>
     <a href="https://codecov.io/gh/pleaseai/code-search"><img src="https://img.shields.io/codecov/c/github/pleaseai/code-search?label=coverage" alt="Coverage"></a>
+    <a href="https://socket.dev/npm/package/@pleaseai/csp"><img src="https://socket.dev/api/badge/npm/package/@pleaseai/csp" alt="Socket Badge"></a>
     <a href="https://github.com/pleaseai/code-search/blob/main/LICENSE">
       <img src="https://img.shields.io/badge/license-MIT-green" alt="License - MIT">
     </a>
