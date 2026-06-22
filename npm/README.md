@@ -1,11 +1,11 @@
-# npm distribution wrapper (Rust migration scaffold)
+# npm distribution wrapper
 
-> Status: **scaffold** — authored for ADR-0003 / track `rust-rewrite-20260618`
-> (T023). Not yet wired into the live publish. The published `@pleaseai/csp`
-> package on npm is still produced from the TypeScript build (root `package.json`,
-> `dist/cli.mjs`). Cut over to this wrapper only when the Rust binary reaches full
-> runtime parity and the Rust release pipeline (`.github/workflows/release-rust.yml`)
-> is producing verified `csp-<target>` assets.
+> Status: **live** (since v0.1.4). The published `@pleaseai/csp` package is the
+> Rust-binary wrapper generated from this directory by
+> `scripts/generate-platform-packages.mjs` and published via npm Trusted
+> Publishing in `.github/workflows/release-please.yml`. The generator ships the
+> repo-root `README.md` + `LICENSE` inside the wrapper so the npm page renders
+> docs. This internal note documents the layout; it is not published.
 
 ## Goal
 
@@ -37,11 +37,13 @@ follows the [Biome](https://github.com/biomejs/biome) distribution model:
   per-platform package directories from the built `csp-<target>` assets and the
   release version, ready to `npm publish --provenance` each one.
 
-## Release flow (once activated)
+## Release flow
 
 1. `release-rust.yml` builds `csp-<target>` binaries + checksums.
 2. `node npm/scripts/generate-platform-packages.mjs <version> <assets-dir>`
-   materializes `npm/dist/<pkg>/` for each platform.
+   materializes `npm/dist/<pkg>/` for each platform (and the wrapper, with the
+   repo-root `README.md` + `LICENSE` copied in).
 3. Publish each platform package, then the wrapper, with
-   `npm publish ./<pkg> --provenance --access public` (CI: `id-token: write`).
-   Per repo policy, use `npm publish` for provenance — not `bun publish`.
+   `npm publish ./<pkg> --access public` (CI: `id-token: write`). Auth is npm
+   Trusted Publishing (OIDC) — no token, and provenance is generated
+   automatically, so no `--provenance` flag is needed.

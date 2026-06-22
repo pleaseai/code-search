@@ -91,4 +91,11 @@ const wrapperDir = join(distRoot, 'csp')
 mkdirSync(join(wrapperDir, 'bin'), { recursive: true })
 writeFileSync(join(wrapperDir, 'package.json'), `${JSON.stringify(wrapper, null, 2)}\n`)
 copyFileSync(join(npmRoot, 'csp', 'bin', 'csp.js'), join(wrapperDir, 'bin', 'csp.js'))
+
+// Ship the user-facing README + LICENSE in the published wrapper so the npm
+// package page renders docs (without these, npm shows "No README data found").
+// npm always includes README.md / LICENSE regardless of the `files` allowlist.
+const repoRoot = resolve(npmRoot, '..')
+copyFileSync(join(repoRoot, 'README.md'), join(wrapperDir, 'README.md'))
+copyFileSync(join(repoRoot, 'LICENSE'), join(wrapperDir, 'LICENSE'))
 process.stdout.write(`wrote wrapper @pleaseai/csp@${version}\n`)
