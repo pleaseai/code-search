@@ -1,0 +1,64 @@
+{
+  "name": "@pleaseai/csp-sdk",
+  "version": "0.1.4",
+  "description": "In-process native (napi-rs) SDK for csp — fast, accurate hybrid code search for agents. Binds the Rust core directly (no subprocess). The CLI/MCP server ships separately as @pleaseai/csp.",
+  "license": "MIT",
+  "homepage": "https://github.com/pleaseai/code-search",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pleaseai/code-search.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pleaseai/code-search/issues"
+  },
+  "keywords": [
+    "code-search",
+    "hybrid-search",
+    "semantic-search",
+    "bm25",
+    "embeddings",
+    "agent",
+    "rag",
+    "napi-rs",
+    "native"
+  ],
+  "main": "index.js",
+  "types": "index.d.ts",
+  "type": "commonjs",
+  "napi": {
+    "name": "csp-sdk",
+    "triples": {
+      "defaults": true,
+      "additional": [
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-unknown-linux-musl"
+      ]
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "artifacts": "napi artifacts",
+    "prepublishOnly": "napi prepublish -t npm",
+    "version": "napi version"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.4"
+  },
+  "optionalDependencies": {
+    "@pleaseai/csp-sdk-darwin-arm64": "0.0.0",
+    "@pleaseai/csp-sdk-darwin-x64": "0.0.0",
+    "@pleaseai/csp-sdk-linux-arm64-gnu": "0.0.0",
+    "@pleaseai/csp-sdk-linux-x64-gnu": "0.0.0",
+    "@pleaseai/csp-sdk-linux-x64-musl": "0.0.0",
+    "@pleaseai/csp-sdk-win32-x64-msvc": "0.0.0"
+  }
+}

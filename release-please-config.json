@@ -29,12 +29,13 @@
           "jsonpath": "$.version"
         },
         {
-          "type": "generic",
-          "path": "Cargo.toml"
+          "type": "json",
+          "path": "crates/csp-node/package.json",
+          "jsonpath": "$.version"
         },
         {
           "type": "generic",
-          "path": "src/version.ts"
+          "path": "Cargo.toml"
         }
       ]
     }

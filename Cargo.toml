@@ -5,7 +5,7 @@
 # it is retired and this becomes the primary tree.
 [workspace]
 resolver = "2"
-members = ["crates/csp", "crates/csp-cli"]
+members = ["crates/csp", "crates/csp-cli", "crates/csp-node"]
 
 [workspace.package]
 version = "0.1.4" # x-release-please-version
@@ -36,6 +36,12 @@ fancy-regex = "0.16"   # Phase 1 — boosting definition patterns (lookbehind/lo
 indexmap = "2"         # Phase 1 — insertion-ordered score maps (Map<Chunk,number> parity)
 sha2 = "0.10"          # Phase 3 — content-hash cache keys (sha256, parity with node:crypto)
 tempfile = "3"         # Phase 3/4 — temp dirs (git clone checkout) + tests
+# napi-rs native SDK (separate distribution channel — the @pleaseai/csp-sdk npm
+# package; the CLI/MCP launcher under npm/ stays a standalone-binary shim). Only
+# crates/csp-node opts in; the core/CLI crates do not depend on napi.
+napi = "2"
+napi-derive = "2"
+napi-build = "2"
 
 # Single-binary release profile (ADR-0003 motivation #1).
 [profile.release]

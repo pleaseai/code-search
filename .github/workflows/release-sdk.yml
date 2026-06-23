@@ -1,0 +1,181 @@
+# napi-rs SDK release pipeline — the @pleaseai/csp-sdk in-process native addon.
+#
+# Distinct from release-rust.yml (which ships the standalone `csp` binary + its
+# npm launcher). This builds `csp-sdk.<platform>.node` for each target from
+# crates/csp-node, then publishes the wrapper + per-platform packages to npm via
+# Trusted Publishing (OIDC — no NPM_TOKEN; provenance is automatic).
+#
+# Runs two ways: manually (workflow_dispatch) for ad-hoc rebuilds, and as a
+# reusable workflow (workflow_call) invoked by release-please.yml on
+# release_created. Each per-platform package (@pleaseai/csp-sdk-*) and the
+# wrapper (@pleaseai/csp-sdk) must have a trusted publisher configured on
+# npmjs.com pointing at this repo + workflow before the publish job can succeed.
+
+name: Release (SDK)
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish to npm after building (needs trusted-publisher config). Leave false to only build artifacts.
+        required: false
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      publish:
+        description: Publish to npm after building.
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-sdk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14 # Apple Silicon
+            target: aarch64-apple-darwin
+          - os: macos-15-intel # Intel
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          # Build-only job — it never pushes, so don't persist the token.
+          persist-credentials: false
+
+      # rust-toolchain.toml pins the toolchain; add the target triple so the
+      # cross-target build resolves its std.
+      - name: Add Rust target
+        run: rustup target add ${{ matrix.target }}
+
+      # @napi-rs/cli is a Node tool (devDependency of crates/csp-node). Bun
+      # installs it; the runner's preinstalled Node runs the `napi` binary.
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Install SDK build tooling
+        run: bun install
+        working-directory: crates/csp-node
+
+      # musl pulls C/C++ deps (esaxx-rs C++ via tokenizers, onig/zstd C) and
+      # musl-tools ships only musl-gcc, not musl-g++. cargo-zigbuild + zig is a
+      # full C/C++ cross toolchain; napi's `--zig` flag routes the build through
+      # it. zig is minisign-verified against the official key (mirrors
+      # release-rust.yml) before it is extracted and run.
+      - name: Set up cargo-zigbuild (musl)
+        if: ${{ endsWith(matrix.target, '-musl') }}
+        run: |
+          ZIG_VERSION=0.13.0
+          ZIG_PUBKEY="RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U"
+          TARBALL="zig-linux-x86_64-${ZIG_VERSION}.tar.xz"
+          sudo apt-get update && sudo apt-get install -y minisign
+          curl -fsSLO "https://ziglang.org/download/${ZIG_VERSION}/${TARBALL}"
+          curl -fsSLO "https://ziglang.org/download/${ZIG_VERSION}/${TARBALL}.minisig"
+          minisign -Vm "${TARBALL}" -P "${ZIG_PUBKEY}"
+          tar -xJf "${TARBALL}" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/zig-linux-x86_64-${ZIG_VERSION}" >> "$GITHUB_PATH"
+          cargo install --locked cargo-zigbuild --version '^0.19'
+
+      - name: Build native addon
+        shell: bash
+        working-directory: crates/csp-node
+        run: |
+          if [[ "${{ matrix.target }}" == *-musl ]]; then
+            bunx napi build --platform --release --target "${{ matrix.target }}" --zig
+          else
+            bunx napi build --platform --release --target "${{ matrix.target }}"
+          fi
+          ls -lh ./*.node
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: csp-sdk-${{ matrix.target }}
+          path: crates/csp-node/*.node
+          if-no-files-found: error
+
+  # Assemble the per-platform packages from the built addons and publish them +
+  # the wrapper via npm Trusted Publishing. Resilient: publishes whatever
+  # targets built (always()), and fails loudly if nothing built.
+  publish:
+    needs: build
+    if: ${{ always() && inputs.publish }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          # Publish-only; never pushes to git, so don't persist the token.
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      # Trusted Publishing requires npm >= 11.5.1; ubuntu-latest ships npm 10.x.
+      - name: Upgrade npm for Trusted Publishing
+        run: sudo npm install -g npm@latest
+
+      - name: Install SDK build tooling
+        run: bun install
+        working-directory: crates/csp-node
+
+      - name: Download built addons
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: csp-sdk-*
+          merge-multiple: true
+          path: crates/csp-node/artifacts
+
+      # `create-npm-dirs` materializes the npm/<platform>/ package dirs from the
+      # `napi.triples` config; `artifacts` moves each built .node into its dir.
+      - name: Assemble platform packages
+        working-directory: crates/csp-node
+        run: |
+          bunx napi create-npm-dirs
+          bunx napi artifacts --dir artifacts
+          ls -R npm
+
+      # OIDC supplies auth + provenance, so no token / --provenance flag.
+      # Platform packages first; the wrapper last (its optionalDependencies pin
+      # them by version). Skip any platform dir that has no addon (partial matrix).
+      - name: Publish to npm
+        working-directory: crates/csp-node
+        run: |
+          set -e
+          for dir in npm/*/; do
+            if compgen -G "$dir/*.node" > /dev/null; then
+              echo "publishing platform package: $dir"
+              npm publish "$dir" --access public
+            else
+              echo "skipping $dir (no addon built for this target)"
+            fi
+          done
+          echo "publishing wrapper: @pleaseai/csp-sdk"
+          npm publish --access public

@@ -21,6 +21,6 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*", "eslint.config.ts", "tsdown.config.ts"],
+  "include": ["eslint.config.ts"],
   "exclude": ["node_modules", "dist"]
 }

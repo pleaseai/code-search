@@ -93,6 +93,20 @@ jobs:
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
 
+  # Build + publish the napi-rs SDK (@pleaseai/csp-sdk) — the separate in-process
+  # native-addon channel. Reuses release-sdk.yml so its cross-compile matrix
+  # lives in one place. id-token: write is granted here (the caller) so the
+  # reusable workflow's publish job can use npm Trusted Publishing (OIDC).
+  build-and-publish-sdk:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/release-sdk.yml
+    with:
+      publish: true
+
   # Generate the per-platform npm packages from the released binaries and
   # publish the wrapper + platform packages via npm Trusted Publishing (OIDC).
   # No NPM_TOKEN needed — auth is the OIDC id-token, and provenance is generated
