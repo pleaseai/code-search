@@ -445,7 +445,9 @@ csp clear all      # 인덱스 캐시와 savings 모두 삭제
 <details>
 <summary>라이브러리 사용</summary>
 
-`csp`는 Rust 라이브러리 크레이트로도 사용할 수 있습니다. 짧은 이름 `csp`가 이미 선점되어 있어 crates.io에는 [**`code-search-please`**](https://crates.io/crates/code-search-please)로 배포됩니다. 라이브러리 이름은 `csp` 그대로이므로 의존성은 `code-search-please`로 추가하되 코드에서는 `use csp::...`를 씁니다. `CspIndex`(`from_path` / `from_git` / `search` / `find_related`)와 `ContentType` enum, 랭킹 파이프라인을 노출합니다.
+`csp`는 두 가지 방식으로 라이브러리로 쓸 수 있습니다. **Rust 크레이트**, 또는 같은 코어를 napi-rs로 네이티브 바인딩한 **JavaScript/TypeScript SDK**(`@pleaseai/csp-sdk`)입니다.
+
+**Rust** — 짧은 이름 `csp`가 이미 선점되어 있어 crates.io에는 [**`code-search-please`**](https://crates.io/crates/code-search-please)로 배포됩니다. 라이브러리 이름은 `csp` 그대로이므로 의존성은 `code-search-please`로 추가하되 코드에서는 `use csp::...`를 씁니다. `CspIndex`(`from_path` / `from_git` / `search` / `find_related`)와 `ContentType` enum, 랭킹 파이프라인을 노출합니다.
 
 ```toml
 [dependencies]
@@ -465,7 +467,20 @@ for r in &results {
 }
 ```
 
-> 크레이트는 crates.io에 [`code-search-please`](https://crates.io/crates/code-search-please)로 배포되며 라이브러리 이름은 `csp`입니다. (npm 패키지는 `csp` 바이너리를 런처 뒤에 담아 배포할 뿐, JavaScript API를 노출하지 않습니다.)
+**JavaScript / TypeScript** — [`@pleaseai/csp-sdk`](https://www.npmjs.com/package/@pleaseai/csp-sdk)는 동일한 Rust 검색 엔진을 **인프로세스**로 실행하는 네이티브(napi-rs) 애드온입니다. 서브프로세스도, JSON 왕복도 없습니다. 빌드 진입점은 비동기, 쿼리 호출은 동기입니다.
+
+```ts
+import { CspIndex, ContentType } from '@pleaseai/csp-sdk'
+
+const index = await CspIndex.fromPath('./my-project', { content: [ContentType.Code] })
+const results = index.search('save model to disk', { topK: 3 })
+
+for (const { chunk, score } of results) {
+  console.log(score.toFixed(3), chunk.location) // 예: 0.871 src/index.ts:42-58
+}
+```
+
+> 두 npm 패키지는 별개입니다. **`@pleaseai/csp`**는 `csp` **CLI + MCP 서버**를 런처 뒤에 담아 배포하며(JS API는 노출하지 않음), **`@pleaseai/csp-sdk`**는 인프로세스 **라이브러리** SDK입니다. 둘 다 하나의 Rust 코어에서 빌드됩니다. 크레이트는 crates.io에 [`code-search-please`](https://crates.io/crates/code-search-please)로 배포되며 라이브러리 이름은 `csp`입니다.
 
 </details>
 

@@ -12,15 +12,18 @@
 //! `camelCase` automatically (so `file_path` → `filePath`, `from_path` →
 //! `fromPath`).
 //!
-//! NOTE: these bindings are synchronous; `fromPath` / `fromGit` do heavy work
-//! (file walking, embedding, and — for git — a network clone) and will block the
-//! Node event loop. Moving the build factories onto `AsyncTask` is a tracked
-//! follow-up (see the crate README).
+//! The build entrypoints (`fromPath` / `fromGit` / `loadFromDisk`) do heavy work
+//! — file walking, embedding, and (for git) a network clone — so they run on the
+//! libuv worker pool via napi [`AsyncTask`] and resolve a `Promise`; they do NOT
+//! block the Node event loop. The per-query methods (`search` / `findRelated` /
+//! `stats`) and `save` stay synchronous: they are fast and/or borrow `&self`,
+//! which cannot cross to a worker thread without cloning the whole index.
 
 use std::collections::HashMap;
 use std::path::Path;
 
 use napi::bindgen_prelude::*;
+use napi::Task;
 use napi_derive::napi;
 
 use csp::indexing::index::{
@@ -94,32 +97,33 @@ pub struct CspIndex {
 
 #[napi]
 impl CspIndex {
-    /// Build an index from a local directory.
-    #[napi(factory)]
-    pub fn from_path(path: String, options: Option<LoadOptions>) -> Result<Self> {
-        CoreIndex::from_path(Path::new(&path), &to_core_load_options(options))
-            .map(|inner| Self { inner })
-            .map_err(to_napi_err)
+    /// Build an index from a local directory. Resolves a `Promise<CspIndex>`
+    /// (the file walk + embedding runs on a worker thread).
+    #[napi(ts_return_type = "Promise<CspIndex>")]
+    pub fn from_path(path: String, options: Option<LoadOptions>) -> AsyncTask<BuildFromPath> {
+        AsyncTask::new(BuildFromPath { path, options })
     }
 
     /// Build an index from a remote git URL (shallow clone into a temp dir).
-    #[napi(factory)]
+    /// Resolves a `Promise<CspIndex>` (clone + build runs on a worker thread).
+    #[napi(ts_return_type = "Promise<CspIndex>")]
     pub fn from_git(
         url: String,
         options: Option<LoadOptions>,
         git_ref: Option<String>,
-    ) -> Result<Self> {
-        CoreIndex::from_git(&url, &to_core_load_options(options), git_ref.as_deref())
-            .map(|inner| Self { inner })
-            .map_err(to_napi_err)
+    ) -> AsyncTask<BuildFromGit> {
+        AsyncTask::new(BuildFromGit {
+            url,
+            options,
+            git_ref,
+        })
     }
 
-    /// Load an index previously persisted with `save`.
-    #[napi(factory)]
-    pub fn load_from_disk(dir: String) -> Result<Self> {
-        CoreIndex::load_from_disk(Path::new(&dir))
-            .map(|inner| Self { inner })
-            .map_err(to_napi_err)
+    /// Load an index previously persisted with `save`. Resolves a
+    /// `Promise<CspIndex>` (disk read runs on a worker thread).
+    #[napi(ts_return_type = "Promise<CspIndex>")]
+    pub fn load_from_disk(dir: String) -> AsyncTask<LoadFromDisk> {
+        AsyncTask::new(LoadFromDisk { dir })
     }
 
     /// Hybrid search over the indexed chunks.
@@ -163,6 +167,78 @@ impl CspIndex {
                 .map(|(lang, count)| (lang, count as u32))
                 .collect(),
         }
+    }
+}
+
+// --- async build tasks (run on the libuv worker pool) ---
+//
+// Each holds owned inputs, runs the blocking core call in `compute`, and wraps
+// the resulting core index in the JS `CspIndex` class in `resolve`. `options`
+// is `take`n in `compute` (it runs once), avoiding a needless clone.
+
+/// Backs `CspIndex.fromPath`.
+pub struct BuildFromPath {
+    path: String,
+    options: Option<LoadOptions>,
+}
+
+impl Task for BuildFromPath {
+    type Output = CoreIndex;
+    type JsValue = CspIndex;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        CoreIndex::from_path(
+            Path::new(&self.path),
+            &to_core_load_options(self.options.take()),
+        )
+        .map_err(to_napi_err)
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(CspIndex { inner: output })
+    }
+}
+
+/// Backs `CspIndex.fromGit`.
+pub struct BuildFromGit {
+    url: String,
+    options: Option<LoadOptions>,
+    git_ref: Option<String>,
+}
+
+impl Task for BuildFromGit {
+    type Output = CoreIndex;
+    type JsValue = CspIndex;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        CoreIndex::from_git(
+            &self.url,
+            &to_core_load_options(self.options.take()),
+            self.git_ref.as_deref(),
+        )
+        .map_err(to_napi_err)
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(CspIndex { inner: output })
+    }
+}
+
+/// Backs `CspIndex.loadFromDisk`.
+pub struct LoadFromDisk {
+    dir: String,
+}
+
+impl Task for LoadFromDisk {
+    type Output = CoreIndex;
+    type JsValue = CspIndex;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        CoreIndex::load_from_disk(Path::new(&self.dir)).map_err(to_napi_err)
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(CspIndex { inner: output })
     }
 }
 

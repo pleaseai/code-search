@@ -48,12 +48,12 @@ export interface IndexStats {
 }
 /** Hybrid (dense + BM25) code-search index. */
 export class CspIndex {
-  /** Build an index from a local directory. */
-  static fromPath(path: string, options?: LoadOptions | undefined | null): CspIndex
-  /** Build an index from a remote git URL (shallow clone into a temp dir). */
-  static fromGit(url: string, options?: LoadOptions | undefined | null, gitRef?: string | undefined | null): CspIndex
-  /** Load an index previously persisted with `save`. */
-  static loadFromDisk(dir: string): CspIndex
+  /** Build an index from a local directory. Runs on a worker thread. */
+  static fromPath(path: string, options?: LoadOptions | undefined | null): Promise<CspIndex>
+  /** Build an index from a remote git URL (shallow clone into a temp dir). Runs on a worker thread. */
+  static fromGit(url: string, options?: LoadOptions | undefined | null, gitRef?: string | undefined | null): Promise<CspIndex>
+  /** Load an index previously persisted with `save`. Runs on a worker thread. */
+  static loadFromDisk(dir: string): Promise<CspIndex>
   /** Hybrid search over the indexed chunks. */
   search(query: string, options?: QueryOptions | undefined | null): Array<SearchResult>
   /** Find chunks similar to a seed chunk, excluding the seed itself. */
