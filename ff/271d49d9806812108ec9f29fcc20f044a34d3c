@@ -1,0 +1,21 @@
+crates/csp-node/src/lib.rs
+  s_2e6fa76f16e17f::t_acda6444f377d9 24
+  s_2e6fa76f16e17f::t_dabce9c55ee0fe 96-98
+  s_2e6fa76f16e17f::t_8b5ffffc44c1a3 201-203,228-230,248-250
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "ff271d49d9806812108ec9f29fcc20f044a34d3c",
+  "prompts": {},
+  "sessions": {
+    "s_2e6fa76f16e17f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e482deb5-8f81-477b-8c6e-bae0c24a6788",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
