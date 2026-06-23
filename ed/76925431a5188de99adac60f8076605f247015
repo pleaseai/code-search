@@ -1,0 +1,23 @@
+README.md
+  s_2e6fa76f16e17f::t_83c749c797a3b1 473
+.github/workflows/release-sdk.yml
+  s_2e6fa76f16e17f::t_83c749c797a3b1 20
+README.ko.md
+  s_2e6fa76f16e17f::t_83c749c797a3b1 473
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "ed76925431a5188de99adac60f8076605f247015",
+  "prompts": {},
+  "sessions": {
+    "s_2e6fa76f16e17f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e482deb5-8f81-477b-8c6e-bae0c24a6788",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
