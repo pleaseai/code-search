@@ -51,6 +51,17 @@ jobs:
         # offline (see ADR-0004). --all-features mirrors the Rust CI gate.
         run: cargo llvm-cov --workspace --locked --all-features --lcov --output-path coverage/rust-lcov.info
 
+      # Rust coverage to Codecov (TypeScript is uploaded from ci.yml). Flags keep
+      # the two languages separable in the Codecov report.
+      - name: Upload Rust coverage to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: ./coverage/rust-lcov.info
+          flags: rust
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
       # --- SonarQube Cloud analysis ---
       - name: SonarQube Cloud scan
         uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
