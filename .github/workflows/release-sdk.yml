@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: 'Publish to npm after building (needs trusted-publisher config). Leave false to only build artifacts.'
+        description: Publish to npm after building (needs trusted-publisher config). Leave false to only build artifacts.
         required: false
         type: boolean
         default: false

@@ -470,7 +470,7 @@ for r in &results {
 **JavaScript / TypeScript** — [`@pleaseai/csp-sdk`](https://www.npmjs.com/package/@pleaseai/csp-sdk)는 동일한 Rust 검색 엔진을 **인프로세스**로 실행하는 네이티브(napi-rs) 애드온입니다. 서브프로세스도, JSON 왕복도 없습니다. 빌드 진입점은 비동기, 쿼리 호출은 동기입니다.
 
 ```ts
-import { CspIndex, ContentType } from '@pleaseai/csp-sdk'
+import { ContentType, CspIndex } from '@pleaseai/csp-sdk'
 
 const index = await CspIndex.fromPath('./my-project', { content: [ContentType.Code] })
 const results = index.search('save model to disk', { topK: 3 })

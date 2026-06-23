@@ -470,7 +470,7 @@ for r in &results {
 **JavaScript / TypeScript** — [`@pleaseai/csp-sdk`](https://www.npmjs.com/package/@pleaseai/csp-sdk) is a native (napi-rs) addon that runs the same Rust search engine **in-process** — no subprocess, no JSON round-trip. The build entrypoints are async; the per-query calls are sync.
 
 ```ts
-import { CspIndex, ContentType } from '@pleaseai/csp-sdk'
+import { ContentType, CspIndex } from '@pleaseai/csp-sdk'
 
 const index = await CspIndex.fromPath('./my-project', { content: [ContentType.Code] })
 const results = index.search('save model to disk', { topK: 3 })
