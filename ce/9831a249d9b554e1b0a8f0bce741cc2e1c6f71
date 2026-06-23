@@ -1,0 +1,34 @@
+README.ko.md
+  s_2e6fa76f16e17f::t_cc9e1cb3e7d6a1 448-450,470-483
+crates/csp-node/README.md
+  s_2e6fa76f16e17f::t_a53f9d065feb53 57,59
+  s_2e6fa76f16e17f::t_6dd57f34601717 14-15,21,23,25,30
+crates/csp-node/index.d.ts
+  s_2e6fa76f16e17f::t_e2b161d2e5110e 51-56
+crates/csp-node/src/lib.rs
+  s_2e6fa76f16e17f::t_112a484ef7650b 15-20,26
+  s_2e6fa76f16e17f::t_56fd7676228b9e 100-104,108-109,114-119,122-126
+  s_2e6fa76f16e17f::t_80561885904114 173-244
+.github/workflows/release-please.yml
+  s_2e6fa76f16e17f::t_1748c6a8f1fd1d 96-109
+.github/workflows/release-sdk.yml
+  s_2e6fa76f16e17f::t_1383e96872ed1b 1-178
+README.md
+  s_2e6fa76f16e17f::t_5fd0ba4f4b8897 448-450,470-483
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "ce9831a249d9b554e1b0a8f0bce741cc2e1c6f71",
+  "prompts": {},
+  "sessions": {
+    "s_2e6fa76f16e17f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e482deb5-8f81-477b-8c6e-bae0c24a6788",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
