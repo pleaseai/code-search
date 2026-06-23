@@ -1,0 +1,28 @@
+tsconfig.json
+  s_2e6fa76f16e17f::t_e6a7c3b2391c8b 24
+package.json
+  s_2e6fa76f16e17f::t_7a928ab08a13b6 36
+  s_2e6fa76f16e17f::t_4f054d2ed0c831 7
+CLAUDE.md
+  s_2e6fa76f16e17f::t_6d6918314ad64d 7,9,13-15,17
+  s_2e6fa76f16e17f::t_d1799f24bd29fa 18
+  s_2e6fa76f16e17f::t_b2e611df244a80 11-12
+  s_2e6fa76f16e17f::t_486ef8a04aca59 29
+  s_2e6fa76f16e17f::t_469f9e4cf03b2f 33-38,43-50,56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "ddb144d1d2cb6a1ef40f4600957add6f0675dad8",
+  "prompts": {},
+  "sessions": {
+    "s_2e6fa76f16e17f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e482deb5-8f81-477b-8c6e-bae0c24a6788",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
