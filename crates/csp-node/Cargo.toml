@@ -1,0 +1,29 @@
+# napi-rs native Node bindings — the in-process JS SDK for csp.
+#
+# This crate is the SDK distribution channel (decision A): an in-process native
+# addon over `crates/csp`, shipped as the `@pleaseai/csp-sdk` npm package. It is
+# DISTINCT from the CLI/MCP launcher under `npm/`, which execs the standalone
+# `csp` binary (and preserves the no-runtime Homebrew story). Not published to
+# crates.io — the artifact is the `.node` addon, not a Rust library.
+[package]
+name = "csp-node"
+description = "napi-rs native Node bindings for csp (the @pleaseai/csp-sdk in-process SDK)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[lib]
+# `cdylib` produces the `.node` addon loaded by Node; `lib` (rlib) keeps the
+# crate linkable for `cargo test --workspace` and doctests.
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+csp = { workspace = true }
+napi = { workspace = true }
+napi-derive = { workspace = true }
+
+[build-dependencies]
+napi-build = { workspace = true }

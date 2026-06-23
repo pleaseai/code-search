@@ -1,0 +1,9 @@
+# napi-rs build artifacts
+*.node
+index.js
+
+# Generated per-platform packages (created by `napi prepublish` / `napi artifacts`)
+npm/
+
+# Node tooling
+node_modules/
