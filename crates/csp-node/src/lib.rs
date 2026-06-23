@@ -21,6 +21,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 
 use napi::bindgen_prelude::*;
 use napi::Task;
@@ -92,7 +93,9 @@ pub struct IndexStats {
 /// Hybrid (dense + BM25) code-search index.
 #[napi(js_name = "CspIndex")]
 pub struct CspIndex {
-    inner: CoreIndex,
+    // `Arc` so a future async `search` / `find_related` can hand a cheap shared
+    // handle to a libuv worker thread instead of cloning the whole index.
+    inner: Arc<CoreIndex>,
 }
 
 #[napi]
@@ -195,7 +198,9 @@ impl Task for BuildFromPath {
     }
 
     fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(CspIndex { inner: output })
+        Ok(CspIndex {
+            inner: Arc::new(output),
+        })
     }
 }
 
@@ -220,7 +225,9 @@ impl Task for BuildFromGit {
     }
 
     fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(CspIndex { inner: output })
+        Ok(CspIndex {
+            inner: Arc::new(output),
+        })
     }
 }
 
@@ -238,7 +245,9 @@ impl Task for LoadFromDisk {
     }
 
     fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(CspIndex { inner: output })
+        Ok(CspIndex {
+            inner: Arc::new(output),
+        })
     }
 }
 
