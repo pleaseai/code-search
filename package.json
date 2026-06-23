@@ -4,7 +4,7 @@
   "version": "0.1.4",
   "private": true,
   "packageManager": "bun@1.3.14",
-  "description": "Fast and Accurate Code Search for Agents — TypeScript port of MinishLab/semble",
+  "description": "Fast and accurate hybrid code search for agents — Rust port of MinishLab/semble. This manifest holds repo JS tooling and the release-please version anchor; the published artifacts are the Rust binary (Homebrew) and its npm wrapper under npm/.",
   "author": "Minsu Lee <minsu.lee@dietfriends.kr>",
   "license": "MIT",
   "homepage": "https://github.com/pleaseai/code-search",
@@ -26,47 +26,20 @@
     "rag",
     "tree-sitter"
   ],
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs"
-    }
-  },
-  "main": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
-  "bin": {
-    "csp": "./dist/cli.mjs"
-  },
-  "files": [
-    "dist"
-  ],
   "engines": {
     "node": ">=22.0.0",
     "bun": ">=1.3.10"
   },
   "scripts": {
-    "build": "tsdown",
-    "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --cache",
-    "lint:fix": "eslint . --fix --cache",
-    "test": "bun test",
-    "prepublishOnly": "bun run build"
-  },
-  "dependencies": {
-    "@huggingface/transformers": "^4.2.0",
-    "@kreuzberg/tree-sitter-language-pack": "^1.8.1",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "chokidar": "^5.0.0",
-    "commander": "^14.0.3",
-    "ignore": "^7.0.5"
+    "lint:fix": "eslint . --fix --cache"
   },
   "devDependencies": {
     "@pleaseai/eslint-config": "^0.0.4",
     "@types/bun": "latest",
     "eslint": "^10.0.3",
     "jiti": "^2.7.0",
-    "tsdown": "^0.21.5",
     "typescript": "^6.0.2"
   }
 }
