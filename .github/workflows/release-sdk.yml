@@ -59,6 +59,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          # Build-only job — it never pushes, so don't persist the token.
+          persist-credentials: false
 
       # rust-toolchain.toml pins the toolchain; add the target triple so the
       # cross-target build resolves its std.
