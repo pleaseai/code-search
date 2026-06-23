@@ -1,0 +1,39 @@
+CLAUDE.md
+  s_2e6fa76f16e17f::t_c4a545eeb4026b 11
+crates/csp-node/index.d.ts
+  s_2e6fa76f16e17f::t_9d79097257e4da 1-65
+release-please-config.json
+  s_2e6fa76f16e17f::t_9ac89d570c0b05 32-35
+crates/csp-node/build.rs
+  s_2e6fa76f16e17f::t_5136907dbad16e 1-6
+Cargo.toml
+  s_2e6fa76f16e17f::t_b94490c4615c95 8
+  s_2e6fa76f16e17f::t_34951cc7491435 39-44
+crates/csp-node/package.json
+  s_2e6fa76f16e17f::t_705110f2bb6a77 57-62
+  s_2e6fa76f16e17f::t_be8e272f1f19ea 1-56,63-64
+crates/csp-node/src/lib.rs
+  s_2e6fa76f16e17f::t_4c6817ae15354b 1-233
+crates/csp-node/README.md
+  s_2e6fa76f16e17f::t_e849ab5b0f9c76 1-58
+crates/csp-node/.gitignore
+  s_2e6fa76f16e17f::t_78f22e8ae14324 1-9
+crates/csp-node/Cargo.toml
+  s_2e6fa76f16e17f::t_d0e078d498fd8d 1-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "e48ca1d7a84d19007a99bf9cf8566eccff38adc2",
+  "prompts": {},
+  "sessions": {
+    "s_2e6fa76f16e17f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e482deb5-8f81-477b-8c6e-bae0c24a6788",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
