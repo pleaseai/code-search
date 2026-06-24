@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: sonar-${{ github.workflow }}-${{ github.ref }}
@@ -16,6 +17,8 @@ concurrency:
 jobs:
   sonar:
     runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -51,7 +54,9 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       # --- SonarQube Cloud analysis ---
+      # pull_request runs from forks don't get the SONAR_TOKEN secret; skip the
+      # scan there (env is checked instead of secrets, which isn't available in
+      # step `if:` conditions) so external PRs aren't blocked.
       - name: SonarQube Cloud scan
+        if: ${{ env.SONAR_TOKEN != '' }}
         uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
