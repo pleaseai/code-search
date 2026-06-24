@@ -1,0 +1,21 @@
+.github/workflows/sonar.yml
+  s_7a98442914dbac::t_4015456275e87f 11
+  s_7a98442914dbac::t_8963955a04775c 20-21
+  s_7a98442914dbac::t_7c21901853728d 57-59,61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.11",
+  "base_commit_sha": "0e9b9f1fe4c40cc518c3b410a27f619e77d6095c",
+  "prompts": {},
+  "sessions": {
+    "s_7a98442914dbac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f9de5e11-6bae-4eb8-af3e-31befe3b18d3",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
