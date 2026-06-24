@@ -1,0 +1,19 @@
+codecov.yml
+  s_7a98442914dbac::t_ac2c1b749412c2 19,22-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.11",
+  "base_commit_sha": "8b3d4e167fcc907d9b795dbc8ad5471882ec9456",
+  "prompts": {},
+  "sessions": {
+    "s_7a98442914dbac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f9de5e11-6bae-4eb8-af3e-31befe3b18d3",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
