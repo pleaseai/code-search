@@ -54,9 +54,11 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       # --- SonarQube Cloud analysis ---
-      # pull_request runs from forks don't get the SONAR_TOKEN secret; skip the
-      # scan there (env is checked instead of secrets, which isn't available in
-      # step `if:` conditions) so external PRs aren't blocked.
+      # On pull_request runs from forks the SONAR_TOKEN secret isn't exposed, so
+      # skip the scan there instead of blocking external PRs. On push (main) the
+      # scan always runs — a missing token then fails loudly so a misconfigured
+      # Sonar setup is surfaced rather than silently skipped. (env is checked
+      # because the `secrets` context isn't available in step `if:` conditions.)
       - name: SonarQube Cloud scan
-        if: ${{ env.SONAR_TOKEN != '' }}
+        if: ${{ github.event_name != 'pull_request' || env.SONAR_TOKEN != '' }}
         uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
