@@ -1,0 +1,64 @@
+name: Sonar
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: sonar-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  sonar:
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          # Full history so SonarQube Cloud can attribute new code / blame.
+          fetch-depth: 0
+
+      # --- Rust coverage (coverage/rust-lcov.info) ---
+      # rust-toolchain.toml uses `profile = "minimal"`, so the llvm-tools-preview
+      # component (required by cargo-llvm-cov) is not present by default.
+      - name: Add llvm-tools-preview component
+        run: rustup component add llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@9e1e5806d4a4822de933115878265be9aaa786d9 # v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Test with coverage (Rust)
+        # #[ignore] (network-gated) tests are excluded by default, keeping this
+        # offline (see ADR-0004). --all-features mirrors the Rust CI gate.
+        run: |
+          mkdir -p coverage
+          cargo llvm-cov --workspace --locked --all-features --lcov --output-path coverage/rust-lcov.info
+
+      - name: Upload Rust coverage to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: ./coverage/rust-lcov.info
+          flags: rust
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      # --- SonarQube Cloud analysis ---
+      # On pull_request runs from forks the SONAR_TOKEN secret isn't exposed, so
+      # skip the scan there instead of blocking external PRs. On push (main) the
+      # scan always runs — a missing token then fails loudly so a misconfigured
+      # Sonar setup is surfaced rather than silently skipped. (env is checked
+      # because the `secrets` context isn't available in step `if:` conditions.)
+      - name: SonarQube Cloud scan
+        if: ${{ github.event_name != 'pull_request' || env.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
