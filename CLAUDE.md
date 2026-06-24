@@ -4,14 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project context
 
-`@pleaseai/csp` (binary: `csp`) is a TypeScript/Bun port of [MinishLab/semble](https://github.com/MinishLab/semble), a Python hybrid code-search library for agents. The current repo is an **initial scaffold only** — `src/index.ts` and `src/cli.ts` are placeholders. The README is the canonical spec for the intended public surface (MCP server, CLI, library).
+`@pleaseai/csp` (binary: `csp`) is a **Rust** port of [MinishLab/semble](https://github.com/MinishLab/semble), a Python hybrid code-search library for agents. The implementation lives in `crates/csp` (library) + `crates/csp-cli` (`csp` binary). The README is the canonical spec for the public surface (MCP server, CLI, library).
 
-### Rust rewrite (ADR-0003)
+The deprecated TypeScript implementation that formerly lived under `src/` has been **removed** — the Rust port is the only implementation. The root `package.json` / `tsconfig.json` / `eslint.config.ts` remain only as repo JS tooling (lint/typecheck of `npm/`) and the release-please version anchor. The **napi-rs native-binding SDK** binds the `crates/` Rust directly (it does not reintroduce a TS port).
 
-A Rust port lives in `crates/csp` (library) + `crates/csp-cli` (`csp` binary). **The Python upstream ([MinishLab/semble](https://github.com/MinishLab/semble)) is the source of truth** — the Rust port targets behavioral equivalence with the upstream Python. The TS `src/` is **deprecated**: slated for deletion and retained only as a historical/reference implementation; it is **no longer** the source of truth or the parity oracle.
+**SDK packaging decision: keep the two distribution channels separate.** `npm/` stays the Biome-style CLI/MCP launcher — a thin Node shim that execs the **standalone Rust binary** (this preserves the no-runtime Homebrew story; do NOT convert it to napi). The napi-rs SDK is a distinct concern: `crates/csp-node` holds `#[napi]` bindings over `crates/csp` and is shipped as its **own npm package** (`@pleaseai/csp-sdk`), an in-process native addon — not merged into `npm/`. Both build outputs share the one `crates/csp` core. The SDK is in place: `#[napi]` bindings (`fromPath`/`fromGit`/`loadFromDisk` are async on the libuv worker pool; `search`/`findRelated`/`save`/`stats` sync, with `inner` held behind `Arc` to enable a future async move), the `napi build` toolchain (`.node` + `index.js`; `index.d.ts` is the committed type surface), and the cross-compile + Trusted-Publishing release in `release-sdk.yml`. The remaining step is publish-only — a maintainer must configure the npm trusted publisher for `@pleaseai/csp-sdk` + its platform packages (see `crates/csp-node/README.md`).
+
+### Rust port (ADR-0003)
+
+**The Python upstream ([MinishLab/semble](https://github.com/MinishLab/semble)) is the source of truth** — the Rust port targets behavioral equivalence with the upstream Python.
 - Quality gate before every Rust commit: `cargo fmt --all && cargo clippy --all-targets --all-features -- -D warnings && cargo test --workspace`.
-- Parity oracle = the **Python upstream** behavior (read the source directly — see the fetch note below). The TS test suite stays usable as language-neutral golden fixtures for already-ported modules, but is not authoritative where it disagrees with upstream. The Rust port has intentionally moved **past the old TS stubs** to match upstream: dense embeddings are real (`model2vec-rs`, not the deterministic stub), the ranking pipeline is wired (query boosts + path penalties + file saturation), and the chunk length is `750`. The TS `src/` still carries the older stubs/values until it is removed.
-- CLI/MCP output is a **snake_case** wire dict (`csp::utils::format_results`, mirroring TS `SearchResult.toDict`), distinct from the camelCase `ChunkDict` used for on-disk persistence.
+- Parity oracle = the **Python upstream** behavior (read the source directly — see the fetch note below). Dense embeddings are real (`model2vec-rs`), the ranking pipeline is wired (query boosts + path penalties + file saturation), and the chunk length is `750`.
+- CLI/MCP output is a **snake_case** wire dict (`csp::utils::format_results`, mirroring upstream `SearchResult.to_dict`), distinct from the camelCase `ChunkDict` used for on-disk persistence.
 - rmcp 1.7: the default `#[tool_handler]` rebuilds the router via `Self::tool_router()` and leaves a stored `tool_router` field unread (clippy `dead_code`) — use `#[tool_handler(router = self.tool_router)]`.
 
 When porting modules from semble, fetch the upstream source and read the Python directly:
@@ -22,32 +26,34 @@ ask src github:MinishLab/semble@main    # absolute path to the cached checkout (
 curl -fsSL https://raw.githubusercontent.com/MinishLab/semble/main/src/semble/search.py
 ```
 
-Read the Python source directly — do not infer behavior from the README. Key upstream modules and their target TS counterparts live under `src/semble/` (Python): `types.py`, `tokens.py`, `chunking/`, `index/` (files, file_walker, dense, sparse, create, index), `ranking/` (boosting, penalties, weighting), `search.py`, `mcp.py`, `cli.py`, `cache.py`, `stats.py`, `utils.py`.
+Read the Python source directly — do not infer behavior from the README. Key upstream modules (mapped to their `crates/csp` Rust counterparts in `.please/docs/references/semble.md`) live under `src/semble/` (Python): `types.py`, `tokens.py`, `chunking/`, `index/` (files, file_walker, dense, sparse, create, index), `ranking/` (boosting, penalties, weighting), `search.py`, `mcp.py`, `cli.py`, `cache.py`, `stats.py`, `utils.py`.
 
 ## Stack
 
-- **Runtime / package manager**: Bun 1.3.10+ (`packageManager` pinned in `package.json`). Node.js 22+ supported.
-- **Module system**: ESM only (`"type": "module"`). Use `.ts` imports with `verbatimModuleSyntax`.
-- **Build**: `tsdown` — config at `tsdown.config.ts`, two entries (`src/index.ts`, `src/cli.ts`), `unbundle: true`, emits ESM + DTS into `dist/`.
-- **Lint**: `@pleaseai/eslint-config` (wraps `@antfu/eslint-config`). Flat config at `eslint.config.ts`. No semicolons, single quotes, 2-space indent. Type-aware rules enabled via `tsconfigPath`.
-- **TypeScript**: strict + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` + `verbatimModuleSyntax`. Target ES2022, `moduleResolution: bundler`.
-- **Tests**: `bun:test` (no jest/vitest). Run with `bun test`.
+The implementation is **Rust** (a Cargo workspace). A thin Node/Bun toolchain remains for repo-level JS lint/typecheck and the future napi-rs SDK.
+
+- **Impl**: Rust, edition 2021. Cargo workspace (`crates/csp` lib + `crates/csp-cli` `csp` binary), toolchain pinned by `rust-toolchain.toml`. Single-binary release profile (`lto`, `codegen-units=1`, `strip`).
+- **Tests**: `cargo test --workspace` (255+ lib + CLI tests). Network-gated grammar-fetch tests run with `-- --ignored` (see ADR-0004).
+- **Distribution**: self-contained Rust binary via Homebrew (`pleaseai/homebrew-tap`) + an npm wrapper under `npm/` that preserves the `bunx @pleaseai/csp` entrypoint.
+- **JS tooling** (no TS implementation): Bun 1.3.10+ / Node 22+. `@pleaseai/eslint-config` (wraps `@antfu/eslint-config`) lints `npm/` JS + `eslint.config.ts`; `tsc --noEmit` typechecks. No semicolons, single quotes, 2-space indent.
 
 ## Commands
 
 ```bash
-bun install        # install deps
-bun run build      # tsdown build → dist/
-bun run dev        # tsdown --watch
+# Rust (the implementation)
+cargo build --release                          # → target/release/csp
+cargo run -p csp-cli -- search "query" .       # run the CLI locally
+cargo test --workspace                         # test runner
+cargo fmt --all && cargo clippy --all-targets --all-features -- -D warnings   # pre-commit gate
+
+# JS tooling (lint/typecheck of npm/ + configs; no TS sources to build)
+bun install        # install dev tooling
 bun run typecheck  # tsc --noEmit
 bun run lint       # eslint . --cache
 bun run lint:fix   # eslint . --fix --cache
-bun test           # bun:test runner
-bun test path/to/file.test.ts   # single file
-bun test --watch                # watch mode
 ```
 
-`bunx @pleaseai/csp` is the published-package entrypoint referenced throughout the README (MCP/CLI setup snippets). Locally, use `bun run --bun src/cli.ts` or build first.
+`bunx @pleaseai/csp` is the published-package entrypoint referenced throughout the README (MCP/CLI setup snippets); it resolves to the npm wrapper (`npm/`) that execs the Rust binary.
 
 ## Public API surface (target, from README)
 

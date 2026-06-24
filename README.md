@@ -446,7 +446,9 @@ Explicit index paths written with `csp index -o <path>` are not part of the auto
 <details>
 <summary>Library usage</summary>
 
-`csp` is also a Rust library crate, published on crates.io as [**`code-search-please`**](https://crates.io/crates/code-search-please) (the short name `csp` was already taken). The library name stays `csp`, so you depend on `code-search-please` but still write `use csp::...`. It exposes `CspIndex` with `from_path` / `from_git` / `search` / `find_related`, plus the `ContentType` enum and the ranking pipeline.
+`csp` is usable as a library two ways: the **Rust crate**, or a **JavaScript/TypeScript SDK** (`@pleaseai/csp-sdk`) that binds the same core natively via napi-rs.
+
+**Rust** — published on crates.io as [**`code-search-please`**](https://crates.io/crates/code-search-please) (the short name `csp` was already taken). The library name stays `csp`, so you depend on `code-search-please` but still write `use csp::...`. It exposes `CspIndex` with `from_path` / `from_git` / `search` / `find_related`, plus the `ContentType` enum and the ranking pipeline.
 
 ```toml
 [dependencies]
@@ -466,7 +468,20 @@ for r in &results {
 }
 ```
 
-> The crate is published on crates.io as [`code-search-please`](https://crates.io/crates/code-search-please) with the library name `csp`. (The npm package ships only the `csp` binary behind a launcher — it does not expose a JavaScript API.)
+**JavaScript / TypeScript** — [`@pleaseai/csp-sdk`](https://www.npmjs.com/package/@pleaseai/csp-sdk) is a native (napi-rs) addon that runs the same Rust search engine **in-process** — no subprocess, no JSON round-trip. The build entrypoints are async; the per-query calls are sync.
+
+```ts
+import { ContentType, CspIndex } from '@pleaseai/csp-sdk'
+
+const index = await CspIndex.fromPath('./my-project', { content: [ContentType.Code] })
+const results = index.search('save model to disk', { topK: 3 })
+
+for (const { chunk, score } of results) {
+  console.log(score.toFixed(3), chunk.location) // e.g. 0.871 src/index.ts:42-58
+}
+```
+
+> The two npm packages are distinct: **`@pleaseai/csp`** ships the `csp` **CLI + MCP server** behind a launcher (it does not expose a JS API), while **`@pleaseai/csp-sdk`** is the in-process **library** SDK. Both are built from the one Rust core; the crate is on crates.io as [`code-search-please`](https://crates.io/crates/code-search-please) with library name `csp`.
 
 </details>
 
