@@ -1,0 +1,19 @@
+.github/workflows/release-please.yml
+  s_10f76f834d7bf8::t_79d881e5cb3ec8 66-72,76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "85574e7a32a036b4352207ff4f37028a5b970872",
+  "prompts": {},
+  "sessions": {
+    "s_10f76f834d7bf8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "195ac0dc-7218-47fd-9d35-605024b554f6",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
