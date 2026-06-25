@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/pleaseai/code-search/compare/v0.1.5...v0.1.6) (2026-06-25)
+
+
+### Bug Fixes
+
+* **release:** sync full workspace in Cargo.lock on release ([#58](https://github.com/pleaseai/code-search/issues/58)) ([8ac122a](https://github.com/pleaseai/code-search/commit/8ac122aff2b9188880e5baf54bf9f7ed1027dae3))
+
 ## [0.1.5](https://github.com/pleaseai/code-search/compare/v0.1.4...v0.1.5) (2026-06-24)
 
 
