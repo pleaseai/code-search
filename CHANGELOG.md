@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.1.5](https://github.com/pleaseai/code-search/compare/v0.1.4...v0.1.5) (2026-06-24)
+
+
+### Features
+
+* **sdk:** remove deprecated TS implementation; add napi-rs SDK (@pleaseai/csp-sdk) ([#56](https://github.com/pleaseai/code-search/issues/56)) ([1caa29d](https://github.com/pleaseai/code-search/commit/1caa29d06571d043aaaf74c5899edad5b1b5bb67))
+
+
+### Bug Fixes
+
+* **npm:** ship README + LICENSE in the published wrapper package ([#55](https://github.com/pleaseai/code-search/issues/55)) ([efff12b](https://github.com/pleaseai/code-search/commit/efff12bd4f159abd3d87b5dcfd54e9ccc648584f))
+
+
+### Documentation
+
+* note the library is on crates.io as code-search-please ([#54](https://github.com/pleaseai/code-search/issues/54)) ([3fa872b](https://github.com/pleaseai/code-search/commit/3fa872b2181379f8f8ac0e2d9b8c02213a739081))
+* update README for the Rust port ([#44](https://github.com/pleaseai/code-search/issues/44)) ([9c8fe50](https://github.com/pleaseai/code-search/commit/9c8fe50100039cbe264b10e6a48e9c4219b64312))
+
 ## [0.1.4](https://github.com/pleaseai/code-search/compare/v0.1.3...v0.1.4) (2026-06-22)
 
 
