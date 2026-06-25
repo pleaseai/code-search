@@ -63,13 +63,17 @@ jobs:
 
       # release-please bumps the workspace version in Cargo.toml (via the
       # x-release-please-version annotation) but does not touch Cargo.lock, so
-      # the csp/csp-cli entries stay at the previous version and the release
-      # build's `cargo build --locked` fails. Refresh the member versions in the
-      # lockfile and commit it into the release PR. Mirrors the bun.lock sync.
+      # every workspace member stays at the previous version and the release
+      # build's `cargo build --locked` fails. `--workspace` re-locks only the
+      # local members by their real package names (code-search-please / csp-cli
+      # / csp-node) — it does not bump external deps. Don't name packages
+      # explicitly: `-p csp` broke once the lib crate was renamed to
+      # code-search-please and csp-node was added. Commit it into the release
+      # PR. Mirrors the bun.lock sync.
       - name: Sync Cargo.lock
         if: ${{ steps.release.outputs.pr }}
         run: |
-          cargo update -p csp -p csp-cli
+          cargo update --workspace
           if git diff --quiet Cargo.lock; then
             echo "Cargo.lock already in sync"
           else
