@@ -1,0 +1,19 @@
+.github/workflows/release-sdk.yml
+  s_f4f9dd4c753e26::t_b300766a4c7ac0 156,161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "c1224e831519d0b9feee6e5840e38a957fc6584f",
+  "prompts": {},
+  "sessions": {
+    "s_f4f9dd4c753e26": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "04262b51-411b-4e18-af52-ba668906f59d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
