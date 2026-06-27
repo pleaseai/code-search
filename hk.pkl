@@ -1,0 +1,37 @@
+/// hk.pkl — git hook configuration (hk: mise's sister git hook manager)
+/// Install: `mise install` (postinstall → `hk install --mise`) or `hk install --mise`
+/// Details: Skill("standards:dev-tooling") → references/git-hooks.md
+/// Commit message rules/types: Skill("standards:commit-convention")
+amends "package://github.com/jdx/hk/releases/download/v1.48.0/hk@1.48.0#/Config.pkl"
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps {
+      // npm/ JS/TS + config files: check and auto-fix with eslint (@pleaseai/eslint-config).
+      // `bunx` so the local devDep resolves regardless of PATH.
+      ["eslint"] {
+        glob = List("**/*.js", "**/*.mjs", "**/*.cjs", "**/*.ts", "**/*.tsx")
+        check = "bunx eslint --cache {{files}}"
+        fix = "bunx eslint --cache --fix {{files}}"
+      }
+      // Rust sources: check and auto-fix with rustfmt. edition 2021 matches the workspace
+      // (the hk `rustfmt` builtin pins edition 2024, which would misformat).
+      // clippy/test are too costly for pre-commit → handled by `mise run check` + CI (rust.yml).
+      ["rustfmt"] {
+        glob = "**/*.rs"
+        check = "rustfmt --edition 2021 --check {{files}}"
+        fix = "rustfmt --edition 2021 {{files}}"
+      }
+    }
+  }
+  ["commit-msg"] {
+    steps {
+      // Conventional-commit validation via hk's built-in util — no commitlint dependency.
+      ["check-conventional-commit"] {
+        check = "hk util check-conventional-commit {{commit_msg_file}}"
+      }
+    }
+  }
+}

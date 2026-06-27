@@ -1,0 +1,46 @@
+# mise.toml — PassionFactory standard toolchain
+# Details: Skill("standards:dev-tooling")
+#
+# This repo is Rust-first (crates/) with a thin JS toolchain for the npm/ wrapper and SDK.
+# - The Rust toolchain (channel, rustfmt, clippy) is owned solely by rust-toolchain.toml —
+#   do not double-pin it here.
+# - Only node/bun (JS lint + typecheck) and hk (the git hook manager) are pinned via mise.
+
+[tools]
+node = "24"
+bun = "1.3.14"          # matches package.json packageManager
+# hk: git hook manager (sister project of mise). On Intel macOS (x86_64) the aqua backend
+# ships no darwin-amd64 binary, so `hk = "latest"` breaks `mise install` → build from source
+# via the cargo backend (works on every platform; ~3 min first build, cached afterwards).
+# Details: dev-tooling → references/git-hooks.md
+"cargo:hk" = "latest"
+
+[env]
+# Wrap hooks in `mise x` so the mise-managed node/bun are on PATH
+# (hooks work even when the developer hasn't activated mise in their shell).
+HK_MISE = "1"
+
+[hooks]
+# Auto-install hk hooks on `mise install` (replaces husky's prepare script).
+postinstall = "hk install --mise"
+
+[tasks.lint]
+description = "Lint JS/TS (eslint)"
+run = "bun run lint"
+
+[tasks."lint:fix"]
+description = "Lint JS/TS and auto-fix"
+run = "bun run lint:fix"
+
+[tasks.typecheck]
+description = "Type-check (tsc --noEmit)"
+run = "bun run typecheck"
+
+[tasks.test]
+description = "Rust tests (cargo test --workspace)"
+run = "cargo test --workspace"
+
+[tasks.check]
+description = "JS lint/typecheck + Rust fmt/clippy/test (pre-commit gate)"
+depends = ["lint", "typecheck"]
+run = "cargo fmt --all --check && cargo clippy --all-targets --all-features -- -D warnings && cargo test --workspace"

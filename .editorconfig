@@ -1,0 +1,19 @@
+# EditorConfig — follows @pleaseai/editorconfig conventions (see Skill("standards:dev-tooling")).
+# Rust-first repo, so [*.rs] overrides to 4 spaces to match rustfmt's default.
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 2
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Rust sources: rustfmt uses 4-space indentation.
+[*.rs]
+indent_size = 4
+
+# Markdown: trailing spaces can be meaningful (hard line breaks).
+[*.md]
+trim_trailing_whitespace = false
