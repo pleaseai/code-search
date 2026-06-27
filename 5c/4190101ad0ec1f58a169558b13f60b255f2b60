@@ -1,0 +1,19 @@
+.github/workflows/ci.yml
+  s_2c1ee80b9e2939::t_e36d00ac3eede7 19-22,27-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "5c4190101ad0ec1f58a169558b13f60b255f2b60",
+  "prompts": {},
+  "sessions": {
+    "s_2c1ee80b9e2939": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fbcf426b-50b7-43e5-a482-0f84d3a33154",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
