@@ -1,0 +1,30 @@
+orca.yaml
+  s_2c1ee80b9e2939::t_33f6083884f42c 6-8,17-20,22-24
+.editorconfig
+  s_2c1ee80b9e2939::t_ca30976f9cb2a4 1-19
+CLAUDE.md
+  s_2c1ee80b9e2939::t_41a64621dd3612 39
+hk.pkl
+  s_2c1ee80b9e2939::t_c03bf60cad5b24 1-4,12,21
+  s_2c1ee80b9e2939::t_e34ce08e3c8b9a 5-11,14,16-18,22,24-30,35-37
+  s_2c1ee80b9e2939::t_71db0172fe3fe7 13,15,19-20,23,31-34
+mise.toml
+  s_2c1ee80b9e2939::t_3e86fe4c38efaf 3,8-10,16-18,21-23,25-27,29-31,33-35,37-39,41-43,45-46
+  s_2c1ee80b9e2939::t_a0c674e6dc92fc 1-2,4-7,11-15,19-20,24,28,32,36,40,44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "6a64af9ea20d2f60a4830ae6fa4f0ab29c4b3daa",
+  "prompts": {},
+  "sessions": {
+    "s_2c1ee80b9e2939": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fbcf426b-50b7-43e5-a482-0f84d3a33154",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
