@@ -1,0 +1,25 @@
+.github/workflows/ci.yml
+  s_2c1ee80b9e2939::t_9b4c3f7f592760 26-29
+mise.toml
+  s_2c1ee80b9e2939::t_d3c3c2c499607b 26-29
+CLAUDE.md
+  s_2c1ee80b9e2939::t_527e5ffab502f7 38
+orca.yaml
+  s_2c1ee80b9e2939::t_5f18f5348fb4e1 23-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "0347a1121abc31466aaff0f90a763bbec09c1a0b",
+  "prompts": {},
+  "sessions": {
+    "s_2c1ee80b9e2939": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fbcf426b-50b7-43e5-a482-0f84d3a33154",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
