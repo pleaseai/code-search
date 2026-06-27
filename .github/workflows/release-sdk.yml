@@ -153,12 +153,12 @@ jobs:
           merge-multiple: true
           path: crates/csp-node/artifacts
 
-      # `create-npm-dirs` materializes the npm/<platform>/ package dirs from the
+      # `create-npm-dir` materializes the npm/<platform>/ package dirs from the
       # `napi.triples` config; `artifacts` moves each built .node into its dir.
       - name: Assemble platform packages
         working-directory: crates/csp-node
         run: |
-          bunx napi create-npm-dirs
+          bunx napi create-npm-dir
           bunx napi artifacts --dir artifacts
           ls -R npm
 
