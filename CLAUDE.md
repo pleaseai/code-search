@@ -35,7 +35,8 @@ The implementation is **Rust** (a Cargo workspace). A thin Node/Bun toolchain re
 - **Impl**: Rust, edition 2021. Cargo workspace (`crates/csp` lib + `crates/csp-cli` `csp` binary), toolchain pinned by `rust-toolchain.toml`. Single-binary release profile (`lto`, `codegen-units=1`, `strip`).
 - **Tests**: `cargo test --workspace` (255+ lib + CLI tests). Network-gated grammar-fetch tests run with `-- --ignored` (see ADR-0004).
 - **Distribution**: self-contained Rust binary via Homebrew (`pleaseai/homebrew-tap`) + an npm wrapper under `npm/` that preserves the `bunx @pleaseai/csp` entrypoint.
-- **JS tooling** (no TS implementation): Bun 1.3.10+ / Node 22+. `@pleaseai/eslint-config` (wraps `@antfu/eslint-config`) lints `npm/` JS + `eslint.config.ts`; `tsc --noEmit` typechecks. No semicolons, single quotes, 2-space indent.
+- **JS tooling** (no TS implementation): Bun ≥1.3.10 / Node ≥22 (the `engines` floor; `mise.toml` pins 1.3.14 / 24 for dev + CI). `@pleaseai/eslint-config` (wraps `@antfu/eslint-config`) lints `npm/` JS + `eslint.config.ts`; `tsc --noEmit` typechecks. No semicolons, single quotes, 2-space indent.
+- **Toolchain manager**: `mise.toml` pins `node`/`bun` + `hk` (the git hook manager); the Rust channel stays owned by `rust-toolchain.toml`. `mise install` provisions tools and runs `hk install --mise`, wiring git hooks from `hk.pkl` (pre-commit: eslint on `npm/` JS + `rustfmt` on staged `.rs`; commit-msg: conventional-commit check). `mise run check` is the full local gate. On Intel macOS hk is pinned via the `cargo:` backend (aqua has no darwin-amd64).
 
 ## Commands
 
