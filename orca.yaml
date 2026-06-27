@@ -20,5 +20,6 @@ scripts:
     # 2. Copy gitignored local files (.env, .claude/settings.local.json, ...) from the main checkout.
     #    Patterns are defined in .worktreeinclude.
     mise exec -- bunx @pleaseai/worktreeinclude "$ORCA_ROOT_PATH" "$ORCA_WORKTREE_PATH"
-    # 3. Install dependencies.
-    mise exec -- bun install
+    # 3. Install dependencies (frozen, matching CI — avoids silent lockfile drift
+    #    across parallel worktree sessions).
+    mise exec -- bun install --frozen-lockfile

@@ -23,7 +23,10 @@ HK_MISE = "1"
 
 [hooks]
 # Auto-install hk hooks on `mise install` (replaces husky's prepare script).
-postinstall = "hk install --mise"
+# Tolerate a missing hk binary: this hook runs unconditionally even when hk is
+# skipped (e.g. CI sets MISE_DISABLE_TOOLS=cargo:hk), so guard on `command -v hk`
+# to avoid a noisy "hk: not found" postinstall warning where git hooks aren't wanted.
+postinstall = "command -v hk >/dev/null 2>&1 && hk install --mise || true"
 
 [tasks.lint]
 description = "Lint JS/TS (eslint)"
