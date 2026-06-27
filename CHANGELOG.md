@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/pleaseai/code-search/compare/v0.1.6...v0.1.7) (2026-06-27)
+
+
+### Bug Fixes
+
+* **ci:** use napi create-npm-dir for @napi-rs/cli v2 in SDK release ([#60](https://github.com/pleaseai/code-search/issues/60)) ([a7445f0](https://github.com/pleaseai/code-search/commit/a7445f0ee6d93922c619a0709324f9758fefa968))
+
 ## [0.1.6](https://github.com/pleaseai/code-search/compare/v0.1.5...v0.1.6) (2026-06-25)
 
 
