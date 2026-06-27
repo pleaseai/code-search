@@ -1,0 +1,20 @@
+mise.toml
+  s_2c1ee80b9e2939::t_3ba39811cae5bb 46-49
+  s_2c1ee80b9e2939::t_04e4041f385c8a 11,15,17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "0b2d0b5d66dad2db77bb0c409e0373b8042985ac",
+  "prompts": {},
+  "sessions": {
+    "s_2c1ee80b9e2939": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fbcf426b-50b7-43e5-a482-0f84d3a33154",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
