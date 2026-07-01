@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/pleaseai/code-search/compare/v0.1.7...v0.1.8) (2026-07-01)
+
+
+### Features
+
+* **install:** add curl installer script and fix homebrew formula publish ([#65](https://github.com/pleaseai/code-search/issues/65)) ([e232d71](https://github.com/pleaseai/code-search/commit/e232d71c8166d7dc0885f2d77c84b524681f8664))
+
 ## [0.1.7](https://github.com/pleaseai/code-search/compare/v0.1.6...v0.1.7) (2026-06-27)
 
 
