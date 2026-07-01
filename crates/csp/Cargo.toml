@@ -40,3 +40,10 @@ model2vec-rs = { workspace = true }
 # degrades to line chunking exactly as before.
 tree-sitter = { workspace = true }
 tree-sitter-language-pack = "1.9"
+
+[dev-dependencies]
+criterion = { version = "5.0.1", package = "codspeed-criterion-compat" }
+
+[[bench]]
+name = "core"
+harness = false
