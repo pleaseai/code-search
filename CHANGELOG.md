@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.9](https://github.com/pleaseai/code-search/compare/v0.1.8...v0.1.9) (2026-07-01)
+
+
+### Performance Improvements
+
+* **npm:** copy-over-shim for near-native CLI startup ([#69](https://github.com/pleaseai/code-search/issues/69)) ([03d7e29](https://github.com/pleaseai/code-search/commit/03d7e29398f785ab8f295e9029521eadda825998))
+
+
+### Documentation
+
+* rename plugin marketplace to pleaseai/claude-code-plugins ([#67](https://github.com/pleaseai/code-search/issues/67)) ([2bf9c70](https://github.com/pleaseai/code-search/commit/2bf9c703e66cece7f29488f5db8d7abb97b5be72))
+
 ## [0.1.8](https://github.com/pleaseai/code-search/compare/v0.1.7...v0.1.8) (2026-07-01)
 
 

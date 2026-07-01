@@ -1,7 +1,7 @@
 {
   "name": "@pleaseai/csp",
   "type": "module",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "packageManager": "bun@1.3.14",
   "description": "Fast and accurate hybrid code search for agents — Rust port of MinishLab/semble. This manifest holds repo JS tooling and the release-please version anchor; the published artifacts are the Rust binary (Homebrew) and its npm wrapper under npm/.",
