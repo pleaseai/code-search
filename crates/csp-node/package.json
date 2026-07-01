@@ -1,6 +1,6 @@
 {
   "name": "@pleaseai/csp-sdk",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "In-process native (napi-rs) SDK for csp — fast, accurate hybrid code search for agents. Binds the Rust core directly (no subprocess). The CLI/MCP server ships separately as @pleaseai/csp.",
   "license": "MIT",
   "homepage": "https://github.com/pleaseai/code-search",
