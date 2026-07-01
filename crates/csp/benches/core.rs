@@ -95,7 +95,7 @@ fn make_chunks(n: usize) -> Vec<Chunk> {
 }
 
 fn make_scores(n: usize) -> Scores {
-    // Deterministic pseudo-random-ish scores in (0, 1].
+    // Deterministic pseudo-random-ish scores in (0.001, ~1.0].
     (0..n)
         .map(|i| (i, ((i * 2654435761) % 997) as f64 / 997.0 + 0.001))
         .collect()
