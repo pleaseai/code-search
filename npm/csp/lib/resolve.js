@@ -41,8 +41,10 @@ function resolvePlatformPackage() {
         : { pkg: '@pleaseai/csp-linux-x64', binary: 'csp' }
     }
     if (arch === 'arm64') {
-      // arm64 ships glibc only for now; musl arm64 falls back to it.
-      return { pkg: '@pleaseai/csp-linux-arm64', binary: 'csp' }
+      // Only a glibc arm64 build exists. On musl arm64 (Alpine) return null so
+      // the launcher reports an unsupported platform rather than exec'ing an
+      // incompatible glibc binary.
+      return musl ? null : { pkg: '@pleaseai/csp-linux-arm64', binary: 'csp' }
     }
   }
 

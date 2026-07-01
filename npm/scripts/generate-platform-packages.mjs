@@ -24,7 +24,7 @@ const TARGETS = [
   { pkg: '@pleaseai/csp-darwin-arm64', asset: 'csp-darwin-arm64', binary: 'csp', os: 'darwin', cpu: 'arm64' },
   { pkg: '@pleaseai/csp-darwin-x64', asset: 'csp-darwin-x64', binary: 'csp', os: 'darwin', cpu: 'x64' },
   { pkg: '@pleaseai/csp-linux-x64', asset: 'csp-linux-x64', binary: 'csp', os: 'linux', cpu: 'x64', libc: 'glibc' },
-  { pkg: '@pleaseai/csp-linux-arm64', asset: 'csp-linux-arm64', binary: 'csp', os: 'linux', cpu: 'arm64' },
+  { pkg: '@pleaseai/csp-linux-arm64', asset: 'csp-linux-arm64', binary: 'csp', os: 'linux', cpu: 'arm64', libc: 'glibc' },
   { pkg: '@pleaseai/csp-linux-x64-musl', asset: 'csp-linux-x64-musl', binary: 'csp', os: 'linux', cpu: 'x64', libc: 'musl' },
   { pkg: '@pleaseai/csp-win32-x64', asset: 'csp-windows-x64.exe', binary: 'csp.exe', os: 'win32', cpu: 'x64' },
 ]

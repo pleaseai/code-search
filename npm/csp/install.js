@@ -50,7 +50,11 @@ function main() {
   // file behind — so on a re-run (`npm rebuild`, `npm ci`) we must not enter the
   // link+rename path at all.
   try {
-    if (statSync(shimPath).ino === statSync(binaryPath).ino) {
+    const shimStat = statSync(shimPath)
+    const binStat = statSync(binaryPath)
+    // Match on device + inode: inode numbers are only unique within a
+    // filesystem, so comparing ino alone could collide across devices.
+    if (shimStat.dev === binStat.dev && shimStat.ino === binStat.ino) {
       return
     }
   }
