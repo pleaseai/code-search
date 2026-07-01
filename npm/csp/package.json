@@ -26,10 +26,15 @@
     "csp": "bin/csp.js"
   },
   "files": [
-    "bin/csp.js"
+    "bin/csp.js",
+    "install.js",
+    "lib/resolve.js"
   ],
   "engines": {
     "node": ">=22.0.0"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
   },
   "optionalDependencies": {
     "@pleaseai/csp-darwin-arm64": "0.0.0",

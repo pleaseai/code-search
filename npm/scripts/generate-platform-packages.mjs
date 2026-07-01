@@ -24,7 +24,7 @@ const TARGETS = [
   { pkg: '@pleaseai/csp-darwin-arm64', asset: 'csp-darwin-arm64', binary: 'csp', os: 'darwin', cpu: 'arm64' },
   { pkg: '@pleaseai/csp-darwin-x64', asset: 'csp-darwin-x64', binary: 'csp', os: 'darwin', cpu: 'x64' },
   { pkg: '@pleaseai/csp-linux-x64', asset: 'csp-linux-x64', binary: 'csp', os: 'linux', cpu: 'x64', libc: 'glibc' },
-  { pkg: '@pleaseai/csp-linux-arm64', asset: 'csp-linux-arm64', binary: 'csp', os: 'linux', cpu: 'arm64' },
+  { pkg: '@pleaseai/csp-linux-arm64', asset: 'csp-linux-arm64', binary: 'csp', os: 'linux', cpu: 'arm64', libc: 'glibc' },
   { pkg: '@pleaseai/csp-linux-x64-musl', asset: 'csp-linux-x64-musl', binary: 'csp', os: 'linux', cpu: 'x64', libc: 'musl' },
   { pkg: '@pleaseai/csp-win32-x64', asset: 'csp-windows-x64.exe', binary: 'csp.exe', os: 'win32', cpu: 'x64' },
 ]
@@ -96,8 +96,13 @@ const wrapper = {
 }
 const wrapperDir = join(distRoot, 'csp')
 mkdirSync(join(wrapperDir, 'bin'), { recursive: true })
+mkdirSync(join(wrapperDir, 'lib'), { recursive: true })
 writeFileSync(join(wrapperDir, 'package.json'), `${JSON.stringify(wrapper, null, 2)}\n`)
+// The runtime launcher shim (overwritten by the postinstall copy-over), the
+// postinstall step itself, and the shared resolver both of them require.
 copyFileSync(join(npmRoot, 'csp', 'bin', 'csp.js'), join(wrapperDir, 'bin', 'csp.js'))
+copyFileSync(join(npmRoot, 'csp', 'install.js'), join(wrapperDir, 'install.js'))
+copyFileSync(join(npmRoot, 'csp', 'lib', 'resolve.js'), join(wrapperDir, 'lib', 'resolve.js'))
 
 // Ship the user-facing README + LICENSE in the published wrapper so the npm
 // package page renders docs (without these, npm shows "No README data found").
