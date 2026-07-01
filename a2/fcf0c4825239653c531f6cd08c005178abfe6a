@@ -1,0 +1,43 @@
+npm/csp/bin/csp.js
+  s_4ccf564d2a0389::t_51b9d3cd162fa6 2-5,28
+  s_4ccf564d2a0389::t_5e90546e3fb406 6-11,13,15,27,38-50,54-89
+npm/csp/install.js
+  s_4ccf564d2a0389::t_f72f23e62d8770 36-48,68-72
+  s_4ccf564d2a0389::t_7cc6c1f7cc0ec7 1-14,16-35,49-67,73-80
+  s_4ccf564d2a0389::t_8877fd014d2b66 15
+npm/csp/lib/resolve.js
+  s_4ccf564d2a0389::t_ff2d7a7a8261bd 74-75
+  s_4ccf564d2a0389::t_24b4b2cedc0691 90-115
+  s_4ccf564d2a0389::t_105014e3d9af22 1-8,11-16,19-73,76-89
+  s_4ccf564d2a0389::t_503527d9a75496 9-10
+  s_4ccf564d2a0389::t_813a9278f10fd0 17-18
+npm/scripts/generate-platform-packages.mjs
+  s_4ccf564d2a0389::t_85b7e1d2145135 99,101-102,104-105
+npm/csp/package.json
+  s_4ccf564d2a0389::t_7cf6c6a0f17d6e 29-31
+  s_4ccf564d2a0389::t_2afc1155415430 36-37
+  s_4ccf564d2a0389::t_42fd81d57d3b75 38
+CLAUDE.md
+  s_4ccf564d2a0389::t_eb313616fa31d7 11
+npm/README.md
+  s_4ccf564d2a0389::t_d1d94def99fa43 81-84
+  s_4ccf564d2a0389::t_8f2abdeb0f4fbe 20-26
+  s_4ccf564d2a0389::t_6c7de49edfcde7 13-16,19,27-35,41-67
+  s_4ccf564d2a0389::t_5b51438e1118dd 68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "a2fcf0c4825239653c531f6cd08c005178abfe6a",
+  "prompts": {},
+  "sessions": {
+    "s_4ccf564d2a0389": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8b2ea81d-bf23-4ee1-9ce0-41b7b1995d3e",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
