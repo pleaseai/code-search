@@ -1,0 +1,19 @@
+.github/PULL_REQUEST_TEMPLATE.md
+  s_f0c447c07ea585::t_36479dc7246e49 14-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "e0267e65dd7d7bc884b72504f4f22f68b5886f2f",
+  "prompts": {},
+  "sessions": {
+    "s_f0c447c07ea585": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9026827b-9f5e-4cb2-ac4f-0218019c1c6d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
