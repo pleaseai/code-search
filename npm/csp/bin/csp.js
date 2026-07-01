@@ -1,64 +1,18 @@
 #!/usr/bin/env node
-// Launcher for the platform-specific `csp` Rust binary. Resolves the binary
-// shipped by the matching @pleaseai/csp-<platform> optional dependency and
-// execs it, forwarding argv, stdio, and the exit code. Modeled on Biome's
-// distribution launcher (ADR-0003 / T023).
+// Fallback launcher for the platform-specific `csp` Rust binary.
+//
+// Normally the postinstall step (`install.js`) copies the native binary OVER
+// this file so npm's `.bin/csp` symlink resolves straight to native code — no
+// Node.js process on the hot path (esbuild/ast-grep-style copy-over). This JS
+// shim is the fallback for when postinstall did not run — e.g. `--ignore-scripts`,
+// or bun blocking lifecycle scripts for untrusted deps (`bunx @pleaseai/csp`,
+// or `bun install` without `@pleaseai/csp` in `trustedDependencies`). It resolves
+// the binary at runtime and execs it, forwarding argv, stdio, signals, and the
+// exit code.
 
-const { spawnSync } = require('node:child_process')
+const { spawn } = require('node:child_process')
 const process = require('node:process')
-
-/**
- * Map the current platform/arch (plus libc on Linux) to the optional-dependency
- * package name and the binary filename it ships.
- */
-function resolvePlatformPackage() {
-  const { platform, arch } = process
-
-  if (platform === 'win32') {
-    if (arch === 'x64') {
-      return { pkg: '@pleaseai/csp-win32-x64', binary: 'csp.exe' }
-    }
-  }
-  else if (platform === 'darwin') {
-    if (arch === 'arm64') {
-      return { pkg: '@pleaseai/csp-darwin-arm64', binary: 'csp' }
-    }
-    if (arch === 'x64') {
-      return { pkg: '@pleaseai/csp-darwin-x64', binary: 'csp' }
-    }
-  }
-  else if (platform === 'linux') {
-    const musl = isMusl()
-    if (arch === 'x64') {
-      return musl
-        ? { pkg: '@pleaseai/csp-linux-x64-musl', binary: 'csp' }
-        : { pkg: '@pleaseai/csp-linux-x64', binary: 'csp' }
-    }
-    if (arch === 'arm64') {
-      // arm64 ships glibc only for now; musl arm64 falls back to it.
-      return { pkg: '@pleaseai/csp-linux-arm64', binary: 'csp' }
-    }
-  }
-
-  return null
-}
-
-/** Best-effort libc detection: report.glibcVersionRuntime is absent on musl. */
-function isMusl() {
-  try {
-    const report = typeof process.report?.getReport === 'function'
-      ? process.report.getReport()
-      : null
-    if (report && report.header && report.header.glibcVersionRuntime) {
-      return false
-    }
-    // No glibc runtime reported → assume musl (e.g. Alpine).
-    return report !== null
-  }
-  catch {
-    return false
-  }
-}
+const { resolveBinaryPath, resolveDevBinaryPath, resolvePlatformPackage } = require('../lib/resolve.js')
 
 function main() {
   const target = resolvePlatformPackage()
@@ -70,11 +24,8 @@ function main() {
     process.exit(1)
   }
 
-  let binaryPath
-  try {
-    binaryPath = require.resolve(`${target.pkg}/${target.binary}`)
-  }
-  catch {
+  const binaryPath = resolveBinaryPath() ?? resolveDevBinaryPath()
+  if (binaryPath === null) {
     process.stderr.write(
       `csp: the platform package "${target.pkg}" is not installed.\n`
       + 'It should have been pulled in automatically as an optional dependency. '
@@ -84,14 +35,58 @@ function main() {
     process.exit(1)
   }
 
-  const result = spawnSync(binaryPath, process.argv.slice(2), {
+  // This shim only runs when the postinstall copy-over did not (on Windows the
+  // shim is the intended launcher, so no hint there). Nudge interactive users
+  // toward the fast path; stay silent on pipes/MCP-stdio/CI to avoid noise.
+  if (process.platform !== 'win32' && process.stderr.isTTY && !process.env.CSP_NO_FALLBACK_WARNING) {
+    process.stderr.write(
+      'csp: running via the Node launcher (postinstall copy-over did not run), '
+      + 'which adds per-invocation startup overhead.\n'
+      + 'Under bun, add "@pleaseai/csp" to "trustedDependencies" for the native fast path. '
+      + 'Set CSP_NO_FALLBACK_WARNING=1 to silence this.\n',
+    )
+  }
+
+  const child = spawn(binaryPath, process.argv.slice(2), {
     stdio: 'inherit',
     windowsHide: true,
   })
-  if (result.error) {
-    throw result.error
-  }
-  process.exit(result.status ?? 1)
+
+  child.on('error', (error) => {
+    process.stderr.write(`csp: failed to execute native binary: ${error.message}\n`)
+    process.exit(1)
+  })
+
+  // Forward termination signals to the child so a supervisor killing this
+  // launcher (e.g. stopping a long-running `csp mcp` server) cleanly stops the
+  // binary too, rather than orphaning it.
+  const signals = ['SIGINT', 'SIGTERM', 'SIGHUP']
+  const forward = signals.map((signal) => {
+    const handler = () => {
+      if (!child.killed) {
+        try {
+          child.kill(signal)
+        }
+        catch {}
+      }
+    }
+    process.on(signal, handler)
+    return [signal, handler]
+  })
+
+  child.on('exit', (code, signal) => {
+    for (const [s, h] of forward) {
+      process.removeListener(s, h)
+    }
+    if (signal) {
+      // Re-raise the signal on ourselves so the parent observes the same cause
+      // of death (correct exit status for shells and supervisors).
+      process.kill(process.pid, signal)
+    }
+    else {
+      process.exit(code ?? 1)
+    }
+  })
 }
 
 main()
