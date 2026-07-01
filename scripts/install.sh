@@ -30,8 +30,10 @@ readonly BIN_NAME="csp"
 readonly RELEASES_URL="https://github.com/${OWNER}/${REPO}/releases"
 
 # --- Output helpers ----------------------------------------------------------
-# Only emit ANSI colors when stderr is a terminal. Piped through `curl | bash`
-# into a log file, escape sequences would show up as literal garbage.
+# All human-facing messages (info/ok/err) go to stderr, keeping stdout clean for
+# piping. Gate colors on the same fd they're written to (stderr): otherwise, with
+# stdout redirected to a log file, escape sequences would land in the log instead
+# of on screen.
 if [[ -t 2 ]]; then
   RED='\033[0;31m'
   GREEN='\033[0;32m'
@@ -48,8 +50,8 @@ fi
 # reference it after main()'s locals go out of scope.
 WORKDIR=""
 
-info() { printf '%b\n' "${YELLOW}==>${NC} $*"; }
-ok() { printf '%b\n' "${GREEN}✓${NC} $*"; }
+info() { printf '%b\n' "${YELLOW}==>${NC} $*" >&2; }
+ok() { printf '%b\n' "${GREEN}✓${NC} $*" >&2; }
 err() { printf '%b\n' "${RED}✗${NC} $*" >&2; }
 
 die() {
@@ -144,7 +146,7 @@ warn_if_not_on_path() {
     *":${dir}:"*) ;;
     *)
       info "${dir} is not on your PATH. Add it to your shell profile:"
-      printf '    export PATH="%s:$PATH"\n' "$dir"
+      printf '    export PATH="%s:$PATH"\n' "$dir" >&2
       ;;
   esac
 }
