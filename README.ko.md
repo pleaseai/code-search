@@ -79,13 +79,16 @@ codex plugin add csp@pleaseai
 # Homebrew (macOS / Linux) — Node/Bun 없이 동작하는 독립 실행 바이너리
 brew install pleaseai/tap/csp
 
+# 또는 독립 실행 바이너리를 직접 내려받기 (패키지 매니저 불필요)
+curl -fsSL https://raw.githubusercontent.com/pleaseai/code-search/main/scripts/install.sh | bash
+
 # 또는 JavaScript 패키지 매니저로 설치 (PATH에 Bun 또는 Node 22+ 필요)
 bun add -g @pleaseai/csp     # bun으로 설치 (권장)
 npm install -g @pleaseai/csp # 또는 npm
 pnpm add -g @pleaseai/csp    # 또는 pnpm
 ```
 
-> Homebrew formula는 자체 완결형 Rust 바이너리를 제공합니다(`cargo build --release`; tree-sitter 문법·임베딩 런타임 내장)므로 런타임에 Node/Bun이 필요 없습니다. npm 패키지는 동일한 바이너리를 작은 Node 런처 뒤에 담아 배포하므로, `npm`/`bun`/`pnpm` 설치 경로는 `PATH`에 Bun 또는 Node 22+가 필요합니다. 인덱스는 `~/.csp/`에 캐시됩니다([ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md) 참고).
+> Homebrew formula는 자체 완결형 Rust 바이너리를 제공합니다(`cargo build --release`; tree-sitter 문법·임베딩 런타임 내장)므로 런타임에 Node/Bun이 필요 없습니다. `install.sh` 스크립트는 플랫폼에 맞는 동일한 독립 실행 바이너리를 GitHub 릴리스에서 내려받아 체크섬을 검증한 뒤 `~/.local/bin`에 설치합니다(`CSP_INSTALL_DIR`로 경로 변경, `bash -s -- --version v0.1.7`로 버전 고정 가능). npm 패키지는 동일한 바이너리를 작은 Node 런처 뒤에 담아 배포하므로, `npm`/`bun`/`pnpm` 설치 경로는 `PATH`에 Bun 또는 Node 22+가 필요합니다. 인덱스는 `~/.csp/`에 캐시됩니다([ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md) 참고).
 
 <details>
 <summary>AGENTS.md / CLAUDE.md 스니펫</summary>

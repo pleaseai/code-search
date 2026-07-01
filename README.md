@@ -79,13 +79,16 @@ Add `csp` usage instructions to your agent's context so it knows when and how to
 # Homebrew (macOS / Linux) — standalone binary, no Node/Bun required
 brew install pleaseai/tap/csp
 
+# Or download the standalone binary directly (no package manager required)
+curl -fsSL https://raw.githubusercontent.com/pleaseai/code-search/main/scripts/install.sh | bash
+
 # Or via a JavaScript package manager (needs Bun or Node 22+ on your PATH)
 bun add -g @pleaseai/csp     # Install with bun (recommended)
 npm install -g @pleaseai/csp # Or with npm
 pnpm add -g @pleaseai/csp    # Or with pnpm
 ```
 
-> The Homebrew formula ships a self-contained Rust binary (`cargo build --release`; tree-sitter grammars and the embedding runtime are built in), so it needs no Node/Bun at runtime. The npm package ships the same binary behind a small Node launcher, so the `npm`/`bun`/`pnpm` install path needs Bun or Node 22+ on your `PATH`. Indexes are cached under `~/.csp/` (see [ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md)).
+> The Homebrew formula ships a self-contained Rust binary (`cargo build --release`; tree-sitter grammars and the embedding runtime are built in), so it needs no Node/Bun at runtime. The `install.sh` script downloads that same standalone binary from the GitHub release for your platform, verifies its checksum, and drops it in `~/.local/bin` (override with `CSP_INSTALL_DIR`; pin a release with `bash -s -- --version v0.1.7`). The npm package ships the same binary behind a small Node launcher, so the `npm`/`bun`/`pnpm` install path needs Bun or Node 22+ on your `PATH`. Indexes are cached under `~/.csp/` (see [ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md)).
 
 <details>
 <summary>AGENTS.md / CLAUDE.md snippet</summary>
