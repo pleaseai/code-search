@@ -1,0 +1,26 @@
+npm/csp/install.js
+  s_4ccf564d2a0389::t_6071d4cf7f0f16 16,21-30
+npm/csp/bin/csp.js
+  s_4ccf564d2a0389::t_e1319fd9b091be 45-46
+npm/csp/lib/resolve.js
+  s_4ccf564d2a0389::t_b81106194a83bd 127-129
+  s_4ccf564d2a0389::t_ecf83c15dbc865 55,58-74
+npm/README.md
+  s_4ccf564d2a0389::t_9bacfd94975ac3 82-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "c43be1830e8ab07222de07458d4e4df46d2eaaa7",
+  "prompts": {},
+  "sessions": {
+    "s_4ccf564d2a0389": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8b2ea81d-bf23-4ee1-9ce0-41b7b1995d3e",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
