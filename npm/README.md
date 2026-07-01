@@ -79,7 +79,10 @@ startup win. bun users who want the fast path add `@pleaseai/csp` to
 ## Layout
 
 - `csp/` — the wrapper package:
-  - `bin/csp.js` — the runtime launcher (overwritten by the copy-over at install).
+  - `bin/csp.js` — the runtime launcher. On a successful `postinstall` the
+    copy-over replaces it with the native binary; it is left in place (and used
+    as the fallback) on Windows, unsupported platforms, when lifecycle scripts
+    are skipped, or if the copy fails.
   - `install.js` — the `postinstall` copy-over step.
   - `lib/resolve.js` — the shared platform resolver (never overwritten).
 - `scripts/generate-platform-packages.mjs` — at release time, generates the

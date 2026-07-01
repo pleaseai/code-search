@@ -13,11 +13,21 @@
 // of trying to `require()` a native executable as CommonJS.
 
 const { chmodSync, copyFileSync, linkSync, renameSync, statSync, unlinkSync } = require('node:fs')
-const { join } = require('node:path')
+const { join, sep } = require('node:path')
 const process = require('node:process')
 const { resolveBinaryPath } = require('./lib/resolve.js')
 
 function main() {
+  // Only rewrite the launcher when running as an installed dependency. From a
+  // source checkout `bin/csp.js` is a git-tracked file, and an in-place
+  // copy-over there would mutate the repo — the generator reads that same file
+  // into every published wrapper, so one stray local install could ship a
+  // native binary as the "launcher". An installed package always lives under a
+  // `node_modules/` path segment; a checkout does not.
+  if (!__dirname.split(sep).includes('node_modules')) {
+    return
+  }
+
   // On Windows the npm-generated bin shims (csp.cmd / csp.ps1) invoke
   // `node bin/csp.js`, so the shim must remain JavaScript. Skip the copy-over
   // and rely on the runtime launcher there.

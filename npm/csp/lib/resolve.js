@@ -52,14 +52,26 @@ function resolvePlatformPackage() {
 /** Best-effort libc detection: report.glibcVersionRuntime is absent on musl. */
 function isMusl() {
   try {
-    const report = typeof process.report?.getReport === 'function'
-      ? process.report.getReport()
-      : null
-    if (report && report.header && report.header.glibcVersionRuntime) {
+    if (typeof process.report?.getReport !== 'function') {
       return false
     }
-    // No glibc runtime reported → assume musl (e.g. Alpine).
-    return report !== null
+    // getReport() defaults to including network info, which can trigger a
+    // blocking reverse-DNS (PTR) lookup — the opposite of this shim's goal.
+    // We only need report.header.glibcVersionRuntime, so exclude network data
+    // for the call and restore the caller's setting afterward.
+    const previousExcludeNetwork = process.report.excludeNetwork
+    process.report.excludeNetwork = true
+    try {
+      const report = process.report.getReport()
+      if (report && report.header && report.header.glibcVersionRuntime) {
+        return false
+      }
+      // No glibc runtime reported → assume musl (e.g. Alpine).
+      return report != null
+    }
+    finally {
+      process.report.excludeNetwork = previousExcludeNetwork
+    }
   }
   catch {
     return false
@@ -112,4 +124,6 @@ function resolveDevBinaryPath() {
   return null
 }
 
-module.exports = { resolvePlatformPackage, resolveBinaryPath, resolveDevBinaryPath, isMusl }
+// isMusl stays private — it is an internal helper of resolvePlatformPackage;
+// exporting it would invite callers to drift from the canonical resolution.
+module.exports = { resolvePlatformPackage, resolveBinaryPath, resolveDevBinaryPath }

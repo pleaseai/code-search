@@ -42,7 +42,8 @@ function main() {
     process.stderr.write(
       'csp: running via the Node launcher (postinstall copy-over did not run), '
       + 'which adds per-invocation startup overhead.\n'
-      + 'Under bun, add "@pleaseai/csp" to "trustedDependencies" for the native fast path. '
+      + 'Reinstall without --ignore-scripts, or under bun add "@pleaseai/csp" to '
+      + '"trustedDependencies", for the native fast path. '
       + 'Set CSP_NO_FALLBACK_WARNING=1 to silence this.\n',
     )
   }
