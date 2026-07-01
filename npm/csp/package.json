@@ -1,6 +1,6 @@
 {
   "name": "@pleaseai/csp",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Fast and accurate hybrid code search for agents (Rust binary, npm-distributed).",
   "license": "MIT",
   "homepage": "https://github.com/pleaseai/code-search",
