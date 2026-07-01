@@ -11,7 +11,7 @@
 ## Checklist
 
 - [ ] PR title follows Conventional Commits
-- [ ] Tests added or updated, and the suite passes (`bun run test`)
-- [ ] Lint/format pass (`bun run lint`)
+- [ ] Tests added or updated, and the suite passes (`mise run test`)
+- [ ] Lint/format pass (`mise run lint`)
 - [ ] Documentation updated if behavior changed
 - [ ] No breaking change, or a `BREAKING CHANGE:` note is included
