@@ -146,7 +146,7 @@ warn_if_not_on_path() {
     *":${dir}:"*) ;;
     *)
       info "${dir} is not on your PATH. Add it to your shell profile:"
-      printf '    export PATH="%s:$PATH"\n' "$dir" >&2
+      printf "    export PATH=\"%s:\$PATH\"\n" "$dir" >&2
       ;;
   esac
 }
