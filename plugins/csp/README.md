@@ -12,7 +12,7 @@ Fast, local, token-efficient hybrid code search for agents, packaged as both a [
 **Claude Code:**
 
 ```text
-/plugin marketplace add pleaseai/code-search
+/plugin marketplace add pleaseai/claude-code-plugins
 /plugin install csp@pleaseai
 ```
 
@@ -21,7 +21,7 @@ Then restart Claude Code (or run `/mcp` to confirm the `csp` server is connected
 **Codex:**
 
 ```bash
-codex plugin marketplace add pleaseai/code-search
+codex plugin marketplace add pleaseai/claude-code-plugins
 codex plugin add csp@pleaseai
 ```
 
