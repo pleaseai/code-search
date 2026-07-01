@@ -1,14 +1,7 @@
 {
   "enabledPlugins": {
-    "typescript-lsp@code-intelligence": true,
-    "rust-analyzer-lsp@code-intelligence": true,
-    "eslint-lsp@code-intelligence": true,
+    "code-intelligence-lsp@code-intelligence": true,
     "bun@pleaseai": true,
-    "claude-md-management@claude-plugins-official": true,
-    "code-review@pleaseai": true,
-    "please@passionfactory": true,
-    "standards@passionfactory": true,
-    "review@passionfactory": true,
-    "plannotator@passionfactory": true
+    "claude-md-management@claude-plugins-official": true
   }
 }
