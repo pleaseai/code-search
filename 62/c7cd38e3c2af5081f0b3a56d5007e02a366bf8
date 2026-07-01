@@ -1,0 +1,19 @@
+scripts/install.sh
+  s_1243a9ea83087a::t_4bf2ecefc4fb30 149
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "62c7cd38e3c2af5081f0b3a56d5007e02a366bf8",
+  "prompts": {},
+  "sessions": {
+    "s_1243a9ea83087a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fada5b23-eeee-4a70-b8c8-82528444698c",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
