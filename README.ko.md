@@ -58,14 +58,14 @@ claude mcp add csp -s user -- bunx @pleaseai/csp mcp
 Claude Code:
 
 ```text
-/plugin marketplace add pleaseai/code-search
+/plugin marketplace add pleaseai/claude-code-plugins
 /plugin install csp@pleaseai
 ```
 
 Codex:
 
 ```bash
-codex plugin marketplace add pleaseai/code-search
+codex plugin marketplace add pleaseai/claude-code-plugins
 codex plugin add csp@pleaseai
 ```
 

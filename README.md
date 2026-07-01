@@ -58,14 +58,14 @@ The fastest way to set up `csp` is the plugin, which registers the MCP server **
 Claude Code:
 
 ```text
-/plugin marketplace add pleaseai/code-search
+/plugin marketplace add pleaseai/claude-code-plugins
 /plugin install csp@pleaseai
 ```
 
 Codex:
 
 ```bash
-codex plugin marketplace add pleaseai/code-search
+codex plugin marketplace add pleaseai/claude-code-plugins
 codex plugin add csp@pleaseai
 ```
 
