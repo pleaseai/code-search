@@ -282,14 +282,19 @@ jobs:
           sed -i "s/SHA256_LINUX_X64_PLACEHOLDER/${LINUX_X64_SHA256}/" csp.rb
           sed -i "s/SHA256_LINUX_ARM64_PLACEHOLDER/${LINUX_ARM64_SHA256}/" csp.rb
 
-          # Check if there are changes
-          if git diff --quiet csp.rb 2>/dev/null; then
+          # Stage first, then check the *staged* diff. `git diff --quiet csp.rb`
+          # compares the working tree against the index and ignores untracked
+          # files, so on the very first run (csp.rb absent from the tap) it
+          # reported "no changes" and skipped the commit — which is why the
+          # formula was never published. `git diff --cached` sees the newly
+          # added file and still no-ops on an unchanged re-run.
+          git add csp.rb
+          if git diff --cached --quiet; then
             echo "No changes to Formula"
             exit 0
           fi
 
           # Commit and push
-          git add csp.rb
           git commit -m "chore: update csp to ${VERSION}"
           git push origin main
         env:
