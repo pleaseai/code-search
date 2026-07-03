@@ -3,7 +3,8 @@
 //! `src/mcp/server.ts` (← semble `mcp.py`).
 //!
 //! The handlers and [`IndexCache`] are transport-agnostic and fully tested here.
-//! The rmcp stdio server in `csp-cli` (`mcp_server.rs`) wires these handlers onto
+//! The rmcp stdio server in the `csp` binary (`src/bin/csp/mcp_server.rs`, behind
+//! the `cli` feature) wires these handlers onto
 //! the live MCP protocol; this core is kept transport-free so it stays unit-
 //! testable. [`IndexCache`] holds `Arc<CspIndex>` so it can be shared across the
 //! async server's tokio tasks.

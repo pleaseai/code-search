@@ -5,7 +5,7 @@
 # it is retired and this becomes the primary tree.
 [workspace]
 resolver = "2"
-members = ["crates/csp", "crates/csp-cli", "crates/csp-node"]
+members = ["crates/csp", "crates/csp-node"]
 
 [workspace.package]
 version = "0.1.9" # x-release-please-version
@@ -19,7 +19,10 @@ authors = ["csp maintainers"]
 [workspace.dependencies]
 # Published as `code-search-please`; the `csp` key keeps `use csp::...` working
 # in member crates (the lib name stays `csp` via crates/csp `[lib]`).
-csp = { path = "crates/csp", package = "code-search-please" }
+# `default-features = false` drops the CLI stack (clap/tokio/rmcp) — csp-node
+# only wants the library. The `csp` binary lives inside code-search-please
+# itself (behind the default-on `cli` feature), so it doesn't consume this key.
+csp = { path = "crates/csp", package = "code-search-please", default-features = false }
 model2vec-rs = "0.2"   # Phase 3 — dense embeddings (official MinishLab port)
 tree-sitter = "0.26"   # Phase 2 — AST chunking
 ignore = "0.4"         # Phase 3 — .gitignore / .cspignore file walking

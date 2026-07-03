@@ -65,8 +65,8 @@ jobs:
       # x-release-please-version annotation) but does not touch Cargo.lock, so
       # every workspace member stays at the previous version and the release
       # build's `cargo build --locked` fails. `--workspace` re-locks only the
-      # local members by their real package names (code-search-please / csp-cli
-      # / csp-node) — it does not bump external deps. Don't name packages
+      # local members by their real package names (code-search-please /
+      # csp-node) — it does not bump external deps. Don't name packages
       # explicitly: `-p csp` broke once the lib crate was renamed to
       # code-search-please and csp-node was added. Commit it into the release
       # PR. Mirrors the bun.lock sync.
@@ -307,8 +307,10 @@ jobs:
   # configured on a crate that doesn't exist yet), (2) add a GitHub Actions
   # trusted publisher on crates.io (repo pleaseai/code-search, workflow
   # release-please.yml), (3) set the repo variable CRATES_IO_PUBLISH=true.
-  # The CLI crate (code-search-please-cli) is a follow-up — it needs
-  # intra-workspace dependency-version management before it can publish.
+  # The CLI ships inside this same crate as the `csp` binary (default-on `cli`
+  # feature — the ripgrep model), so `cargo publish -p code-search-please` and
+  # `cargo install code-search-please` both cover the library and the CLI; there
+  # is no separate CLI crate to version-manage.
   publish-crate:
     needs: [release-please]
     if: ${{ needs.release-please.outputs.release_created && vars.CRATES_IO_PUBLISH == 'true' }}
