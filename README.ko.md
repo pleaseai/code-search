@@ -12,6 +12,7 @@
     <a href="https://app.codspeed.io/pleaseai/code-search?utm_source=badge"><img src="https://img.shields.io/endpoint?url=https://app.codspeed.io/badge.json" alt="CodSpeed"/></a>
     <a href="https://sonarcloud.io/summary/new_code?id=pleaseai_code-search"><img src="https://sonarcloud.io/api/project_badges/measure?project=pleaseai_code-search&metric=alert_status" alt="Quality Gate Status"></a>
     <a href="https://socket.dev/npm/package/@pleaseai/csp"><img src="https://socket.dev/api/badge/npm/package/@pleaseai/csp" alt="Socket Badge"></a>
+    <a href="https://socket.dev/cargo/package/code-search-please"><img src="https://socket.dev/api/badge/cargo/package/code-search-please" alt="Socket Badge"></a>
     <a href="https://github.com/pleaseai/code-search/blob/main/LICENSE">
       <img src="https://img.shields.io/badge/license-MIT-green" alt="License - MIT">
     </a>
@@ -86,6 +87,9 @@ curl -fsSL https://raw.githubusercontent.com/pleaseai/code-search/main/scripts/i
 bun add -g @pleaseai/csp     # bun으로 설치 (권장)
 npm install -g @pleaseai/csp # 또는 npm
 pnpm add -g @pleaseai/csp    # 또는 pnpm
+
+# 또는 Cargo로 소스에서 설치 (standalone 바이너리를 로컬에서 컴파일)
+cargo install code-search-please
 ```
 
 > Homebrew formula는 자체 완결형 Rust 바이너리를 제공합니다(`cargo build --release`; tree-sitter 문법·임베딩 런타임 내장)므로 런타임에 Node/Bun이 필요 없습니다. `install.sh` 스크립트는 플랫폼에 맞는 동일한 독립 실행 바이너리를 GitHub 릴리스에서 내려받아 체크섬을 검증한 뒤 `~/.local/bin`에 설치합니다(`CSP_INSTALL_DIR`로 경로 변경, `bash -s -- --version v0.1.7`로 버전 고정 가능). npm 패키지는 동일한 바이너리를 작은 Node 런처 뒤에 담아 배포하므로, `npm`/`bun`/`pnpm` 설치 경로는 `PATH`에 Bun 또는 Node 22+가 필요합니다. 인덱스는 `~/.csp/`에 캐시됩니다([ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md) 참고).
@@ -454,9 +458,11 @@ csp clear all      # 인덱스 캐시와 savings 모두 삭제
 
 **Rust** — 짧은 이름 `csp`가 이미 선점되어 있어 crates.io에는 [**`code-search-please`**](https://crates.io/crates/code-search-please)로 배포됩니다. 라이브러리 이름은 `csp` 그대로이므로 의존성은 `code-search-please`로 추가하되 코드에서는 `use csp::...`를 씁니다. `CspIndex`(`from_path` / `from_git` / `search` / `find_related`)와 `ContentType` enum, 랭킹 파이프라인을 노출합니다.
 
+이 크레이트는 `csp` CLI도 함께 담고 있습니다(기본 활성화된 `cli` 피처). **라이브러리**로 의존할 때는 기본 피처를 끄면 CLI 스택(`clap` / `tokio` / `rmcp`)을 건너뜁니다:
+
 ```toml
 [dependencies]
-code-search-please = "0.1"
+code-search-please = { version = "0.1", default-features = false }
 ```
 
 ```rust
@@ -510,7 +516,7 @@ for (const { chunk, score } of results) {
 
 ## 개발
 
-라이브러리와 `csp` 바이너리는 Cargo 워크스페이스입니다(`crates/csp`, `crates/csp-cli`):
+라이브러리와 `csp` 바이너리는 Cargo 워크스페이스입니다(`crates/csp`에 라이브러리와 `csp` 바이너리가 함께 있고, `csp` 바이너리는 기본 활성화된 `cli` 피처 뒤에 있습니다):
 
 ```bash
 cargo build --release          # csp 바이너리 빌드

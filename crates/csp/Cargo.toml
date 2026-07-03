@@ -41,8 +41,29 @@ model2vec-rs = { workspace = true }
 tree-sitter = { workspace = true }
 tree-sitter-language-pack = "1.9"
 
+# CLI + MCP-server dependencies, gated behind the `cli` feature so library
+# consumers (`use csp::...`) don't pull the clap/tokio/rmcp stack. The `csp`
+# binary sets `required-features = ["cli"]`; the feature is on by default so
+# `cargo install code-search-please` yields the `csp` CLI with no extra flags
+# (the ripgrep model — one crate, lib + bin). Depend on the library only with
+# `default-features = false` to get the lean tree.
+clap = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+rmcp = { workspace = true, optional = true }
+schemars = { workspace = true, optional = true }
+anyhow = { workspace = true, optional = true }
+
+[features]
+default = ["cli"]
+cli = ["dep:clap", "dep:tokio", "dep:rmcp", "dep:schemars", "dep:anyhow"]
+
 [dev-dependencies]
 criterion = { version = "5.0.1", package = "codspeed-criterion-compat" }
+
+[[bin]]
+name = "csp"
+path = "src/bin/csp/main.rs"
+required-features = ["cli"]
 
 [[bench]]
 name = "core"

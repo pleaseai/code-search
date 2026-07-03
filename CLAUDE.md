@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project context
 
-`@pleaseai/csp` (binary: `csp`) is a **Rust** port of [MinishLab/semble](https://github.com/MinishLab/semble), a Python hybrid code-search library for agents. The implementation lives in `crates/csp` (library) + `crates/csp-cli` (`csp` binary). The README is the canonical spec for the public surface (MCP server, CLI, library).
+`@pleaseai/csp` (binary: `csp`) is a **Rust** port of [MinishLab/semble](https://github.com/MinishLab/semble), a Python hybrid code-search library for agents. The implementation lives in `crates/csp` — the library plus the `csp` binary (`src/bin/csp/`, gated behind the default-on `cli` feature). The README is the canonical spec for the public surface (MCP server, CLI, library).
 
 The deprecated TypeScript implementation that formerly lived under `src/` has been **removed** — the Rust port is the only implementation. The root `package.json` / `tsconfig.json` / `eslint.config.ts` remain only as repo JS tooling (lint/typecheck of `npm/`) and the release-please version anchor. The **napi-rs native-binding SDK** binds the `crates/` Rust directly (it does not reintroduce a TS port).
 
@@ -32,7 +32,7 @@ Read the Python source directly — do not infer behavior from the README. Key u
 
 The implementation is **Rust** (a Cargo workspace). A thin Node/Bun toolchain remains for repo-level JS lint/typecheck and the future napi-rs SDK.
 
-- **Impl**: Rust, edition 2021. Cargo workspace (`crates/csp` lib + `crates/csp-cli` `csp` binary), toolchain pinned by `rust-toolchain.toml`. Single-binary release profile (`lto`, `codegen-units=1`, `strip`).
+- **Impl**: Rust, edition 2021. Cargo workspace — `crates/csp` holds the lib **and** the `csp` binary (`src/bin/csp/`, behind the default-on `cli` feature; published as `code-search-please`, so `cargo install code-search-please` yields the CLI), plus `crates/csp-node` (napi SDK). Toolchain pinned by `rust-toolchain.toml`. Single-binary release profile (`lto`, `codegen-units=1`, `strip`).
 - **Tests**: `cargo test --workspace` (255+ lib + CLI tests). Network-gated grammar-fetch tests run with `-- --ignored` (see ADR-0004).
 - **Distribution**: self-contained Rust binary via Homebrew (`pleaseai/homebrew-tap`) + an npm wrapper under `npm/` that preserves the `bunx @pleaseai/csp` entrypoint.
 - **JS tooling** (no TS implementation): Bun ≥1.3.10 / Node ≥22 (the `engines` floor; `mise.toml` pins 1.3.14 / 24 for dev + CI). `@pleaseai/eslint-config` (wraps `@antfu/eslint-config`) lints `npm/` JS + `eslint.config.ts`; `tsc --noEmit` typechecks. No semicolons, single quotes, 2-space indent.
@@ -43,7 +43,7 @@ The implementation is **Rust** (a Cargo workspace). A thin Node/Bun toolchain re
 ```bash
 # Rust (the implementation)
 cargo build --release                          # → target/release/csp
-cargo run -p csp-cli -- search "query" .       # run the CLI locally
+cargo run -p code-search-please -- search "query" .   # run the CLI locally (bin `csp`, needs the `cli` feature — on by default)
 cargo test --workspace                         # test runner
 cargo fmt --all && cargo clippy --all-targets --all-features -- -D warnings   # pre-commit gate
 

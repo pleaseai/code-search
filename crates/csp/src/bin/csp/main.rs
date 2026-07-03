@@ -146,16 +146,16 @@ impl Agent {
     /// Embedded sub-agent template for this agent.
     fn template(self) -> &'static str {
         match self {
-            Agent::Antigravity => include_str!("../agents/antigravity.md"),
-            Agent::Claude => include_str!("../agents/claude.md"),
-            Agent::Commandcode => include_str!("../agents/commandcode.md"),
-            Agent::Copilot => include_str!("../agents/copilot.md"),
-            Agent::Cursor => include_str!("../agents/cursor.md"),
-            Agent::Gemini => include_str!("../agents/gemini.md"),
-            Agent::Kiro => include_str!("../agents/kiro.md"),
-            Agent::Opencode => include_str!("../agents/opencode.md"),
-            Agent::Pi => include_str!("../agents/pi.md"),
-            Agent::Reasonix => include_str!("../agents/reasonix.md"),
+            Agent::Antigravity => include_str!("agents/antigravity.md"),
+            Agent::Claude => include_str!("agents/claude.md"),
+            Agent::Commandcode => include_str!("agents/commandcode.md"),
+            Agent::Copilot => include_str!("agents/copilot.md"),
+            Agent::Cursor => include_str!("agents/cursor.md"),
+            Agent::Gemini => include_str!("agents/gemini.md"),
+            Agent::Kiro => include_str!("agents/kiro.md"),
+            Agent::Opencode => include_str!("agents/opencode.md"),
+            Agent::Pi => include_str!("agents/pi.md"),
+            Agent::Reasonix => include_str!("agents/reasonix.md"),
         }
     }
 }

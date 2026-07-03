@@ -1,7 +1,9 @@
 # Rust release pipeline (ADR-0003 / track rust-rewrite-20260618, T022).
 #
 # This builds the cross-compiled `csp` binaries from the Rust workspace
-# (crates/csp-cli). It runs in two ways: **manually** (workflow_dispatch) for
+# (the `csp` bin in crates/csp, behind the default-on `cli` feature of the
+# published `code-search-please` crate). It runs in two ways: **manually**
+# (workflow_dispatch) for
 # ad-hoc rebuilds, and **as a reusable workflow** (workflow_call) invoked by
 # release-please.yml on release_created — the latter is the live cut-over
 # (T023/T024) that makes Rust the published product (GitHub release assets +
@@ -100,9 +102,9 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.target }}" == *-musl ]]; then
-            cargo zigbuild --release --locked -p csp-cli --target "${{ matrix.target }}"
+            cargo zigbuild --release --locked -p code-search-please --target "${{ matrix.target }}"
           else
-            cargo build --release --locked -p csp-cli --target "${{ matrix.target }}"
+            cargo build --release --locked -p code-search-please --target "${{ matrix.target }}"
           fi
 
       - name: Stage asset (unix)

@@ -12,6 +12,7 @@
     <a href="https://app.codspeed.io/pleaseai/code-search?utm_source=badge"><img src="https://img.shields.io/endpoint?url=https://app.codspeed.io/badge.json" alt="CodSpeed"/></a>
     <a href="https://sonarcloud.io/summary/new_code?id=pleaseai_code-search"><img src="https://sonarcloud.io/api/project_badges/measure?project=pleaseai_code-search&metric=alert_status" alt="Quality Gate Status"></a>
     <a href="https://socket.dev/npm/package/@pleaseai/csp"><img src="https://socket.dev/api/badge/npm/package/@pleaseai/csp" alt="Socket Badge"></a>
+    <a href="https://socket.dev/cargo/package/code-search-please"><img src="https://socket.dev/api/badge/cargo/package/code-search-please" alt="Socket Badge"></a>
     <a href="https://github.com/pleaseai/code-search/blob/main/LICENSE">
       <img src="https://img.shields.io/badge/license-MIT-green" alt="License - MIT">
     </a>
@@ -86,6 +87,9 @@ curl -fsSL https://raw.githubusercontent.com/pleaseai/code-search/main/scripts/i
 bun add -g @pleaseai/csp     # Install with bun (recommended)
 npm install -g @pleaseai/csp # Or with npm
 pnpm add -g @pleaseai/csp    # Or with pnpm
+
+# Or from source with Cargo (compiles the standalone binary locally)
+cargo install code-search-please
 ```
 
 > The Homebrew formula ships a self-contained Rust binary (`cargo build --release`; tree-sitter grammars and the embedding runtime are built in), so it needs no Node/Bun at runtime. The `install.sh` script downloads that same standalone binary from the GitHub release for your platform, verifies its checksum, and drops it in `~/.local/bin` (override with `CSP_INSTALL_DIR`; pin a release with `bash -s -- --version v0.1.7`). The npm package ships the same binary behind a small Node launcher, so the `npm`/`bun`/`pnpm` install path needs Bun or Node 22+ on your `PATH`. Indexes are cached under `~/.csp/` (see [ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md)).
@@ -454,9 +458,11 @@ Explicit index paths written with `csp index -o <path>` are not part of the auto
 
 **Rust** — published on crates.io as [**`code-search-please`**](https://crates.io/crates/code-search-please) (the short name `csp` was already taken). The library name stays `csp`, so you depend on `code-search-please` but still write `use csp::...`. It exposes `CspIndex` with `from_path` / `from_git` / `search` / `find_related`, plus the `ContentType` enum and the ranking pipeline.
 
+The crate ships the `csp` CLI too (behind the default-on `cli` feature). As a **library** dependency, disable default features to skip the CLI stack (`clap` / `tokio` / `rmcp`):
+
 ```toml
 [dependencies]
-code-search-please = "0.1"
+code-search-please = { version = "0.1", default-features = false }
 ```
 
 ```rust
@@ -510,7 +516,7 @@ Because the embedding model is static with no transformer forward pass at query 
 
 ## Development
 
-The library and `csp` binary are a Cargo workspace (`crates/csp`, `crates/csp-cli`):
+The library and `csp` binary are a Cargo workspace (`crates/csp` holds both the library and the `csp` binary, which sits behind the default-on `cli` feature):
 
 ```bash
 cargo build --release          # build the csp binary

@@ -1,8 +1,8 @@
 # Reference Analysis — MinishLab/semble → Rust port (`crates/csp`)
 
 > Module-by-module analysis of [MinishLab/semble](https://github.com/MinishLab/semble) (the
-> Python original) mapped to the **Rust port** under `crates/csp` (library) and `crates/csp-cli`
-> (`csp` binary), introduced by [ADR-0003](../decisions/0003-rewrite-in-rust.md). Each section
+> Python original) mapped to the **Rust port** under `crates/csp` (the library **and** the
+> `csp` binary, `src/bin/csp/`), introduced by [ADR-0003](../decisions/0003-rewrite-in-rust.md). Each section
 > captures the load-bearing algorithm + its constants, the Rust-specific structure/idioms, and
 > where the port diverges.
 >
@@ -15,7 +15,7 @@
 > the Rust port has moved past the old TS stubs (real dense embeddings, wired ranking, chunk
 > length 750) the upstream Python is authoritative.
 > **Upstream layout**: Python `src/semble/`. **Port layout**: `crates/csp/src/` (lib) +
-> `crates/csp-cli/src/` (bin).
+> `crates/csp/src/bin/csp/` (the `csp` binary, behind the `cli` feature).
 
 ---
 
@@ -86,10 +86,10 @@ The full ranking in `ranking::{boosting,penalties}` is now **wired** into `searc
 | `ranking/boosting.py` | `csp/src/ranking/boosting.rs` | ported (wired) | query-type detection + definition/stem/embedded boosts |
 | `ranking/penalties.py` | `csp/src/ranking/penalties.rs` | ported (wired) | path penalties + file-saturation rerank |
 | `stats.py` | `csp/src/stats.rs` | adapted | `~/.csp/savings.jsonl` read/write + report formatting |
-| `mcp.py` | `csp/src/mcp.rs` (core) + `csp-cli/src/mcp_server.rs` (rmcp transport) | ported | MCP `search` / `find_related` tools |
-| `cli.py` | `csp-cli/src/main.rs` | adapted (clap) | subcommands: search / find-related / index / savings / clear / init / mcp |
+| `mcp.py` | `csp/src/mcp.rs` (core) + `csp/src/bin/csp/mcp_server.rs` (rmcp transport) | ported | MCP `search` / `find_related` tools |
+| `cli.py` | `csp/src/bin/csp/main.rs` | adapted (clap) | subcommands: search / find-related / index / savings / clear / init / mcp |
 | `utils.py` | `csp/src/utils.rs` | ported | git-URL detection, `format_results` (snake_case wire), `resolve_chunk` |
-| `installer/` | `csp-cli/agents/*.md` (+ `init`) | adapted | agent config templates wired via `init` |
+| `installer/` | `csp/src/bin/csp/agents/*.md` (+ `init`) | adapted | agent config templates wired via `init` |
 | — | `csp/src/lib.rs` | new | crate root / public re-exports |
 
 ---
@@ -289,19 +289,19 @@ Ported faithfully (`LazyLock<Regex>` for the static patterns, `RefCell<HashMap>`
 - **Divergence**: fixed `~/.csp/savings.jsonl` (not the OS cache dir); no `flock` (sub-4KB
   appends are atomic on POSIX); header is "Csp".
 
-### 4.16 MCP — `csp/src/mcp.rs` (core) + `csp-cli/src/mcp_server.rs` (rmcp transport)
+### 4.16 MCP — `csp/src/mcp.rs` (core) + `csp/src/bin/csp/mcp_server.rs` (rmcp transport)
 
 Clean two-layer split:
 - **`csp::mcp`** (lib) — the unit-tested tool **core**: `search` / `find_related` handler logic,
   in-process LRU `IndexCache` (`CACHE_MAX_SIZE = 10`, `Arc<CspIndex>` so indexes are `Send`
   across tasks), `_get_index` with git-transport guards.
-- **`csp-cli::mcp_server`** (bin) — **rmcp 1.7** stdio wiring: `CspMcpServer` with
+- **`csp` bin `mcp_server`** (bin) — **rmcp 1.7** stdio wiring: `CspMcpServer` with
   `#[tool_router]` + `#[tool]` async `search`/`find_related`, `#[tool_handler(router =
   self.tool_router)]` (routes through the stored field; the default `Self::tool_router()` would
   rebuild per call and trip clippy `dead_code`). `run_mcp(path, ref, content)` serves on a tokio
   runtime. Verified on the wire (initialize / tools/list / tools/call).
 
-### 4.17 `csp-cli/src/main.rs` — CLI (clap)
+### 4.17 `csp/src/bin/csp/main.rs` — CLI (clap)
 
 - `#[derive(Parser)]` with a `Command` `#[derive(Subcommand)]` enum: **search**, **find-related**,
   **index** (build + persist a standalone index), **savings**, **clear** (`all|index|savings`),
@@ -355,7 +355,7 @@ Clean two-layer split:
 4. **Two serde shapes** — camelCase `ChunkDict`/`SearchResultDict` (disk persistence) vs
    snake_case `utils::result_to_dict`/`format_results` (CLI/MCP wire).
 5. **Error handling** — `Result` + `thiserror`; backend errors degrade instead of panicking.
-6. **MCP split** — testable core in `csp::mcp`, rmcp 1.7 transport in `csp-cli::mcp_server`.
+6. **MCP split** — testable core in `csp::mcp`, rmcp 1.7 transport in the `csp` bin `mcp_server`.
 7. **Storage** — fixed `~/.csp/index/` (0700) + `~/.csp/savings.jsonl` (ADR-0002), not the OS
    cache dir / `SEMBLE_CACHE_LOCATION`. `.cspignore` (not `.sembleignore`).
 8. **CLI** — clap; `init` (not `install`/`uninstall`); explicit `mcp` subcommand; adds `index`.
