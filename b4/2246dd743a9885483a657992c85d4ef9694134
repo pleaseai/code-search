@@ -1,0 +1,33 @@
+crates/csp/src/bin/csp/mcp_server.rs
+  s_86b4b5724ee940::t_06b72d7d0ffe44 140-215,217-241,243-249
+  s_86b4b5724ee940::t_71a2aa6a521ca9 216,242
+crates/csp/src/bin/csp/main.rs
+  s_86b4b5724ee940::t_9204766bc112ed 342,346,355,361,374,377,398,402,425,431,435,448,451
+  s_86b4b5724ee940::t_b3a614a0aa999f 557-576,578-579
+  s_86b4b5724ee940::t_ad2557a97f822c 281,290
+  s_86b4b5724ee940::t_44db857330c703 577
+  s_86b4b5724ee940::t_584774185a39de 320,322
+  s_86b4b5724ee940::t_2c6f642331a55b 550-556,580-686
+  s_86b4b5724ee940::t_6f12124d1831ba 120-124
+  s_86b4b5724ee940::t_c2cac4d756a7e6 328-329,335
+  s_86b4b5724ee940::t_314deba5415f1c 282-287,296
+  s_86b4b5724ee940::t_e8fbd6dbdf3fdd 327,330-334
+  s_86b4b5724ee940::t_248e336c034e09 13
+  s_86b4b5724ee940::t_2063158f1801c2 312
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b42246dd743a9885483a657992c85d4ef9694134",
+  "prompts": {},
+  "sessions": {
+    "s_86b4b5724ee940": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fe8fe81c-9750-401d-8a02-56412d27da72",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
