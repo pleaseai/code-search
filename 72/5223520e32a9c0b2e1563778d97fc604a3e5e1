@@ -1,0 +1,61 @@
+.please/docs/references/semble.md
+  s_86b4b5724ee940::t_9b7f53bf834f41 18
+  s_86b4b5724ee940::t_7020dc4b69ab49 89-90,92,292,298,304,358
+  s_86b4b5724ee940::t_8f50826e427b3b 4-5
+Cargo.toml
+  s_86b4b5724ee940::t_7b782d714a979e 8
+  s_86b4b5724ee940::t_305afb00404e22 22-25
+README.ko.md
+  s_86b4b5724ee940::t_ab2e4b9cf22b07 519
+  s_86b4b5724ee940::t_f98632242e7f13 461-462,465
+  s_86b4b5724ee940::t_8efad19289ea49 90-92
+  s_86b4b5724ee940::t_f17dffc08f85f3 15
+crates/csp/Cargo.toml
+  s_86b4b5724ee940::t_2a6a53d675192e 44-59,63-66
+  s_b6d2f829eeb131::t_14491b90ad942a 67
+README.md
+  s_86b4b5724ee940::t_836cec246a0520 461-462,465
+  s_86b4b5724ee940::t_fa1f7f8173ca53 90-92
+  s_86b4b5724ee940::t_ff39ddb92b2e1a 519
+  s_86b4b5724ee940::t_9d68accb654240 15
+crates/csp/src/bin/csp/main.rs
+  s_86b4b5724ee940::t_ea82c4377ab52a 1-532
+.github/workflows/release-rust.yml
+  s_86b4b5724ee940::t_098ce5d869d394 4-6
+  s_86b4b5724ee940::t_8ca4192b05a45c 105,107
+.github/workflows/release-please.yml
+  s_86b4b5724ee940::t_d415dc02b393e1 68-69
+  s_86b4b5724ee940::t_0c553e453d218b 310-313
+crates/csp/src/mcp.rs
+  s_86b4b5724ee940::t_e988c1c16e34fd 6-7
+CLAUDE.md
+  s_86b4b5724ee940::t_81bbda6cd340a7 35
+  s_86b4b5724ee940::t_6c7d8372fa9cca 7
+  s_86b4b5724ee940::t_2687ccb14be266 46
+Cargo.lock
+  s_86b4b5724ee940::t_0d1329d8be0a40 339-340,347-348,354
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "725223520e32a9c0b2e1563778d97fc604a3e5e1",
+  "prompts": {},
+  "sessions": {
+    "s_86b4b5724ee940": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fe8fe81c-9750-401d-8a02-56412d27da72",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    },
+    "s_b6d2f829eeb131": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ef40db73-8241-47cd-9dd1-e07065b25782",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
