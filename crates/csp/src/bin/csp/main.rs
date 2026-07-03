@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use csp::indexing::cache::clear_index_cache;
+use csp::indexing::cache::{clear_index_cache, CacheLocation};
 use csp::indexing::index::{
     load_or_build_index, CspIndex, LoadOptions, LoadOrBuildOptions, QueryOptions,
 };
@@ -116,6 +116,11 @@ enum Command {
 }
 
 const CLEAR_CHOICES: &str = "all, index, savings";
+
+/// Process exit codes returned by `dispatch` / `run_clear` (mapped to
+/// `ExitCode` in `run`). Plain `u8` so tests can assert on them directly.
+const EXIT_SUCCESS: u8 = 0;
+const EXIT_FAILURE: u8 = 1;
 
 impl Agent {
     fn slug(self) -> &'static str {
@@ -273,16 +278,22 @@ fn run_init(agent: Agent, force: bool, cwd: &Path) -> Result<String, String> {
     Ok(rel)
 }
 
-fn run_clear(what: &str) -> ExitCode {
+fn run_clear(what: &str) -> u8 {
+    run_clear_at(what, &Default::default(), &default_stats_file())
+}
+
+/// `run_clear` with the cache location and savings file injected, so tests can
+/// exercise the destructive branches against temp dirs instead of real `~/.csp`.
+fn run_clear_at(what: &str, cache_loc: &CacheLocation, stats_file: &Path) -> u8 {
     if !["all", "index", "savings"].contains(&what) {
         eprintln!("Invalid clear type: {what}. Choices: {CLEAR_CHOICES}");
-        return ExitCode::FAILURE;
+        return EXIT_FAILURE;
     }
     // Track failures so a maintenance command that couldn't clear the index
     // reports a non-zero exit status (automation relies on it).
     let mut failed = false;
     if what == "index" || what == "all" {
-        match clear_index_cache(&Default::default()) {
+        match clear_index_cache(cache_loc) {
             Ok(r) if r.cleared => {
                 println!(
                     "Cleared {} cached index entries at `{}`",
@@ -298,7 +309,7 @@ fn run_clear(what: &str) -> ExitCode {
         }
     }
     if what == "savings" || what == "all" {
-        let (path, cleared) = clear_savings(&default_stats_file());
+        let (path, cleared) = clear_savings(stats_file);
         if cleared {
             println!("Cleared savings at `{}`", path.display());
         } else {
@@ -306,26 +317,33 @@ fn run_clear(what: &str) -> ExitCode {
         }
     }
     if failed {
-        ExitCode::FAILURE
+        EXIT_FAILURE
     } else {
-        ExitCode::SUCCESS
+        EXIT_SUCCESS
     }
 }
 
 fn run() -> ExitCode {
-    let cli = Cli::parse();
-    match cli.command {
+    ExitCode::from(dispatch(Cli::parse().command))
+}
+
+/// Execute a parsed subcommand, returning a process exit code (`0` success,
+/// `1` failure). Split from `run` — and returning a plain `u8` rather than
+/// `ExitCode` — so the dispatch logic is unit-testable without going through
+/// `Cli::parse` (which reads argv) or an opaque, non-comparable `ExitCode`.
+fn dispatch(command: Command) -> u8 {
+    match command {
         Command::Init { agent, force } => {
             let agent = agent.unwrap_or(Agent::Claude);
             let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
             match run_init(agent, force, &cwd) {
                 Ok(rel) => {
                     println!("Created {rel}");
-                    ExitCode::SUCCESS
+                    EXIT_SUCCESS
                 }
                 Err(e) => {
                     eprintln!("{e}");
-                    ExitCode::FAILURE
+                    EXIT_FAILURE
                 }
             }
         }
@@ -334,13 +352,13 @@ fn run() -> ExitCode {
                 "{}",
                 format_savings_report(&default_stats_file(), verbose, now_secs())
             );
-            ExitCode::SUCCESS
+            EXIT_SUCCESS
         }
         Command::Clear { what } => run_clear(&what),
         Command::Index { path, out, content } => {
             let Some(out) = out else {
                 eprintln!("--out / -o is required for `index`.");
-                return ExitCode::FAILURE;
+                return EXIT_FAILURE;
             };
             let path = path.unwrap_or_else(|| ".".to_string());
             let options = LoadOptions {
@@ -353,10 +371,10 @@ fn run() -> ExitCode {
                 CspIndex::from_path(Path::new(&path), &options)
             };
             match built.and_then(|idx| idx.save(Path::new(&out), None)) {
-                Ok(()) => ExitCode::SUCCESS,
+                Ok(()) => EXIT_SUCCESS,
                 Err(e) => {
                     eprintln!("{e}");
-                    ExitCode::FAILURE
+                    EXIT_FAILURE
                 }
             }
         }
@@ -377,11 +395,11 @@ fn run() -> ExitCode {
             ) {
                 Ok(idx) => {
                     println!("{}", search_output(&idx, &query, top_k.unwrap_or(5)));
-                    ExitCode::SUCCESS
+                    EXIT_SUCCESS
                 }
                 Err(e) => {
                     eprintln!("{e}");
-                    ExitCode::FAILURE
+                    EXIT_FAILURE
                 }
             }
         }
@@ -404,17 +422,17 @@ fn run() -> ExitCode {
                 Ok(idx) => idx,
                 Err(e) => {
                     eprintln!("{e}");
-                    return ExitCode::FAILURE;
+                    return EXIT_FAILURE;
                 }
             };
             match find_related_output(&idx, &file, &line, top_k.unwrap_or(5)) {
                 Ok(out) => {
                     println!("{out}");
-                    ExitCode::SUCCESS
+                    EXIT_SUCCESS
                 }
                 Err(e) => {
                     eprintln!("{e}");
-                    ExitCode::FAILURE
+                    EXIT_FAILURE
                 }
             }
         }
@@ -427,10 +445,10 @@ fn run() -> ExitCode {
             // None when no path was given (the tool then requires an explicit `repo`).
             // `git_ref` (--ref) pins the revision when that default source is a git URL.
             match mcp_server::run_mcp(path, git_ref, resolve_content(&content)) {
-                Ok(()) => ExitCode::SUCCESS,
+                Ok(()) => EXIT_SUCCESS,
                 Err(e) => {
                     eprintln!("{e}");
-                    ExitCode::FAILURE
+                    EXIT_FAILURE
                 }
             }
         }
@@ -528,5 +546,142 @@ mod tests {
         let idx = CspIndex::from_path(dir.path(), &LoadOptions::default()).unwrap();
         let err = find_related_output(&idx, "nope.ts", "1", 5).unwrap_err();
         assert!(err.contains("No chunk found"));
+    }
+
+    #[test]
+    fn run_clear_rejects_unknown_type() {
+        // Validation-only branch — does not touch any real ~/.csp data.
+        assert_eq!(run_clear("bogus"), EXIT_FAILURE);
+    }
+
+    #[test]
+    fn run_clear_at_handles_index_savings_and_all() {
+        // Point both the cache home and the savings file at temp dirs so the
+        // destructive branches run without touching real ~/.csp.
+        let home = tempdir().unwrap();
+        let loc = CacheLocation {
+            base_dir: Some(home.path().to_path_buf()),
+            ..Default::default()
+        };
+        let stats = home.path().join("savings.jsonl");
+
+        // Nothing there yet → still a clean (success) exit for each branch.
+        assert_eq!(run_clear_at("index", &loc, &stats), EXIT_SUCCESS);
+        assert_eq!(run_clear_at("savings", &loc, &stats), EXIT_SUCCESS);
+        assert_eq!(run_clear_at("all", &loc, &stats), EXIT_SUCCESS);
+    }
+
+    #[test]
+    fn dispatch_savings_succeeds() {
+        // format_savings_report only reads (a possibly-absent) savings file.
+        assert_eq!(dispatch(Command::Savings { verbose: true }), EXIT_SUCCESS);
+    }
+
+    /// Build a pre-built index into `out_dir` via the `index` subcommand.
+    fn index_to(out_dir: &Path, src_dir: &Path) -> u8 {
+        dispatch(Command::Index {
+            path: Some(src_dir.to_string_lossy().into_owned()),
+            out: Some(out_dir.to_string_lossy().into_owned()),
+            content: vec![],
+        })
+    }
+
+    #[test]
+    fn dispatch_index_requires_out() {
+        let src = build_index_dir();
+        let code = dispatch(Command::Index {
+            path: Some(src.path().to_string_lossy().into_owned()),
+            out: None,
+            content: vec![],
+        });
+        assert_eq!(code, EXIT_FAILURE);
+    }
+
+    #[test]
+    fn dispatch_index_then_search_and_find_related() {
+        // Keep everything on an explicit --index path so the test never writes
+        // to the global ~/.csp auto-cache.
+        let src = build_index_dir();
+        let out = tempdir().unwrap();
+
+        assert_eq!(index_to(out.path(), src.path()), EXIT_SUCCESS);
+
+        let idx_path = out.path().to_string_lossy().into_owned();
+        let search = dispatch(Command::Search {
+            query: "greet".to_string(),
+            path: None,
+            top_k: Some(5),
+            content: vec![],
+            index: Some(idx_path.clone()),
+            git_ref: None,
+        });
+        assert_eq!(search, EXIT_SUCCESS);
+
+        // sample.ts:1 has an indexable chunk → find-related succeeds.
+        let related = dispatch(Command::FindRelated {
+            file: "sample.ts".to_string(),
+            line: "1".to_string(),
+            path: None,
+            top_k: Some(5),
+            content: vec![],
+            index: Some(idx_path.clone()),
+            git_ref: None,
+        });
+        assert_eq!(related, EXIT_SUCCESS);
+
+        // A non-integer line is a caller error → failure exit.
+        let bad = dispatch(Command::FindRelated {
+            file: "sample.ts".to_string(),
+            line: "abc".to_string(),
+            path: None,
+            top_k: Some(5),
+            content: vec![],
+            index: Some(idx_path),
+            git_ref: None,
+        });
+        assert_eq!(bad, EXIT_FAILURE);
+    }
+
+    #[test]
+    fn dispatch_search_reports_missing_index() {
+        // A nonexistent explicit --index path surfaces a load error → failure.
+        let missing = tempdir().unwrap();
+        let code = dispatch(Command::Search {
+            query: "greet".to_string(),
+            path: None,
+            top_k: Some(1),
+            content: vec![],
+            index: Some(
+                missing
+                    .path()
+                    .join("does-not-exist")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            git_ref: None,
+        });
+        assert_eq!(code, EXIT_FAILURE);
+    }
+
+    #[test]
+    fn dispatch_init_writes_agent_file() {
+        // Init writes under the current working dir; run it in a temp cwd so it
+        // does not pollute the repo. Serialize cwd mutation with a mutex since
+        // tests share the process.
+        use std::sync::Mutex;
+        static CWD_LOCK: Mutex<()> = Mutex::new(());
+        let _guard = CWD_LOCK.lock().unwrap();
+
+        let dir = tempdir().unwrap();
+        let original = std::env::current_dir().unwrap();
+        std::env::set_current_dir(dir.path()).unwrap();
+        let code = dispatch(Command::Init {
+            agent: Some(Agent::Claude),
+            force: false,
+        });
+        std::env::set_current_dir(original).unwrap();
+
+        assert_eq!(code, EXIT_SUCCESS);
+        assert!(dir.path().join(".claude/agents/csp-search.md").exists());
     }
 }

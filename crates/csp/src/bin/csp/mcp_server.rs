@@ -137,3 +137,113 @@ pub fn run_mcp(
         Ok::<(), anyhow::Error>(())
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn search_params_deserialize_with_and_without_optionals() {
+        // Only `query` is required; repo/top_k default to None.
+        let minimal: SearchParams =
+            serde_json::from_value(serde_json::json!({ "query": "greet" })).unwrap();
+        assert_eq!(minimal.query, "greet");
+        assert!(minimal.repo.is_none());
+        assert!(minimal.top_k.is_none());
+
+        let full: SearchParams = serde_json::from_value(serde_json::json!({
+            "query": "greet",
+            "repo": "./x",
+            "top_k": 3
+        }))
+        .unwrap();
+        assert_eq!(full.repo.as_deref(), Some("./x"));
+        assert_eq!(full.top_k, Some(3));
+    }
+
+    #[test]
+    fn find_related_params_deserialize() {
+        let p: FindRelatedParams = serde_json::from_value(serde_json::json!({
+            "file_path": "sample.ts",
+            "line": 1
+        }))
+        .unwrap();
+        assert_eq!(p.file_path, "sample.ts");
+        assert_eq!(p.line, 1);
+        assert!(p.repo.is_none());
+        assert!(p.top_k.is_none());
+    }
+
+    #[test]
+    fn get_info_advertises_tools_and_instructions() {
+        let server = CspMcpServer::new(None, None, vec![ContentType::Code]);
+        let info = server.get_info();
+        assert!(info.capabilities.tools.is_some());
+        assert_eq!(info.instructions.as_deref(), Some(SERVER_INSTRUCTIONS));
+    }
+
+    /// A temp dir with one indexable source file used as the default source.
+    fn sample_source() -> tempfile::TempDir {
+        let dir = tempdir().unwrap();
+        fs::write(
+            dir.path().join("sample.ts"),
+            "export function greet(name: string) { return `hi ${name}` }\n",
+        )
+        .unwrap();
+        dir
+    }
+
+    #[tokio::test]
+    async fn search_tool_call_returns_json_payload() {
+        let dir = sample_source();
+        let server = CspMcpServer::new(
+            Some(dir.path().to_string_lossy().into_owned()),
+            None,
+            vec![ContentType::Code],
+        );
+        let result = server
+            .search(Parameters(SearchParams {
+                query: "greet".to_string(),
+                repo: None,
+                top_k: Some(5),
+            }))
+            .await
+            .unwrap();
+        assert_eq!(result.is_error, Some(false));
+        // The tool body wraps the wire JSON from `search_tool` as text content.
+        let text = match &result.content[0].raw {
+            rmcp::model::RawContent::Text(t) => t.text.clone(),
+            _ => panic!("expected text content"),
+        };
+        let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert!(value.get("results").is_some() || value.get("error").is_some());
+    }
+
+    #[tokio::test]
+    async fn find_related_tool_call_reports_missing_chunk() {
+        let dir = sample_source();
+        let server = CspMcpServer::new(
+            Some(dir.path().to_string_lossy().into_owned()),
+            None,
+            vec![ContentType::Code],
+        );
+        let result = server
+            .find_related(Parameters(FindRelatedParams {
+                file_path: "nope.ts".to_string(),
+                line: 1,
+                repo: None,
+                top_k: Some(5),
+            }))
+            .await
+            .unwrap();
+        assert_eq!(result.is_error, Some(false));
+        let text = match &result.content[0].raw {
+            rmcp::model::RawContent::Text(t) => t.text.clone(),
+            _ => panic!("expected text content"),
+        };
+        // No chunk at nope.ts:1 → an error payload (string), not a hard failure.
+        assert!(text.contains("error") || text.contains("No "));
+    }
+}
