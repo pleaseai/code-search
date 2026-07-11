@@ -31,6 +31,12 @@ fn build_index(chunks: Vec<Chunk>) -> CspIndex {
 }
 
 #[test]
+fn hash_path_normalizes_platform_separators() {
+    assert_eq!(normalized_hash_path(Path::new(r"src\lib.rs")), "src/lib.rs");
+    assert_eq!(normalized_hash_path(Path::new("src/lib.rs")), "src/lib.rs");
+}
+
+#[test]
 fn try_reuse_rejects_stale_chunk_size() {
     let chunks = vec![make_chunk("a.ts", "A")];
     let idx = build_index(chunks);

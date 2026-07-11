@@ -24,6 +24,10 @@ pub struct LoadOrBuildOptions {
     pub model_path: Option<String>,
 }
 
+fn normalized_hash_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
 /// Collect the source files `from_path` would index as sorted hash inputs.
 /// File contents are read later, one at a time, by the hashing helper.
 fn collect_source_paths(root: &Path, content: &[ContentType]) -> Vec<(String, PathBuf)> {
@@ -38,7 +42,7 @@ fn collect_source_paths(root: &Path, content: &[ContentType]) -> Vec<(String, Pa
             continue;
         }
         let rel = file_path.strip_prefix(root).unwrap_or(&file_path);
-        files.push((rel.to_string_lossy().into_owned(), file_path));
+        files.push((normalized_hash_path(rel), file_path));
     }
     files
 }
