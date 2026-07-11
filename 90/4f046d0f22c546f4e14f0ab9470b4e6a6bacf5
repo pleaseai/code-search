@@ -1,0 +1,22 @@
+crates/csp/src/mcp.rs
+  s_15eff6e73acf42::t_1b5b78ca7d82fd 39-42
+  s_15eff6e73acf42::t_829cd2de8b777a 13
+  s_15eff6e73acf42::t_03256889d7d497 182-183
+  s_15eff6e73acf42::t_5826c72b13a8fa 449
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.11",
+  "base_commit_sha": "904f046d0f22c546f4e14f0ab9470b4e6a6bacf5",
+  "prompts": {},
+  "sessions": {
+    "s_15eff6e73acf42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "924e538e-afe0-40d2-9627-595b7595a2ce",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
