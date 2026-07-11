@@ -5,6 +5,7 @@
 //! Phase 3.
 
 pub mod cache;
+mod cache_orchestrator;
 pub mod create;
 pub mod dense;
 pub mod file_walker;
