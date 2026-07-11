@@ -86,6 +86,8 @@ struct CacheEntry {
     /// Staleness re-checks for this entry are skipped until this instant, so a
     /// slow-to-build repo isn't re-walked on every query.
     revalidate_after: Instant,
+    /// Cooldown restored after each successful fingerprint revalidation.
+    revalidate_cooldown: std::time::Duration,
 }
 
 /// Session cache of indexed repos/paths, keyed by source (git URL `@ref`, or the
@@ -149,6 +151,8 @@ impl<S: LoadOrBuild> IndexCache<S> {
         if let Some(stored) = stored_fingerprint {
             if self.seam.fingerprint(source, &self.content) != stored {
                 self.tasks.shift_remove(&key);
+            } else if let Some(entry) = self.tasks.get_mut(&key) {
+                entry.revalidate_after = Instant::now() + entry.revalidate_cooldown;
             }
         }
 
@@ -168,12 +172,14 @@ impl<S: LoadOrBuild> IndexCache<S> {
         let index = Arc::new(self.seam.load_or_build(source, &self.content, git_ref)?);
         let build_elapsed = start.elapsed();
         let fingerprint = self.seam.fingerprint(source, &self.content);
+        let revalidate_cooldown = build_elapsed * MIN_REVALIDATE_FACTOR;
         self.tasks.insert(
             key,
             CacheEntry {
                 index: index.clone(),
                 fingerprint,
-                revalidate_after: Instant::now() + build_elapsed * MIN_REVALIDATE_FACTOR,
+                revalidate_after: Instant::now() + revalidate_cooldown,
+                revalidate_cooldown,
             },
         );
         Ok(index)
@@ -447,10 +453,12 @@ mod tests {
         assert_eq!(cache.size(), 1);
 
         // Rebuilt entry captured fp2; past the cooldown with an unchanged
-        // fingerprint → revalidated but matches → served, no rebuild.
+        // fingerprint → revalidated but matches → served, no rebuild, and the
+        // next revalidation is deferred by a fresh cooldown window.
         cache.tasks.get_mut(&key).unwrap().revalidate_after = Instant::now();
         cache.get("/tmp/repo", None).unwrap();
         assert_eq!(*cache.seam.path_calls.borrow(), 2);
+        assert!(cache.tasks.get(&key).unwrap().revalidate_after > Instant::now());
     }
 
     #[test]
