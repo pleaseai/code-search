@@ -277,10 +277,13 @@ fn from_git_clones_and_builds() {
             .current_dir(repo.path())
             .env("GIT_TERMINAL_PROMPT", "0")
             .output()
-            .expect("git available")
+            .ok()
     };
-    if !run(&["init", "-q"]).status.success() {
+    let Some(output) = run(&["init", "-q"]) else {
         return; // git unavailable — skip rather than fail.
+    };
+    if !output.status.success() {
+        return;
     }
     run(&["config", "user.email", "test@example.com"]);
     run(&["config", "user.name", "Test"]);

@@ -182,12 +182,16 @@ impl SelectableBasicBackend {
             ));
         }
 
+        let mut byte_chunks = bytes.chunks_exact(4);
         let mut vectors = Vec::with_capacity(meta.rows);
-        for r in 0..meta.rows {
+        for _ in 0..meta.rows {
             let mut row = Vec::with_capacity(meta.dim);
-            for c in 0..meta.dim {
-                let off = (r * meta.dim + c) * 4;
-                let arr: [u8; 4] = bytes[off..off + 4].try_into().expect("4-byte chunk");
+            for _ in 0..meta.dim {
+                let arr: [u8; 4] = byte_chunks
+                    .next()
+                    .expect("validated vector byte count")
+                    .try_into()
+                    .expect("4-byte chunk");
                 row.push(f32::from_le_bytes(arr));
             }
             vectors.push(row);
