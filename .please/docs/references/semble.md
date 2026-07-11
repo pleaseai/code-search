@@ -338,7 +338,7 @@ Clean two-layer split:
 | strong / moderate / mild penalty | `0.3` / `0.5` / `0.7` | same | `ranking/penalties.rs` |
 | file saturation threshold / decay | `1` / `0.5` | `1` / `0.5` | `ranking/penalties.rs` |
 | max file bytes | `1_000_000` | `1_000_000` | `index/files.py` / `indexing/create.rs` |
-| default model | `minishlab/potion-code-16M` | same (real + stub) | `utils.py` / `indexing/dense.rs` |
+| default model | `minishlab/potion-code-16M-v2` (semble#219) | same (real + stub); cache keyed on model_id | `utils.py` / `indexing/dense.rs` |
 | MCP in-mem LRU | `10` | `10` | `mcp.py` / `csp::mcp` |
 | cache dir mode | — | `0o700` | `indexing/cache.rs` |
 
