@@ -1,0 +1,20 @@
+crates/csp/src/mcp.rs
+  s_15eff6e73acf42::t_ac349f1344c8de 142-152,154-155,157-159,162
+  s_15eff6e73acf42::t_0e787c34c1fa35 445-449
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.11",
+  "base_commit_sha": "194bff0bd7e26072732fdf9e7ea448387304fe2f",
+  "prompts": {},
+  "sessions": {
+    "s_15eff6e73acf42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "924e538e-afe0-40d2-9627-595b7595a2ce",
+        "model": "unknown"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
