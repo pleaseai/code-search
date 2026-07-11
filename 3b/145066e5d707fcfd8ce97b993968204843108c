@@ -1,0 +1,23 @@
+crates/csp/src/indexing/cache_orchestrator.rs
+  s_176206531a7197::t_b14381b5a15fd0 45
+  s_176206531a7197::t_40bce8fb04aed0 27-30
+crates/csp/src/indexing/cache_orchestrator/tests.rs
+  s_176206531a7197::t_2488f803df7870 34-38
+  s_176206531a7197::t_00445aac3d9508 33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.11",
+  "base_commit_sha": "3b145066e5d707fcfd8ce97b993968204843108c",
+  "prompts": {},
+  "sessions": {
+    "s_176206531a7197": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2cc0bde0-0dc6-42ee-918c-444f1b01c881",
+        "model": "claude-gpt-5.6-sol-via-codex"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
