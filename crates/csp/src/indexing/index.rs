@@ -1,6 +1,5 @@
 //! `CspIndex` — the hybrid (dense + BM25) search orchestrator. Port of
-//! `src/indexing/index.ts` (← semble `index/index.py`), plus the
-//! `load_or_build_index` cache orchestration from `src/indexing/cache.ts`.
+//! `src/indexing/index.ts` (← semble `index/index.py`).
 
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write as _;
@@ -11,17 +10,11 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::chunking::source::DESIRED_CHUNK_LENGTH_CHARS;
-use crate::indexing::cache::{
-    compute_content_hash, ensure_cache_dir, resolve_cache_dir, CacheFile, CacheLocation,
-};
-use crate::indexing::create::{create_index_from_path, CreateIndexOptions, MAX_FILE_BYTES};
+use crate::indexing::create::{create_index_from_path, CreateIndexOptions};
 use crate::indexing::dense::{load_model, make_stub_model, Model, SelectableBasicBackend};
-use crate::indexing::file_walker::walk_files;
-use crate::indexing::files::get_extensions;
 use crate::indexing::sparse::Bm25Index;
 use crate::search::{search as run_search, SearchOptions as RunSearchOptions, SearchResult};
 use crate::types::{chunk_from_dict, chunk_to_dict, Chunk, ChunkDict, ContentType, IndexStats};
-use crate::utils::is_git_url;
 
 /// On-disk index schema version.
 pub const INDEX_SCHEMA_VERSION: u32 = 1;
@@ -41,6 +34,9 @@ pub struct IndexManifest {
     pub source_id: Option<String>,
     pub content: Vec<ContentType>,
     pub model_id: String,
+    /// Runtime model implementation used to build vectors (`static` or `stub`).
+    /// Absent in legacy manifests, which are conservatively treated as stale.
+    pub model_kind: Option<String>,
     /// Target chunk length the index was built with. Changing it alters every
     /// chunk boundary, so a cache built with a different value must be rebuilt
     /// (mirrors semble `_metadata_matches`). `None` = built before this field
@@ -86,7 +82,7 @@ pub struct CspIndex {
     pub content: Vec<ContentType>,
 }
 
-fn normalize_content(content: Option<Vec<ContentType>>) -> Vec<ContentType> {
+pub(crate) fn normalize_content(content: Option<Vec<ContentType>>) -> Vec<ContentType> {
     content.unwrap_or_else(|| DEFAULT_CONTENT.to_vec())
 }
 
@@ -295,6 +291,7 @@ impl CspIndex {
             source_id: self.root.clone(),
             content: self.content.clone(),
             model_id: self.model_path.clone(),
+            model_kind: Some(self.model.kind().to_string()),
             chunk_size: Some(DESIRED_CHUNK_LENGTH_CHARS as u32),
         };
         let manifest_json = serde_json::to_string(&manifest).map_err(|e| e.to_string())?;
@@ -431,6 +428,15 @@ pub fn parse_manifest(raw: &serde_json::Value) -> Result<IndexManifest, String> 
         .and_then(serde_json::Value::as_str)
         .ok_or("Invalid manifest: modelId must be a string")?
         .to_string();
+    let model_kind = match obj.get("modelKind") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::String(kind)) if matches!(kind.as_str(), "static" | "stub") => {
+            Some(kind.clone())
+        }
+        Some(_) => {
+            return Err("Invalid manifest: modelKind must be 'static', 'stub', or null".to_string())
+        }
+    };
     // Absent/null = built before the field existed → None (treated as a cache
     // mismatch by `try_reuse`). A present-but-non-numeric value is malformed.
     let chunk_size = obj
@@ -460,488 +466,14 @@ pub fn parse_manifest(raw: &serde_json::Value) -> Result<IndexManifest, String> 
         source_id,
         content,
         model_id,
+        model_kind,
         chunk_size,
     })
 }
 
-// --- load_or_build_index (cache.ts orchestration) ---------------------------
-
-/// Options for [`load_or_build_index`].
-#[derive(Debug, Clone, Default)]
-pub struct LoadOrBuildOptions {
-    pub base_dir: Option<std::path::PathBuf>,
-    pub git_ref: Option<String>,
-    pub content: Option<Vec<ContentType>>,
-    pub model_path: Option<String>,
-}
-
-/// Collect the source files `from_path` would index, as [`CacheFile`] entries.
-fn collect_source_files(root: &Path, content: &[ContentType]) -> Vec<CacheFile> {
-    let resolved = get_extensions(content, None);
-    let ext_refs: Vec<&str> = resolved.iter().map(String::as_str).collect();
-    let mut files = Vec::new();
-    for file_path in walk_files(root, &ext_refs, &[]) {
-        let Ok(meta) = std::fs::metadata(&file_path) else {
-            continue;
-        };
-        if meta.len() > MAX_FILE_BYTES {
-            continue;
-        }
-        let Ok(raw) = std::fs::read(&file_path) else {
-            continue;
-        };
-        let rel = file_path.strip_prefix(root).unwrap_or(&file_path);
-        files.push(CacheFile {
-            path: rel.to_string_lossy().into_owned(),
-            content: raw,
-        });
-    }
-    files
-}
-
-/// Content-hash fingerprint of a local source tree — the same oracle
-/// [`load_or_build_index`] uses to decide cache validity. Returns `None` for git
-/// URLs (URL+ref keyed, no cheap live hash), so callers can cheaply detect
-/// whether an already-built index has gone stale by comparing fingerprints.
-pub fn source_fingerprint(source: &str, content: &[ContentType]) -> Option<String> {
-    if is_git_url(source) {
-        return None;
-    }
-    Some(compute_content_hash(&collect_source_files(
-        Path::new(source),
-        content,
-    )))
-}
-
-/// Load a cached index for `source` if fresh, else build, persist, and return.
-pub fn load_or_build_index(source: &str, options: &LoadOrBuildOptions) -> Result<CspIndex, String> {
-    let content = normalize_content(options.content.clone());
-    let is_git = is_git_url(source);
-
-    let location = CacheLocation {
-        base_dir: options.base_dir.clone(),
-        git_ref: options.git_ref.clone(),
-    };
-    let cache_dir = resolve_cache_dir(source, &content, &location);
-    let base_only = CacheLocation {
-        base_dir: options.base_dir.clone(),
-        git_ref: None,
-    };
-    ensure_cache_dir(&cache_dir, &base_only)?;
-
-    // Local sources: the source-file hash is the cache-validity oracle. Git
-    // sources are URL+ref keyed (no cheap live hash).
-    let source_hash = source_fingerprint(source, &content);
-
-    if let Some(cached) = try_reuse(&cache_dir, is_git, source_hash.as_deref()) {
-        return Ok(cached);
-    }
-
-    let load_options = LoadOptions {
-        model_path: options.model_path.clone(),
-        content: Some(content),
-    };
-    let index = if is_git {
-        CspIndex::from_git(source, &load_options, options.git_ref.as_deref())?
-    } else {
-        CspIndex::from_path(Path::new(source), &load_options)?
-    };
-    index.save(&cache_dir, source_hash.as_deref())?;
-    Ok(index)
-}
-
-/// Reuse a cached index when present and valid, else `None`.
-fn try_reuse(cache_dir: &Path, is_git: bool, source_hash: Option<&str>) -> Option<CspIndex> {
-    let manifest_path = cache_dir.join("manifest.json");
-    if !manifest_path.exists() {
-        return None;
-    }
-    let raw = std::fs::read_to_string(&manifest_path).ok()?;
-    let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
-    let manifest = parse_manifest(&value).ok()?;
-    // A chunk_size change re-chunks every file, so a cache built with a different
-    // target length is stale even if the source files are byte-identical.
-    if manifest.chunk_size != Some(DESIRED_CHUNK_LENGTH_CHARS as u32) {
-        return None;
-    }
-    // Local sources additionally validate the live source-file hash; git sources
-    // are URL+ref keyed (no cheap live hash).
-    if !is_git && Some(manifest.content_hash.as_str()) != source_hash {
-        return None;
-    }
-    CspIndex::load_from_disk(cache_dir).ok()
-}
+pub use crate::indexing::cache_orchestrator::{
+    load_or_build_index, source_fingerprint, LoadOrBuildOptions,
+};
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::indexing::dense::make_stub_model;
-    use tempfile::tempdir;
-
-    fn make_chunk(
-        file_path: &str,
-        start: u32,
-        end: u32,
-        language: Option<&str>,
-        content: &str,
-    ) -> Chunk {
-        Chunk {
-            content: content.to_string(),
-            file_path: file_path.to_string(),
-            start_line: start,
-            end_line: end,
-            language: language.map(str::to_string),
-        }
-    }
-
-    fn build_index(chunks: Vec<Chunk>) -> CspIndex {
-        let model = make_stub_model(4);
-        let vectors: Vec<Vec<f32>> = (0..chunks.len())
-            .map(|i| {
-                let mut v = vec![0f32; 4];
-                v[0] = (i + 1) as f32;
-                v
-            })
-            .collect();
-        CspIndex::new(CspIndexState {
-            model,
-            bm25_index: Bm25Index::build(&vec![vec!["x".to_string()]; chunks.len()]),
-            semantic_index: SelectableBasicBackend::from_vectors(vectors).unwrap(),
-            chunks,
-            model_path: "test-model".to_string(),
-            root: None,
-            content: DEFAULT_CONTENT.to_vec(),
-        })
-    }
-
-    #[test]
-    fn stats_zero_for_empty() {
-        let idx = build_index(vec![]);
-        let stats = idx.stats();
-        assert_eq!(stats.indexed_files, 0);
-        assert_eq!(stats.total_chunks, 0);
-        assert!(stats.languages.is_empty());
-    }
-
-    #[test]
-    fn stats_reflect_distribution() {
-        let chunks = vec![
-            make_chunk("a.ts", 1, 10, Some("typescript"), "x"),
-            make_chunk("a.ts", 11, 20, Some("typescript"), "y"),
-            make_chunk("b.py", 1, 5, Some("python"), "z"),
-            make_chunk("c.bin", 1, 1, None, "w"),
-        ];
-        let stats = build_index(chunks).stats();
-        assert_eq!(stats.indexed_files, 3);
-        assert_eq!(stats.total_chunks, 4);
-        assert_eq!(stats.languages.get("typescript"), Some(&2));
-        assert_eq!(stats.languages.get("python"), Some(&1));
-        assert_eq!(stats.languages.len(), 2);
-    }
-
-    #[test]
-    fn search_empty_query_and_index() {
-        let idx = build_index(vec![make_chunk("a.ts", 1, 1, Some("typescript"), "x")]);
-        assert!(idx.search("", &QueryOptions::default()).is_empty());
-        assert!(idx.search("   ", &QueryOptions::default()).is_empty());
-        let empty = build_index(vec![]);
-        assert!(empty
-            .search("anything", &QueryOptions::default())
-            .is_empty());
-    }
-
-    #[test]
-    fn search_top_k_zero() {
-        let idx = build_index(vec![make_chunk("a.ts", 1, 1, Some("typescript"), "x")]);
-        let opts = QueryOptions {
-            top_k: Some(0),
-            ..Default::default()
-        };
-        assert!(idx.search("anything", &opts).is_empty());
-    }
-
-    #[test]
-    fn search_filters_matching_nothing() {
-        let chunks = vec![
-            make_chunk("a.ts", 1, 10, Some("typescript"), "alpha"),
-            make_chunk("b.py", 1, 10, Some("python"), "beta"),
-        ];
-        let idx = build_index(chunks);
-        let lang_opts = QueryOptions {
-            filter_languages: Some(vec!["nonexistent".to_string()]),
-            ..Default::default()
-        };
-        assert!(idx.search("anything", &lang_opts).is_empty());
-        let path_opts = QueryOptions {
-            filter_paths: Some(vec!["nope.ts".to_string()]),
-            ..Default::default()
-        };
-        assert!(idx.search("anything", &path_opts).is_empty());
-    }
-
-    #[test]
-    fn find_related_excludes_seed() {
-        let chunks = vec![
-            make_chunk("a.ts", 1, 10, Some("typescript"), "seed chunk"),
-            make_chunk("a.ts", 11, 20, Some("typescript"), "companion 1"),
-            make_chunk("b.ts", 1, 5, Some("typescript"), "companion 2"),
-        ];
-        let idx = build_index(chunks.clone());
-        let opts = QueryOptions {
-            top_k: Some(5),
-            ..Default::default()
-        };
-        let results = idx.find_related(&chunks[0], &opts);
-        assert!(!results.iter().any(|r| r.chunk == chunks[0]));
-        assert!(results.len() <= 5);
-    }
-
-    #[test]
-    fn save_load_roundtrip() {
-        let chunks = vec![
-            make_chunk("a.ts", 1, 10, Some("typescript"), "A"),
-            make_chunk("b.ts", 1, 5, Some("python"), "B"),
-        ];
-        let idx = build_index(chunks);
-        let dir = tempdir().unwrap();
-        idx.save(dir.path(), None).unwrap();
-        let loaded = CspIndex::load_from_disk(dir.path()).unwrap();
-        assert_eq!(loaded.chunks.len(), 2);
-        let paths: Vec<&str> = loaded.chunks.iter().map(|c| c.file_path.as_str()).collect();
-        assert_eq!(paths, ["a.ts", "b.ts"]);
-        let stats = loaded.stats();
-        assert_eq!(stats.total_chunks, 2);
-        assert_eq!(stats.languages.get("typescript"), Some(&1));
-        assert_eq!(stats.languages.get("python"), Some(&1));
-    }
-
-    #[test]
-    fn load_missing_directory() {
-        let dir = tempdir().unwrap();
-        let err = CspIndex::load_from_disk(&dir.path().join("nope")).unwrap_err();
-        assert!(err.contains("Index not found"));
-    }
-
-    #[test]
-    fn load_missing_artifact() {
-        let dir = tempdir().unwrap();
-        let err = CspIndex::load_from_disk(dir.path()).unwrap_err();
-        assert!(err.contains("Missing:"));
-    }
-
-    #[test]
-    fn load_schema_version_mismatch() {
-        let idx = build_index(vec![make_chunk("a.ts", 1, 10, Some("typescript"), "A")]);
-        let dir = tempdir().unwrap();
-        idx.save(dir.path(), None).unwrap();
-        let manifest_path = dir.path().join("manifest.json");
-        let raw = std::fs::read_to_string(&manifest_path).unwrap();
-        let mut value: serde_json::Value = serde_json::from_str(&raw).unwrap();
-        value["schemaVersion"] = serde_json::json!(999);
-        std::fs::write(&manifest_path, value.to_string()).unwrap();
-        let err = CspIndex::load_from_disk(dir.path()).unwrap_err();
-        assert!(err.to_lowercase().contains("schema version"));
-    }
-
-    #[test]
-    fn load_rejects_invalid_content() {
-        let idx = build_index(vec![make_chunk("a.ts", 1, 10, Some("typescript"), "A")]);
-        let dir = tempdir().unwrap();
-        idx.save(dir.path(), None).unwrap();
-        let manifest_path = dir.path().join("manifest.json");
-        let raw = std::fs::read_to_string(&manifest_path).unwrap();
-        let mut value: serde_json::Value = serde_json::from_str(&raw).unwrap();
-        value["content"] = serde_json::json!(["bogus"]);
-        std::fs::write(&manifest_path, value.to_string()).unwrap();
-        assert!(CspIndex::load_from_disk(dir.path()).is_err());
-    }
-
-    #[test]
-    fn save_writes_manifest_fields() {
-        let chunks = vec![make_chunk("a.ts", 1, 10, Some("typescript"), "A")];
-        let idx = build_index(chunks);
-        let dir = tempdir().unwrap();
-        idx.save(dir.path(), None).unwrap();
-        let raw = std::fs::read_to_string(dir.path().join("manifest.json")).unwrap();
-        let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
-        assert_eq!(value["schemaVersion"], 1);
-        assert_eq!(value["modelId"], "test-model");
-        assert_eq!(value["content"], serde_json::json!(["code"]));
-        assert!(value["contentHash"].as_str().unwrap().len() == 64);
-        assert_eq!(
-            value["chunkSize"].as_u64(),
-            Some(u64::from(DESIRED_CHUNK_LENGTH_CHARS as u32))
-        );
-    }
-
-    #[test]
-    fn try_reuse_rejects_stale_chunk_size() {
-        let chunks = vec![make_chunk("a.ts", 1, 10, Some("typescript"), "A")];
-        let idx = build_index(chunks);
-        let dir = tempdir().unwrap();
-        idx.save(dir.path(), Some("deadbeef")).unwrap();
-
-        // Fresh cache (matching hash + current chunk_size) is reused.
-        assert!(try_reuse(dir.path(), false, Some("deadbeef")).is_some());
-
-        // Rewrite the manifest with a different chunk_size → stale → rebuild.
-        let manifest_path = dir.path().join("manifest.json");
-        let raw = std::fs::read_to_string(&manifest_path).unwrap();
-        let mut value: serde_json::Value = serde_json::from_str(&raw).unwrap();
-        value["chunkSize"] = serde_json::json!(9999);
-        std::fs::write(&manifest_path, value.to_string()).unwrap();
-        assert!(try_reuse(dir.path(), false, Some("deadbeef")).is_none());
-
-        // A manifest predating the field (absent chunkSize) is also stale.
-        let mut value: serde_json::Value = serde_json::from_str(&raw).unwrap();
-        value.as_object_mut().unwrap().remove("chunkSize");
-        std::fs::write(&manifest_path, value.to_string()).unwrap();
-        assert!(try_reuse(dir.path(), false, Some("deadbeef")).is_none());
-    }
-
-    #[test]
-    fn save_deterministic_content_hash() {
-        let chunks = vec![make_chunk("a.ts", 1, 10, Some("typescript"), "A")];
-        let dir_a = tempdir().unwrap();
-        let dir_b = tempdir().unwrap();
-        build_index(chunks.clone())
-            .save(dir_a.path(), None)
-            .unwrap();
-        build_index(chunks).save(dir_b.path(), None).unwrap();
-        let ha: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(dir_a.path().join("manifest.json")).unwrap(),
-        )
-        .unwrap();
-        let hb: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(dir_b.path().join("manifest.json")).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(ha["contentHash"], hb["contentHash"]);
-    }
-
-    #[test]
-    fn from_path_errors_on_missing() {
-        let dir = tempdir().unwrap();
-        let err =
-            CspIndex::from_path(&dir.path().join("nope"), &LoadOptions::default()).unwrap_err();
-        assert!(err.contains("Path does not exist"));
-    }
-
-    #[test]
-    fn from_path_errors_on_file() {
-        let dir = tempdir().unwrap();
-        let file = dir.path().join("f.ts");
-        std::fs::write(&file, "x").unwrap();
-        let err = CspIndex::from_path(&file, &LoadOptions::default()).unwrap_err();
-        assert!(err.contains("Path is not a directory"));
-    }
-
-    #[test]
-    fn from_path_builds_index() {
-        let dir = tempdir().unwrap();
-        std::fs::write(dir.path().join("sample.ts"), "export const x = 1\n").unwrap();
-        let idx = CspIndex::from_path(dir.path(), &LoadOptions::default()).unwrap();
-        assert!(!idx.chunks.is_empty());
-        assert_eq!(idx.content, DEFAULT_CONTENT.to_vec());
-    }
-
-    // --- from_git ---
-
-    #[test]
-    fn from_git_rejects_dash_ref() {
-        // No clone runs — the ref guard rejects a flag-injection ref first.
-        let err = CspIndex::from_git(
-            "file:///nonexistent",
-            &LoadOptions::default(),
-            Some("--upload-pack=evil"),
-        )
-        .unwrap_err();
-        assert!(err.contains("Invalid git ref"));
-    }
-
-    #[test]
-    fn from_git_errors_on_bad_url() {
-        let dir = tempdir().unwrap();
-        let bogus = dir.path().join("not-a-repo");
-        let err = CspIndex::from_git(
-            &format!("file://{}", bogus.display()),
-            &LoadOptions::default(),
-            None,
-        )
-        .unwrap_err();
-        assert!(err.contains("git clone failed"));
-    }
-
-    #[test]
-    fn from_git_clones_and_builds() {
-        let repo = tempdir().unwrap();
-        let run = |args: &[&str]| {
-            Command::new("git")
-                .args(args)
-                .current_dir(repo.path())
-                .env("GIT_TERMINAL_PROMPT", "0")
-                .output()
-                .expect("git available")
-        };
-        if !run(&["init", "-q"]).status.success() {
-            return; // git unavailable — skip rather than fail.
-        }
-        run(&["config", "user.email", "test@example.com"]);
-        run(&["config", "user.name", "Test"]);
-        run(&["config", "commit.gpgsign", "false"]);
-        std::fs::write(repo.path().join("a.ts"), "export const x = 1\n").unwrap();
-        run(&["add", "."]);
-        run(&["commit", "-q", "-m", "initial"]);
-
-        let url = format!("file://{}", repo.path().display());
-        let idx = CspIndex::from_git(&url, &LoadOptions::default(), None).unwrap();
-        assert!(!idx.chunks.is_empty());
-        assert_eq!(idx.root.as_deref(), Some(url.as_str()));
-    }
-
-    // --- load_or_build_index (cache.ts loadOrBuildIndex parity) ---
-
-    #[test]
-    fn load_or_build_miss_then_hit_then_invalidate() {
-        let home = tempdir().unwrap();
-        let src = tempdir().unwrap();
-        let base = home.path().join(".csp");
-        std::fs::write(
-            src.path().join("a.ts"),
-            "export function alpha() { return 1 }\n",
-        )
-        .unwrap();
-        let src_str = src.path().to_string_lossy().into_owned();
-        let opts = LoadOrBuildOptions {
-            base_dir: Some(base.clone()),
-            ..Default::default()
-        };
-
-        // Miss: builds and writes a manifest.
-        let first = load_or_build_index(&src_str, &opts).unwrap();
-        assert!(!first.chunks.is_empty());
-        let cache_dir = resolve_cache_dir(
-            &src_str,
-            DEFAULT_CONTENT,
-            &CacheLocation {
-                base_dir: Some(base.clone()),
-                git_ref: None,
-            },
-        );
-        assert!(cache_dir.join("manifest.json").exists());
-
-        // Hit: a second call reuses the cache (same chunk count).
-        let second = load_or_build_index(&src_str, &opts).unwrap();
-        assert_eq!(second.chunks.len(), first.chunks.len());
-
-        // Invalidation: add a file → content hash changes → rebuild reflects it.
-        std::fs::write(
-            src.path().join("b.ts"),
-            "export function beta() { return 2 }\n",
-        )
-        .unwrap();
-        let third = load_or_build_index(&src_str, &opts).unwrap();
-        assert!(third.chunks.iter().any(|c| c.file_path == "b.ts"));
-        assert!(third.chunks.len() >= first.chunks.len());
-    }
-}
+mod tests;

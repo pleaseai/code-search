@@ -497,7 +497,7 @@ for (const { chunk, score } of results) {
 
 ## 동작 원리
 
-`csp`는 [tree-sitter](https://tree-sitter.github.io/)로 각 파일을 코드 인지형 청크로 분할한 뒤, 두 개의 상호 보완적인 검색기로 쿼리를 모든 청크와 점수화합니다. 의미 유사도를 위한 정적 [Model2Vec](https://github.com/MinishLab/model2vec) 임베딩(코드 특화 `potion-code-16M` 모델 사용)과, 식별자/API명 등 어휘 매칭을 위한 BM25입니다. 두 점수 리스트는 Reciprocal Rank Fusion(RRF)으로 결합됩니다.
+`csp`는 [tree-sitter](https://tree-sitter.github.io/)로 각 파일을 코드 인지형 청크로 분할한 뒤, 두 개의 상호 보완적인 검색기로 쿼리를 모든 청크와 점수화합니다. 의미 유사도를 위한 정적 [Model2Vec](https://github.com/MinishLab/model2vec) 임베딩(코드 특화 `potion-code-16M-v2` 모델 사용)과, 식별자/API명 등 어휘 매칭을 위한 BM25입니다. 두 점수 리스트는 Reciprocal Rank Fusion(RRF)으로 결합됩니다.
 
 결합 후에는 코드 인지형 신호들로 결과를 재정렬합니다.
 

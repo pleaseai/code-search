@@ -497,7 +497,7 @@ for (const { chunk, score } of results) {
 
 ## How it works
 
-`csp` splits each file into code-aware chunks using [tree-sitter](https://tree-sitter.github.io/), then scores every query against the chunks with two complementary retrievers: static [Model2Vec](https://github.com/MinishLab/model2vec) embeddings using the code-specialized `potion-code-16M` model for semantic similarity, and BM25 for lexical matches on identifiers and API names. The two score lists are fused with Reciprocal Rank Fusion (RRF).
+`csp` splits each file into code-aware chunks using [tree-sitter](https://tree-sitter.github.io/), then scores every query against the chunks with two complementary retrievers: static [Model2Vec](https://github.com/MinishLab/model2vec) embeddings using the code-specialized `potion-code-16M-v2` model for semantic similarity, and BM25 for lexical matches on identifiers and API names. The two score lists are fused with Reciprocal Rank Fusion (RRF).
 
 After fusing, results are reranked with a set of code-aware signals:
 
