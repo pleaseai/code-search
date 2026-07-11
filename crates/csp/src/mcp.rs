@@ -172,6 +172,7 @@ pub fn search_tool<S: LoadOrBuild>(
     query: &str,
     repo: Option<&str>,
     top_k: usize,
+    max_snippet_lines: Option<usize>,
 ) -> String {
     let index = match get_index(repo, default_source, default_ref, cache) {
         Ok(idx) => idx,
@@ -187,11 +188,14 @@ pub fn search_tool<S: LoadOrBuild>(
     if results.is_empty() {
         json!({ "error": "No results found." }).to_string()
     } else {
-        format_results(query, &results).to_string()
+        format_results(query, &results, max_snippet_lines).to_string()
     }
 }
 
 /// `find_related` tool handler.
+// Positional transport params mirror the MCP tool signature; a struct would just
+// move the plumbing without clarifying it.
+#[allow(clippy::too_many_arguments)]
 pub fn find_related_tool<S: LoadOrBuild>(
     cache: &mut IndexCache<S>,
     default_source: Option<&str>,
@@ -200,6 +204,7 @@ pub fn find_related_tool<S: LoadOrBuild>(
     line: i64,
     repo: Option<&str>,
     top_k: usize,
+    max_snippet_lines: Option<usize>,
 ) -> String {
     let index = match get_index(repo, default_source, default_ref, cache) {
         Ok(idx) => idx,
@@ -228,7 +233,12 @@ pub fn find_related_tool<S: LoadOrBuild>(
     if results.is_empty() {
         json!({ "error": format!("No related chunks found for {file_path}:{line}.") }).to_string()
     } else {
-        format_results(&format!("Chunks related to {file_path}:{line}"), &results).to_string()
+        format_results(
+            &format!("Chunks related to {file_path}:{line}"),
+            &results,
+            max_snippet_lines,
+        )
+        .to_string()
     }
 }
 
@@ -392,7 +402,15 @@ mod tests {
     #[test]
     fn search_tool_no_results() {
         let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
-        let out = search_tool(&mut cache, Some("/tmp/repo"), None, "anything", None, 5);
+        let out = search_tool(
+            &mut cache,
+            Some("/tmp/repo"),
+            None,
+            "anything",
+            None,
+            5,
+            None,
+        );
         assert_eq!(out, json!({ "error": "No results found." }).to_string());
     }
 
@@ -411,23 +429,62 @@ mod tests {
     #[test]
     fn search_tool_returns_results_json() {
         let mut cache = IndexCache::with_seam(vec![ContentType::Code], OneChunkSeam);
-        let out = search_tool(&mut cache, Some("/tmp/repo"), None, "main", None, 5);
+        let out = search_tool(&mut cache, Some("/tmp/repo"), None, "main", None, 5, None);
         let value: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert!(value.get("query").is_some());
         assert!(value["results"].as_array().is_some());
+        // Full content by default (max_snippet_lines = None).
+        assert!(value["results"][0].get("content").is_some());
+    }
+
+    #[test]
+    fn search_tool_respects_max_snippet_lines_zero() {
+        let mut cache = IndexCache::with_seam(vec![ContentType::Code], OneChunkSeam);
+        let out = search_tool(
+            &mut cache,
+            Some("/tmp/repo"),
+            None,
+            "main",
+            None,
+            5,
+            Some(0),
+        );
+        let value: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let entry = &value["results"][0];
+        // 0 lines → no content, but the location metadata is still present.
+        assert!(entry.get("content").is_none());
+        assert_eq!(entry["file_path"], "a.ts");
     }
 
     #[test]
     fn find_related_no_chunk_message() {
         let mut cache = IndexCache::with_seam(vec![ContentType::Code], OneChunkSeam);
-        let out = find_related_tool(&mut cache, Some("/tmp/repo"), None, "nope.ts", 1, None, 5);
+        let out = find_related_tool(
+            &mut cache,
+            Some("/tmp/repo"),
+            None,
+            "nope.ts",
+            1,
+            None,
+            5,
+            None,
+        );
         assert!(out.contains("No chunk found at nope.ts:1"));
     }
 
     #[test]
     fn find_related_returns_json_for_known_chunk() {
         let mut cache = IndexCache::with_seam(vec![ContentType::Code], OneChunkSeam);
-        let out = find_related_tool(&mut cache, Some("/tmp/repo"), None, "a.ts", 5, None, 5);
+        let out = find_related_tool(
+            &mut cache,
+            Some("/tmp/repo"),
+            None,
+            "a.ts",
+            5,
+            None,
+            5,
+            None,
+        );
         // Either related results or the no-related error — both valid JSON.
         let value: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert!(value.get("query").is_some() || value.get("error").is_some());

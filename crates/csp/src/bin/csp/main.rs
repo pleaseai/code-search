@@ -56,6 +56,10 @@ enum Command {
         path: Option<String>,
         #[arg(long = "top-k", short = 'k')]
         top_k: Option<usize>,
+        /// Lines of source per result (default: full chunk). 10 = signature +
+        /// body, 0 = no code.
+        #[arg(long = "max-snippet-lines", value_name = "N")]
+        max_snippet_lines: Option<i64>,
         #[arg(long, value_enum, num_args = 1..)]
         content: Vec<ContentFilter>,
         /// Path to a pre-built index (bypasses the auto-cache).
@@ -73,6 +77,10 @@ enum Command {
         path: Option<String>,
         #[arg(long = "top-k", short = 'k')]
         top_k: Option<usize>,
+        /// Lines of source per result (default: full chunk). 10 = signature +
+        /// body, 0 = no code.
+        #[arg(long = "max-snippet-lines", value_name = "N")]
+        max_snippet_lines: Option<i64>,
         #[arg(long, value_enum, num_args = 1..)]
         content: Vec<ContentFilter>,
         #[arg(long)]
@@ -210,8 +218,19 @@ fn load_index(
     }
 }
 
+/// Map the CLI `--max-snippet-lines` value to the `Option<usize>` cap. Absent
+/// (`None`) → full chunk content; a negative value clamps to `0` (no code).
+fn resolve_snippet_lines(value: Option<i64>) -> Option<usize> {
+    value.map(|n| n.max(0) as usize)
+}
+
 /// JSON output for `search` (pure — testable without stdout capture).
-fn search_output(index: &CspIndex, query: &str, top_k: usize) -> String {
+fn search_output(
+    index: &CspIndex,
+    query: &str,
+    top_k: usize,
+    max_snippet_lines: Option<usize>,
+) -> String {
     let results = index.search(
         query,
         &QueryOptions {
@@ -222,7 +241,7 @@ fn search_output(index: &CspIndex, query: &str, top_k: usize) -> String {
     let out = if results.is_empty() {
         serde_json::json!({ "error": "No results found." })
     } else {
-        format_results(query, &results)
+        format_results(query, &results, max_snippet_lines)
     };
     out.to_string()
 }
@@ -233,6 +252,7 @@ fn find_related_output(
     file: &str,
     line: &str,
     top_k: usize,
+    max_snippet_lines: Option<usize>,
 ) -> Result<String, String> {
     let Ok(line_num) = line.parse::<i64>() else {
         return Err(format!("line must be an integer, got: {line}"));
@@ -257,7 +277,11 @@ fn find_related_output(
     let out = if related.is_empty() {
         serde_json::json!({ "error": format!("No related chunks found for {file}:{line_num}.") })
     } else {
-        format_results(&format!("Chunks related to {file}:{line_num}"), &related)
+        format_results(
+            &format!("Chunks related to {file}:{line_num}"),
+            &related,
+            max_snippet_lines,
+        )
     };
     Ok(out.to_string())
 }
@@ -382,6 +406,7 @@ fn dispatch(command: Command) -> u8 {
             query,
             path,
             top_k,
+            max_snippet_lines,
             content,
             index,
             git_ref,
@@ -394,7 +419,15 @@ fn dispatch(command: Command) -> u8 {
                 git_ref,
             ) {
                 Ok(idx) => {
-                    println!("{}", search_output(&idx, &query, top_k.unwrap_or(5)));
+                    println!(
+                        "{}",
+                        search_output(
+                            &idx,
+                            &query,
+                            top_k.unwrap_or(5),
+                            resolve_snippet_lines(max_snippet_lines),
+                        )
+                    );
                     EXIT_SUCCESS
                 }
                 Err(e) => {
@@ -408,6 +441,7 @@ fn dispatch(command: Command) -> u8 {
             line,
             path,
             top_k,
+            max_snippet_lines,
             content,
             index,
             git_ref,
@@ -425,7 +459,13 @@ fn dispatch(command: Command) -> u8 {
                     return EXIT_FAILURE;
                 }
             };
-            match find_related_output(&idx, &file, &line, top_k.unwrap_or(5)) {
+            match find_related_output(
+                &idx,
+                &file,
+                &line,
+                top_k.unwrap_or(5),
+                resolve_snippet_lines(max_snippet_lines),
+            ) {
                 Ok(out) => {
                     println!("{out}");
                     EXIT_SUCCESS
@@ -519,16 +559,30 @@ mod tests {
     fn search_output_shapes_results() {
         let dir = build_index_dir();
         let idx = CspIndex::from_path(dir.path(), &LoadOptions::default()).unwrap();
-        let out = search_output(&idx, "greet", 5);
+        let out = search_output(&idx, "greet", 5, None);
         let value: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert!(value.get("results").is_some() || value.get("error").is_some());
         if let Some(results) = value.get("results").and_then(|r| r.as_array()) {
             if let Some(first) = results.first() {
-                let chunk = &first["chunk"];
-                assert!(chunk.get("file_path").is_some());
-                assert!(chunk.get("start_line").is_some());
-                assert!(chunk.get("location").is_some());
+                // Flat wire shape (semble#198): fields at the top level.
+                assert!(first.get("chunk").is_none());
+                assert!(first.get("file_path").is_some());
+                assert!(first.get("start_line").is_some());
+                // CLI default (None) keeps the full content.
+                assert!(first.get("content").is_some());
             }
+        }
+    }
+
+    #[test]
+    fn search_output_caps_snippet_lines() {
+        let dir = build_index_dir();
+        let idx = CspIndex::from_path(dir.path(), &LoadOptions::default()).unwrap();
+        let out = search_output(&idx, "greet", 5, Some(0));
+        let value: serde_json::Value = serde_json::from_str(&out).unwrap();
+        if let Some(first) = value["results"].as_array().and_then(|r| r.first()) {
+            assert!(first.get("content").is_none());
+            assert!(first.get("file_path").is_some());
         }
     }
 
@@ -536,7 +590,7 @@ mod tests {
     fn find_related_rejects_non_integer_line() {
         let dir = build_index_dir();
         let idx = CspIndex::from_path(dir.path(), &LoadOptions::default()).unwrap();
-        let err = find_related_output(&idx, "sample.ts", "abc", 5).unwrap_err();
+        let err = find_related_output(&idx, "sample.ts", "abc", 5, None).unwrap_err();
         assert!(err.contains("line must be an integer"));
     }
 
@@ -544,7 +598,7 @@ mod tests {
     fn find_related_no_chunk_at_location() {
         let dir = build_index_dir();
         let idx = CspIndex::from_path(dir.path(), &LoadOptions::default()).unwrap();
-        let err = find_related_output(&idx, "nope.ts", "1", 5).unwrap_err();
+        let err = find_related_output(&idx, "nope.ts", "1", 5, None).unwrap_err();
         assert!(err.contains("No chunk found"));
     }
 
@@ -611,6 +665,7 @@ mod tests {
             query: "greet".to_string(),
             path: None,
             top_k: Some(5),
+            max_snippet_lines: None,
             content: vec![],
             index: Some(idx_path.clone()),
             git_ref: None,
@@ -623,6 +678,7 @@ mod tests {
             line: "1".to_string(),
             path: None,
             top_k: Some(5),
+            max_snippet_lines: None,
             content: vec![],
             index: Some(idx_path.clone()),
             git_ref: None,
@@ -635,6 +691,7 @@ mod tests {
             line: "abc".to_string(),
             path: None,
             top_k: Some(5),
+            max_snippet_lines: None,
             content: vec![],
             index: Some(idx_path),
             git_ref: None,
@@ -650,6 +707,7 @@ mod tests {
             query: "greet".to_string(),
             path: None,
             top_k: Some(1),
+            max_snippet_lines: None,
             content: vec![],
             index: Some(
                 missing

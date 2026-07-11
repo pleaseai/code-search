@@ -130,6 +130,12 @@ csp search "database host port" ./my-project --content config
 csp search "authentication" ./my-project --content all
 ```
 
+`--max-snippet-lines N`으로 결과당 반환되는 코드를 제한할 수 있습니다. `10`은 시그니처+본문 앞부분 미리보기, `0`은 파일 경로와 라인 범위만 반환하며, 기본값은 전체 청크입니다. 파일을 열기 전 위치를 확인하는 데는 짧은 미리보기로 충분한 경우가 많아, 약간의 맥락을 토큰 절감과 맞바꿉니다.
+
+```bash
+csp search "authentication" ./my-project --max-snippet-lines 10
+```
+
 `csp find-related`로 기존 위치와 비슷한 코드를 찾을 수 있습니다 (이전 검색 결과의 `file_path`와 `line`을 사용).
 
 ```bash
@@ -348,6 +354,8 @@ args = [
 |------|------|
 | `search` | 자연어 또는 코드 쿼리로 코드베이스를 검색. `repo`는 로컬 디렉터리 경로 또는 https:// git URL. |
 | `find_related` | 파일 경로와 라인 번호를 받아, 해당 위치의 코드와 의미적으로 유사한 청크를 반환. |
+
+두 도구 모두 결과당 반환 코드를 제한하는 `max_snippet_lines`를 받습니다. 기본값은 `10`으로, 시그니처+본문 앞부분 미리보기라 에이전트가 위치를 싸게 확인한 뒤 전체 맥락은 파일로 이동해 봅니다. 위치만 필요하면 `0`, 미리보기로 부족하면 `null`로 전체 청크를 받습니다.
 
 기본적으로 MCP 서버는 코드 파일만 인덱싱합니다. 문서/설정/전체를 함께 인덱싱하려면 명령에 `--content docs`, `--content config`, `--content all` 또는 조합(예: `--content code docs`)을 추가하세요. 예를 들어 Claude Code에서는 `claude mcp add csp -s user -- bunx @pleaseai/csp mcp --content all`.
 
