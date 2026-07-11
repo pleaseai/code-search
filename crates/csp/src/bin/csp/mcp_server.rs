@@ -16,6 +16,7 @@ use rmcp::{tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler
 use tokio::sync::Mutex;
 
 use csp::mcp::{find_related_tool, search_tool, IndexCache, SERVER_INSTRUCTIONS};
+use csp::stats::default_stats_file;
 use csp::types::ContentType;
 use csp::utils::resolve_snippet_lines;
 
@@ -65,6 +66,9 @@ pub struct CspMcpServer {
     cache: Arc<Mutex<IndexCache>>,
     default_source: Option<String>,
     default_ref: Option<String>,
+    /// Where token-savings telemetry is appended; `None` disables recording
+    /// (used by tests so they don't touch the real `~/.csp/savings.jsonl`).
+    stats_file: Option<std::path::PathBuf>,
     tool_router: ToolRouter<CspMcpServer>,
 }
 
@@ -79,6 +83,7 @@ impl CspMcpServer {
             cache: Arc::new(Mutex::new(IndexCache::new(content))),
             default_source,
             default_ref,
+            stats_file: Some(default_stats_file()),
             tool_router: Self::tool_router(),
         }
     }
@@ -99,6 +104,7 @@ impl CspMcpServer {
             p.repo.as_deref(),
             p.top_k.unwrap_or(5) as usize,
             resolve_snippet_lines(p.max_snippet_lines),
+            self.stats_file.as_deref(),
         );
         Ok(CallToolResult::success(vec![Content::text(out)]))
     }
@@ -120,6 +126,7 @@ impl CspMcpServer {
             p.repo.as_deref(),
             p.top_k.unwrap_or(5) as usize,
             resolve_snippet_lines(p.max_snippet_lines),
+            self.stats_file.as_deref(),
         );
         Ok(CallToolResult::success(vec![Content::text(out)]))
     }
@@ -231,11 +238,13 @@ mod tests {
     #[tokio::test]
     async fn search_tool_call_returns_json_payload() {
         let dir = sample_source();
-        let server = CspMcpServer::new(
+        let mut server = CspMcpServer::new(
             Some(dir.path().to_string_lossy().into_owned()),
             None,
             vec![ContentType::Code],
         );
+        // Don't append telemetry to the developer's real ~/.csp during tests.
+        server.stats_file = None;
         let result = server
             .search(Parameters(SearchParams {
                 query: "greet".to_string(),

@@ -1,7 +1,7 @@
 //! `CspIndex` — the hybrid (dense + BM25) search orchestrator. Port of
 //! `src/indexing/index.ts` (← semble `index/index.py`).
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write as _;
 use std::path::Path;
 use std::process::Command;
@@ -80,6 +80,11 @@ pub struct CspIndex {
     pub model_path: String,
     pub root: Option<String>,
     pub content: Vec<ContentType>,
+    /// Per-file character counts (repo-relative path → UTF-16 length) captured
+    /// at build time from the source tree, for token-savings telemetry. Empty
+    /// when the source files aren't available (e.g. a git index loaded from
+    /// cache). Derived metadata, not part of [`CspIndexState`].
+    pub file_sizes: HashMap<String, u64>,
 }
 
 pub(crate) fn normalize_content(content: Option<Vec<ContentType>>) -> Vec<ContentType> {
@@ -96,6 +101,7 @@ impl CspIndex {
             model_path: state.model_path,
             root: state.root,
             content: state.content,
+            file_sizes: HashMap::new(),
         }
     }
 
@@ -120,7 +126,7 @@ impl CspIndex {
             },
         )?;
 
-        Ok(Self::new(CspIndexState {
+        let mut index = Self::new(CspIndexState {
             model,
             bm25_index: result.bm25_index,
             semantic_index: result.semantic_index,
@@ -128,7 +134,10 @@ impl CspIndex {
             model_path,
             root: Some(path.to_string_lossy().into_owned()),
             content,
-        }))
+        });
+        // Capture file sizes now, while the source tree is on disk.
+        index.file_sizes = compute_file_sizes(path, &index.chunks);
+        Ok(index)
     }
 
     /// Build an index from a remote git URL (shallow clone into a temp dir).
@@ -149,9 +158,12 @@ impl CspIndex {
 
         clone_shallow(url, dir.path(), git_ref)?;
         let index = Self::from_path(dir.path(), options)?;
+        // `from_path` already captured file sizes from the checkout; carry them
+        // over since the temp dir is removed when `dir` drops.
+        let file_sizes = index.file_sizes.clone();
         // Re-root at the URL so a persisted manifest records a stable sourceId
         // (the temp checkout is removed when `dir` drops).
-        Ok(Self::new(CspIndexState {
+        let mut rerooted = Self::new(CspIndexState {
             model: index.model,
             bm25_index: index.bm25_index,
             semantic_index: index.semantic_index,
@@ -159,7 +171,9 @@ impl CspIndex {
             model_path: index.model_path,
             root: Some(url.to_string()),
             content: index.content,
-        }))
+        });
+        rerooted.file_sizes = file_sizes;
+        Ok(rerooted)
     }
 
     /// Aggregate index statistics.
@@ -348,7 +362,7 @@ impl CspIndex {
             make_stub_model(semantic_index.dim)
         };
 
-        Ok(Self::new(CspIndexState {
+        let mut index = Self::new(CspIndexState {
             model,
             bm25_index,
             semantic_index,
@@ -356,8 +370,35 @@ impl CspIndex {
             model_path,
             root: manifest.source_id,
             content: manifest.content,
-        }))
+        });
+        // Recompute file sizes from the source when it's a still-present local
+        // directory (mirrors semble reading sizes off `root` on load). A git URL
+        // or a moved source leaves this empty → `file_chars` is simply 0.
+        if let Some(root) = index.root.as_deref() {
+            let root_path = Path::new(root);
+            if root_path.is_dir() {
+                index.file_sizes = compute_file_sizes(root_path, &index.chunks);
+            }
+        }
+        Ok(index)
     }
+}
+
+/// Per-file UTF-16 character counts for the unique files referenced by `chunks`,
+/// read from `root`. Mirrors semble `_compute_file_sizes` (unreadable files are
+/// skipped). Feeds the `file_chars` side of token-savings telemetry; UTF-16 keeps
+/// it consistent with `stats::save_search_stats`'s snippet accounting.
+fn compute_file_sizes(root: &Path, chunks: &[Chunk]) -> HashMap<String, u64> {
+    let mut sizes: HashMap<String, u64> = HashMap::new();
+    for chunk in chunks {
+        if sizes.contains_key(&chunk.file_path) {
+            continue;
+        }
+        if let Ok(text) = std::fs::read_to_string(root.join(&chunk.file_path)) {
+            sizes.insert(chunk.file_path.clone(), text.encode_utf16().count() as u64);
+        }
+    }
+    sizes
 }
 
 /// Shallow-clone `url` into `dir`, non-interactively. Rejects a ref starting
