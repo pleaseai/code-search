@@ -10,11 +10,14 @@
 //! async server's tokio tasks.
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use indexmap::IndexMap;
 use serde_json::json;
 
-use crate::indexing::index::{load_or_build_index, CspIndex, LoadOrBuildOptions, QueryOptions};
+use crate::indexing::index::{
+    load_or_build_index, source_fingerprint, CspIndex, LoadOrBuildOptions, QueryOptions,
+};
 use crate::types::ContentType;
 use crate::utils::{format_results, is_git_url, resolve_chunk};
 
@@ -28,6 +31,11 @@ pub const SERVER_INSTRUCTIONS: &str = concat!(
 /// Maximum number of distinct sources held in the session cache (LRU).
 const CACHE_MAX_SIZE: usize = 10;
 
+/// Don't re-check a cached local path for staleness sooner than this many times
+/// the last build's duration — so a slow-to-build repo isn't re-walked on every
+/// query (mirrors semble#211's `_MIN_REVALIDATE_FACTOR`).
+const MIN_REVALIDATE_FACTOR: u32 = 3;
+
 /// Build-or-reuse seam — defaults to [`load_or_build_index`]; tests inject a stub
 /// to count calls and assert git-vs-path routing.
 pub trait LoadOrBuild {
@@ -37,6 +45,11 @@ pub trait LoadOrBuild {
         content: &[ContentType],
         git_ref: Option<&str>,
     ) -> Result<CspIndex, String>;
+
+    /// Live validity fingerprint for a local `source` (`None` for git URLs, which
+    /// are URL+ref keyed and never revalidated). A change from the value captured
+    /// at build time means the cached index is stale and must be rebuilt.
+    fn fingerprint(&self, source: &str, content: &[ContentType]) -> Option<String>;
 }
 
 /// Default seam: route through the shared on-disk cache.
@@ -58,12 +71,29 @@ impl LoadOrBuild for DiskLoadOrBuild {
             },
         )
     }
+
+    fn fingerprint(&self, source: &str, content: &[ContentType]) -> Option<String> {
+        source_fingerprint(source, content)
+    }
+}
+
+/// A cached index plus the metadata needed to revalidate it on later queries.
+struct CacheEntry {
+    index: Arc<CspIndex>,
+    /// Source fingerprint captured at build time; `None` for git URLs (never
+    /// revalidated). A live fingerprint that differs means the entry is stale.
+    fingerprint: Option<String>,
+    /// Staleness re-checks for this entry are skipped until this instant, so a
+    /// slow-to-build repo isn't re-walked on every query.
+    revalidate_after: Instant,
 }
 
 /// Session cache of indexed repos/paths, keyed by source (git URL `@ref`, or the
-/// absolutized local path). LRU-bounded to [`CACHE_MAX_SIZE`].
+/// absolutized local path). LRU-bounded to [`CACHE_MAX_SIZE`]. Local-path entries
+/// are revalidated against their live source fingerprint on query (subject to a
+/// build-time-scaled cooldown), so an entry is rebuilt once its files change.
 pub struct IndexCache<S: LoadOrBuild = DiskLoadOrBuild> {
-    tasks: IndexMap<String, Arc<CspIndex>>,
+    tasks: IndexMap<String, CacheEntry>,
     content: Vec<ContentType>,
     seam: S,
 }
@@ -100,13 +130,33 @@ impl<S: LoadOrBuild> IndexCache<S> {
 
     /// Return an index for `source`, building and caching it on first access.
     /// A build failure is not cached (the next call retries).
+    ///
+    /// A cached local-path entry is revalidated against its live source
+    /// fingerprint once its cooldown has elapsed; a mismatch evicts it so the
+    /// index is rebuilt below. Git URLs are never revalidated.
     pub fn get(&mut self, source: &str, git_ref: Option<&str>) -> Result<Arc<CspIndex>, String> {
         let key = self.compute_key(source, git_ref);
 
-        if let Some(existing) = self.tasks.shift_remove(&key) {
-            // Touch for LRU (re-insert at the most-recent end).
-            self.tasks.insert(key, existing.clone());
-            return Ok(existing);
+        // Past the cooldown, re-check a local entry against the live fingerprint.
+        let stored_fingerprint = match self.tasks.get(&key) {
+            Some(entry)
+                if entry.fingerprint.is_some() && Instant::now() >= entry.revalidate_after =>
+            {
+                Some(entry.fingerprint.clone())
+            }
+            _ => None,
+        };
+        if let Some(stored) = stored_fingerprint {
+            if self.seam.fingerprint(source, &self.content) != stored {
+                self.tasks.shift_remove(&key);
+            }
+        }
+
+        if let Some(entry) = self.tasks.shift_remove(&key) {
+            // Fresh (or git) → serve; touch for LRU (re-insert at the recent end).
+            let index = entry.index.clone();
+            self.tasks.insert(key, entry);
+            return Ok(index);
         }
 
         // LRU eviction: drop the oldest entry when full.
@@ -114,8 +164,18 @@ impl<S: LoadOrBuild> IndexCache<S> {
             self.tasks.shift_remove_index(0);
         }
 
+        let start = Instant::now();
         let index = Arc::new(self.seam.load_or_build(source, &self.content, git_ref)?);
-        self.tasks.insert(key, index.clone());
+        let build_elapsed = start.elapsed();
+        let fingerprint = self.seam.fingerprint(source, &self.content);
+        self.tasks.insert(
+            key,
+            CacheEntry {
+                index: index.clone(),
+                fingerprint,
+                revalidate_after: Instant::now() + build_elapsed * MIN_REVALIDATE_FACTOR,
+            },
+        );
         Ok(index)
     }
 
@@ -274,11 +334,14 @@ mod tests {
         })
     }
 
-    /// Stub seam: counts git vs path builds, never touches disk.
+    /// Stub seam: counts git vs path builds, never touches disk. `fingerprint`
+    /// simulates a local source's live validity token (mutate it to fake a file
+    /// change); git URLs report `None` like the real seam.
     struct Stub {
         git_calls: RefCell<usize>,
         path_calls: RefCell<usize>,
         fail: bool,
+        fingerprint: RefCell<Option<String>>,
     }
     impl Stub {
         fn new() -> Self {
@@ -286,6 +349,7 @@ mod tests {
                 git_calls: RefCell::new(0),
                 path_calls: RefCell::new(0),
                 fail: false,
+                fingerprint: RefCell::new(Some("fp1".to_string())),
             }
         }
     }
@@ -305,6 +369,14 @@ mod tests {
                 *self.path_calls.borrow_mut() += 1;
             }
             Ok(empty_index())
+        }
+
+        fn fingerprint(&self, source: &str, _c: &[ContentType]) -> Option<String> {
+            if is_git_url(source) {
+                None
+            } else {
+                self.fingerprint.borrow().clone()
+            }
         }
     }
 
@@ -351,6 +423,48 @@ mod tests {
         assert_eq!(*cache.seam.path_calls.borrow(), 0);
         cache.get("/tmp/local", None).unwrap();
         assert_eq!(*cache.seam.path_calls.borrow(), 1);
+    }
+
+    #[test]
+    fn cache_revalidates_stale_local_path() {
+        let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
+        let key = cache.compute_key("/tmp/repo", None);
+
+        cache.get("/tmp/repo", None).unwrap();
+        assert_eq!(*cache.seam.path_calls.borrow(), 1);
+
+        // Within the cooldown window the entry is served without a fingerprint
+        // check, so it's not rebuilt even if the fingerprint has drifted.
+        *cache.seam.fingerprint.borrow_mut() = Some("fp2".to_string());
+        cache.get("/tmp/repo", None).unwrap();
+        assert_eq!(*cache.seam.path_calls.borrow(), 1);
+
+        // Force the cooldown to have elapsed → the next get revalidates, sees the
+        // changed fingerprint, evicts, and rebuilds.
+        cache.tasks.get_mut(&key).unwrap().revalidate_after = Instant::now();
+        cache.get("/tmp/repo", None).unwrap();
+        assert_eq!(*cache.seam.path_calls.borrow(), 2);
+        assert_eq!(cache.size(), 1);
+
+        // Rebuilt entry captured fp2; past the cooldown with an unchanged
+        // fingerprint → revalidated but matches → served, no rebuild.
+        cache.tasks.get_mut(&key).unwrap().revalidate_after = Instant::now();
+        cache.get("/tmp/repo", None).unwrap();
+        assert_eq!(*cache.seam.path_calls.borrow(), 2);
+    }
+
+    #[test]
+    fn cache_git_url_not_revalidated() {
+        let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
+        let url = "https://github.com/org/repo.git";
+        cache.get(url, None).unwrap();
+        assert_eq!(*cache.seam.git_calls.borrow(), 1);
+
+        // Even if the (local-only) fingerprint changes, git URLs are keyed by
+        // URL+ref and never revalidated → always served from cache.
+        *cache.seam.fingerprint.borrow_mut() = Some("fp2".to_string());
+        cache.get(url, None).unwrap();
+        assert_eq!(*cache.seam.git_calls.borrow(), 1);
     }
 
     #[test]
@@ -405,6 +519,10 @@ mod tests {
             _r: Option<&str>,
         ) -> Result<CspIndex, String> {
             Ok(index_with_chunk())
+        }
+
+        fn fingerprint(&self, _s: &str, _c: &[ContentType]) -> Option<String> {
+            None
         }
     }
 

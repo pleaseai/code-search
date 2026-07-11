@@ -499,6 +499,20 @@ fn collect_source_files(root: &Path, content: &[ContentType]) -> Vec<CacheFile> 
     files
 }
 
+/// Content-hash fingerprint of a local source tree — the same oracle
+/// [`load_or_build_index`] uses to decide cache validity. Returns `None` for git
+/// URLs (URL+ref keyed, no cheap live hash), so callers can cheaply detect
+/// whether an already-built index has gone stale by comparing fingerprints.
+pub fn source_fingerprint(source: &str, content: &[ContentType]) -> Option<String> {
+    if is_git_url(source) {
+        return None;
+    }
+    Some(compute_content_hash(&collect_source_files(
+        Path::new(source),
+        content,
+    )))
+}
+
 /// Load a cached index for `source` if fresh, else build, persist, and return.
 pub fn load_or_build_index(source: &str, options: &LoadOrBuildOptions) -> Result<CspIndex, String> {
     let content = normalize_content(options.content.clone());
@@ -517,14 +531,7 @@ pub fn load_or_build_index(source: &str, options: &LoadOrBuildOptions) -> Result
 
     // Local sources: the source-file hash is the cache-validity oracle. Git
     // sources are URL+ref keyed (no cheap live hash).
-    let source_hash = if is_git {
-        None
-    } else {
-        Some(compute_content_hash(&collect_source_files(
-            Path::new(source),
-            &content,
-        )))
-    };
+    let source_hash = source_fingerprint(source, &content);
 
     if let Some(cached) = try_reuse(&cache_dir, is_git, source_hash.as_deref()) {
         return Ok(cached);
