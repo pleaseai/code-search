@@ -1,0 +1,19 @@
+CLAUDE.md
+  s_2a47d5e2637f71::t_1ecef753167126 64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "9380337c5af98fbda7517aada93fe540fb54e7c5",
+  "prompts": {},
+  "sessions": {
+    "s_2a47d5e2637f71": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0283c9b7-2d49-4d56-b049-af2be8153f0c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
