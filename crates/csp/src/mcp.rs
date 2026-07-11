@@ -139,24 +139,27 @@ impl<S: LoadOrBuild> IndexCache<S> {
     pub fn get(&mut self, source: &str, git_ref: Option<&str>) -> Result<Arc<CspIndex>, String> {
         let key = self.compute_key(source, git_ref);
 
-        // Past the cooldown, re-check a local entry against the live fingerprint.
-        let stored_fingerprint = match self.tasks.get(&key) {
-            Some(entry)
-                if entry.fingerprint.is_some() && Instant::now() >= entry.revalidate_after =>
-            {
-                Some(entry.fingerprint.clone())
+        let mut entry = self.tasks.shift_remove(&key);
+        let stale = if let Some(entry) = entry.as_mut() {
+            if entry.fingerprint.is_some() && Instant::now() >= entry.revalidate_after {
+                if self.seam.fingerprint(source, &self.content) != entry.fingerprint {
+                    true
+                } else {
+                    entry.revalidate_after = Instant::now() + entry.revalidate_cooldown;
+                    false
+                }
+            } else {
+                false
             }
-            _ => None,
+        } else {
+            false
         };
-        if let Some(stored) = stored_fingerprint {
-            if self.seam.fingerprint(source, &self.content) != stored {
-                self.tasks.shift_remove(&key);
-            } else if let Some(entry) = self.tasks.get_mut(&key) {
-                entry.revalidate_after = Instant::now() + entry.revalidate_cooldown;
-            }
+
+        if stale {
+            entry = None;
         }
 
-        if let Some(entry) = self.tasks.shift_remove(&key) {
+        if let Some(entry) = entry {
             // Fresh (or git) → serve; touch for LRU (re-insert at the recent end).
             let index = entry.index.clone();
             self.tasks.insert(key, entry);
@@ -438,6 +441,11 @@ mod tests {
 
         cache.get("/tmp/repo", None).unwrap();
         assert_eq!(*cache.seam.path_calls.borrow(), 1);
+
+        // The stub build may complete below the clock resolution, so establish an
+        // explicit cooldown window before checking the within-window behavior.
+        cache.tasks.get_mut(&key).unwrap().revalidate_after =
+            Instant::now() + std::time::Duration::from_secs(1);
 
         // Within the cooldown window the entry is served without a fingerprint
         // check, so it's not rebuilt even if the fingerprint has drifted.
