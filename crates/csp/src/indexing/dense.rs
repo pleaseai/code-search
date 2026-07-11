@@ -111,6 +111,14 @@ impl Model {
         }
     }
 
+    /// Stable runtime implementation identifier persisted with cached vectors.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Model::Static { .. } => "static",
+            Model::Stub { .. } => "stub",
+        }
+    }
+
     /// Embedding dimension.
     pub fn dim(&self) -> usize {
         match self {

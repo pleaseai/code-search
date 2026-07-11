@@ -120,6 +120,13 @@ fn try_reuse(
     if manifest.model_id != expected_model {
         return None;
     }
+    // The persisted vectors and live query model must use the same runtime
+    // implementation. This distinguishes a real Model2Vec cache from an offline
+    // deterministic-stub cache even when both share the same requested model id.
+    let (query_model, _) = crate::indexing::dense::load_model(Some(expected_model));
+    if manifest.model_kind.as_deref() != Some(query_model.kind()) {
+        return None;
+    }
     // Local sources additionally validate the live source-file hash; git sources
     // are URL+ref keyed (no cheap live hash).
     if !is_git && Some(manifest.content_hash.as_str()) != source_hash {

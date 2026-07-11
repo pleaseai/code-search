@@ -34,6 +34,9 @@ pub struct IndexManifest {
     pub source_id: Option<String>,
     pub content: Vec<ContentType>,
     pub model_id: String,
+    /// Runtime model implementation used to build vectors (`static` or `stub`).
+    /// Absent in legacy manifests, which are conservatively treated as stale.
+    pub model_kind: Option<String>,
     /// Target chunk length the index was built with. Changing it alters every
     /// chunk boundary, so a cache built with a different value must be rebuilt
     /// (mirrors semble `_metadata_matches`). `None` = built before this field
@@ -288,6 +291,7 @@ impl CspIndex {
             source_id: self.root.clone(),
             content: self.content.clone(),
             model_id: self.model_path.clone(),
+            model_kind: Some(self.model.kind().to_string()),
             chunk_size: Some(DESIRED_CHUNK_LENGTH_CHARS as u32),
         };
         let manifest_json = serde_json::to_string(&manifest).map_err(|e| e.to_string())?;
@@ -424,6 +428,15 @@ pub fn parse_manifest(raw: &serde_json::Value) -> Result<IndexManifest, String> 
         .and_then(serde_json::Value::as_str)
         .ok_or("Invalid manifest: modelId must be a string")?
         .to_string();
+    let model_kind = match obj.get("modelKind") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::String(kind)) if matches!(kind.as_str(), "static" | "stub") => {
+            Some(kind.clone())
+        }
+        Some(_) => {
+            return Err("Invalid manifest: modelKind must be 'static', 'stub', or null".to_string())
+        }
+    };
     // Absent/null = built before the field existed → None (treated as a cache
     // mismatch by `try_reuse`). A present-but-non-numeric value is malformed.
     let chunk_size = obj
@@ -453,6 +466,7 @@ pub fn parse_manifest(raw: &serde_json::Value) -> Result<IndexManifest, String> 
         source_id,
         content,
         model_id,
+        model_kind,
         chunk_size,
     })
 }

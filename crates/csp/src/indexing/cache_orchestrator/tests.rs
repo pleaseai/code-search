@@ -62,6 +62,21 @@ fn try_reuse_rejects_stale_chunk_size() {
 }
 
 #[test]
+fn try_reuse_rejects_mismatched_model_kind() {
+    let idx = build_index(vec![make_chunk("a.ts", "A")]);
+    let dir = tempdir().unwrap();
+    idx.save(dir.path(), Some("deadbeef")).unwrap();
+
+    let manifest_path = dir.path().join("manifest.json");
+    let raw = std::fs::read_to_string(&manifest_path).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    value["modelKind"] = serde_json::json!("static");
+    std::fs::write(&manifest_path, value.to_string()).unwrap();
+
+    assert!(try_reuse(dir.path(), false, Some("deadbeef"), "test-model").is_none());
+}
+
+#[test]
 fn try_reuse_rejects_stale_model() {
     let chunks = vec![make_chunk("a.ts", "A")];
     let idx = build_index(chunks);
