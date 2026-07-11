@@ -1,0 +1,19 @@
+CLAUDE.md
+  s_924699b936eb40::t_b97743ddb1f0e7 64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.11",
+  "base_commit_sha": "85cafe55b23c490427101ccea5b2635b8a5a4784",
+  "prompts": {},
+  "sessions": {
+    "s_924699b936eb40": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e9604da-1adf-4e5f-a3cc-918c2b80bc7f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
