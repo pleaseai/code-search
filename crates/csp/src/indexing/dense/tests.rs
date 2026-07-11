@@ -248,6 +248,20 @@ fn save_load_round_trips() {
 }
 
 #[test]
+fn load_rejects_zero_dimension_for_non_empty_index() {
+    let dir = tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("args.json"),
+        r#"{"rows":1,"dim":0,"arguments":{"metric":"cosine"}}"#,
+    )
+    .unwrap();
+    std::fs::write(dir.path().join("vectors.bin"), []).unwrap();
+
+    let err = SelectableBasicBackend::load(dir.path()).unwrap_err();
+    assert!(err.contains("dim must be greater than 0"));
+}
+
+#[test]
 fn load_rejects_overflowing_dimensions() {
     let dir = tempdir().unwrap();
     std::fs::write(

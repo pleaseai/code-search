@@ -172,6 +172,12 @@ impl SelectableBasicBackend {
     pub fn load(dir: &Path) -> Result<Self, String> {
         let meta_raw = std::fs::read_to_string(dir.join("args.json")).map_err(|e| e.to_string())?;
         let meta: BackendMeta = serde_json::from_str(&meta_raw).map_err(|e| e.to_string())?;
+        if meta.rows > 0 && meta.dim == 0 {
+            return Err(
+                "Invalid vector dimension: dim must be greater than 0 for a non-empty index"
+                    .to_string(),
+            );
+        }
 
         let bytes = std::fs::read(dir.join("vectors.bin")).map_err(|e| e.to_string())?;
         let expected = meta
