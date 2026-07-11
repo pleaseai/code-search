@@ -61,7 +61,7 @@ bun run lint:fix   # eslint . --fix --cache
 These names are **load-bearing** — they appear in the README's MCP configs, CLI examples, and library usage block, and external users will install against them. Don't rename without updating both READMEs.
 
 - **Library**: `CspIndex` (parallels `SembleIndex`) with `.fromPath()`, `.fromGit()`, `.search()`, `.findRelated()`, `.save()`, `.loadFromDisk()`. Enum `ContentType` with `CODE | DOCS | CONFIG`. Camel-cased fields: `chunk.filePath`, `chunk.startLine`, `chunk.endLine`.
-- **CLI** (`csp`): `search`, `index`, `find-related`, `mcp`, `init`, `savings`. Flags: `--top-k`, `--content {code|docs|config|all}`, `--index <path>`, `--agent <claude|cursor|codex|opencode|copilot|kiro|gemini>`.
+- **CLI** (`csp`): `search`, `index`, `find-related`, `mcp`, `init`, `savings`. Flags: `--top-k`, `--content {code|docs|config|all}`, `--index <path>`, `--agent <claude|gemini|cursor|opencode|copilot|kiro|antigravity|commandcode|pi|reasonix>` (the `Agent` clap `ValueEnum` in `src/bin/csp/main.rs`; **Codex is not an `init` agent** — it's wired via the plugin / MCP `~/.codex/config.toml`, see README).
 - **MCP tools**: `search`, `find_related`. Server launched via `bunx @pleaseai/csp mcp` (note `mcp` subcommand — semble uses the bare binary).
 - **Stats path**: `~/.csp/savings.jsonl` (semble uses `~/.semble/`). The global index cache lives alongside it at `~/.csp/index/` (per [ADR 0002](.please/docs/decisions/0002-index-storage-cache-model.md)); `csp clear index` removes only that directory.
 
