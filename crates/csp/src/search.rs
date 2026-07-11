@@ -215,6 +215,9 @@ pub fn search(
         let b = normalized_bm25.get(&idx).copied().unwrap_or(0.0);
         combined.insert(idx, alpha_weight * s + (1.0 - alpha_weight) * b);
     }
+    // Drop chunks whose fused score is exactly 0.0 before ranking (parity with
+    // semble#219's `combined_scores = {... if score}`).
+    combined.retain(|_, &mut score| score != 0.0);
 
     let ranked: Vec<(usize, f64)> = if rerank {
         boost_multi_chunk_files(&mut combined, chunks);
@@ -453,9 +456,9 @@ mod tests {
         assert_eq!(results[1].chunk, chunks[0]);
         assert!(results[0].score > 0.0);
         assert!(results[1].score > 0.0);
-        if let Some(r) = results.iter().find(|r| r.chunk == chunks[4]) {
-            assert_eq!(r.score, 0.0);
-        }
+        // The BM25-only chunk has a fused score of 0.0 at alpha=1.0 and is dropped
+        // (semble#219 filters `combined_scores` before ranking).
+        assert!(results.iter().all(|r| r.chunk != chunks[4]));
     }
 
     #[test]

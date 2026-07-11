@@ -15,7 +15,9 @@ use crate::indexing::cache::{
     compute_content_hash, ensure_cache_dir, resolve_cache_dir, CacheFile, CacheLocation,
 };
 use crate::indexing::create::{create_index_from_path, CreateIndexOptions, MAX_FILE_BYTES};
-use crate::indexing::dense::{load_model, make_stub_model, Model, SelectableBasicBackend};
+use crate::indexing::dense::{
+    load_model, make_stub_model, Model, SelectableBasicBackend, DEFAULT_MODEL_NAME,
+};
 use crate::indexing::file_walker::walk_files;
 use crate::indexing::files::get_extensions;
 use crate::indexing::sparse::Bm25Index;
@@ -526,7 +528,12 @@ pub fn load_or_build_index(source: &str, options: &LoadOrBuildOptions) -> Result
         )))
     };
 
-    if let Some(cached) = try_reuse(&cache_dir, is_git, source_hash.as_deref()) {
+    // The resolved model name the index would be (re)built with. A cache built
+    // with a different model must not be reused — its vectors are incompatible
+    // (mirrors semble#219 bumping the default to the `-v2` weights).
+    let expected_model = options.model_path.as_deref().unwrap_or(DEFAULT_MODEL_NAME);
+
+    if let Some(cached) = try_reuse(&cache_dir, is_git, source_hash.as_deref(), expected_model) {
         return Ok(cached);
     }
 
@@ -544,7 +551,12 @@ pub fn load_or_build_index(source: &str, options: &LoadOrBuildOptions) -> Result
 }
 
 /// Reuse a cached index when present and valid, else `None`.
-fn try_reuse(cache_dir: &Path, is_git: bool, source_hash: Option<&str>) -> Option<CspIndex> {
+fn try_reuse(
+    cache_dir: &Path,
+    is_git: bool,
+    source_hash: Option<&str>,
+    expected_model: &str,
+) -> Option<CspIndex> {
     let manifest_path = cache_dir.join("manifest.json");
     if !manifest_path.exists() {
         return None;
@@ -555,6 +567,11 @@ fn try_reuse(cache_dir: &Path, is_git: bool, source_hash: Option<&str>) -> Optio
     // A chunk_size change re-chunks every file, so a cache built with a different
     // target length is stale even if the source files are byte-identical.
     if manifest.chunk_size != Some(DESIRED_CHUNK_LENGTH_CHARS as u32) {
+        return None;
+    }
+    // A model change makes the persisted vectors incompatible with queries
+    // embedded by the new model, so a cache built with a different model is stale.
+    if manifest.model_id != expected_model {
         return None;
     }
     // Local sources additionally validate the live source-file hash; git sources
@@ -775,7 +792,7 @@ mod tests {
         idx.save(dir.path(), Some("deadbeef")).unwrap();
 
         // Fresh cache (matching hash + current chunk_size) is reused.
-        assert!(try_reuse(dir.path(), false, Some("deadbeef")).is_some());
+        assert!(try_reuse(dir.path(), false, Some("deadbeef"), "test-model").is_some());
 
         // Rewrite the manifest with a different chunk_size → stale → rebuild.
         let manifest_path = dir.path().join("manifest.json");
@@ -783,13 +800,26 @@ mod tests {
         let mut value: serde_json::Value = serde_json::from_str(&raw).unwrap();
         value["chunkSize"] = serde_json::json!(9999);
         std::fs::write(&manifest_path, value.to_string()).unwrap();
-        assert!(try_reuse(dir.path(), false, Some("deadbeef")).is_none());
+        assert!(try_reuse(dir.path(), false, Some("deadbeef"), "test-model").is_none());
 
         // A manifest predating the field (absent chunkSize) is also stale.
         let mut value: serde_json::Value = serde_json::from_str(&raw).unwrap();
         value.as_object_mut().unwrap().remove("chunkSize");
         std::fs::write(&manifest_path, value.to_string()).unwrap();
-        assert!(try_reuse(dir.path(), false, Some("deadbeef")).is_none());
+        assert!(try_reuse(dir.path(), false, Some("deadbeef"), "test-model").is_none());
+    }
+
+    #[test]
+    fn try_reuse_rejects_stale_model() {
+        let chunks = vec![make_chunk("a.ts", 1, 10, Some("typescript"), "A")];
+        let idx = build_index(chunks);
+        let dir = tempdir().unwrap();
+        idx.save(dir.path(), Some("deadbeef")).unwrap();
+
+        // Same model → reused; a different model (e.g. after a default bump to
+        // `-v2`) → stale even with a matching hash + chunk_size.
+        assert!(try_reuse(dir.path(), false, Some("deadbeef"), "test-model").is_some());
+        assert!(try_reuse(dir.path(), false, Some("deadbeef"), "other-model").is_none());
     }
 
     #[test]

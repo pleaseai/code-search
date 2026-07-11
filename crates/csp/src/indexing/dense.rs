@@ -21,10 +21,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::Chunk;
 
-/// Default Model2Vec model name (kept identical to semble for parity).
-pub const DEFAULT_MODEL_NAME: &str = "minishlab/potion-code-16M";
+/// Default Model2Vec model name (kept identical to semble for parity;
+/// semble#219 bumped this to the `-v2` weights).
+pub const DEFAULT_MODEL_NAME: &str = "minishlab/potion-code-16M-v2";
 
-/// Stub embedding dimension (the real `potion-code-16M` emits 256-dim vectors).
+/// Stub embedding dimension (the real `potion-code-16M-v2` emits 256-dim vectors).
 const DEFAULT_STUB_DIM: usize = 256;
 
 /// Deterministic 32-bit FNV-1a over UTF-16 code units (matches JS `charCodeAt`).
@@ -482,11 +483,11 @@ mod tests {
         assert_eq!(model.dim(), DEFAULT_STUB_DIM); // stub fallback
     }
 
-    /// Real Model2Vec load — downloads `minishlab/potion-code-16M` from HF on
+    /// Real Model2Vec load — downloads `minishlab/potion-code-16M-v2` from HF on
     /// first run, so it's network-gated and not part of the default suite.
     /// Run with: `cargo test -p csp -- --ignored real_model2vec`.
     #[test]
-    #[ignore = "network: downloads potion-code-16M from Hugging Face"]
+    #[ignore = "network: downloads potion-code-16M-v2 from Hugging Face"]
     fn real_model2vec_loads_and_embeds() {
         let model = load_static(DEFAULT_MODEL_NAME).expect("load real model");
         assert!(model.dim() > 0);
