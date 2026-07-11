@@ -1,0 +1,46 @@
+crates/csp/src/indexing/dense.rs
+  s_176206531a7197::t_b904a49aecae08 186,188,191
+crates/csp/src/indexing/cache_orchestrator.rs
+  s_176206531a7197::t_97b8841b632f0e 131-133
+  s_176206531a7197::t_d95544d575d014 101
+  s_176206531a7197::t_95281bdda5c11e 1-2
+  s_176206531a7197::t_2cadbaae93c32b 14
+  s_176206531a7197::t_b904a49aecae08 3-13,15-100,102-130
+crates/csp/src/indexing/dense/backend.rs
+  s_176206531a7197::t_b904a49aecae08 1-204
+crates/csp/src/indexing/cache_orchestrator/tests.rs
+  s_176206531a7197::t_e95b4709530e93 1-115
+.claude/skills/verify/SKILL.md
+  s_176206531a7197::t_c4dd7404017b41 1-17
+crates/csp/src/indexing/mod.rs
+  s_176206531a7197::t_b904a49aecae08 8
+crates/csp/src/indexing/dense/tests.rs
+  s_176206531a7197::t_b904a49aecae08 1-260
+crates/csp/src/search.rs
+  s_176206531a7197::t_b904a49aecae08 244
+crates/csp/src/search/tests.rs
+  s_176206531a7197::t_b904a49aecae08 1-310
+crates/csp/src/indexing/index.rs
+  s_176206531a7197::t_1906c2ce67a718 2
+  s_176206531a7197::t_609f4a2e2b99ac 13-14
+  s_176206531a7197::t_462dc910ee7acc 82
+  s_176206531a7197::t_b904a49aecae08 460,463
+crates/csp/src/indexing/index/tests.rs
+  s_176206531a7197::t_b904a49aecae08 1-296
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.11",
+  "base_commit_sha": "9a07893c12f12682dfde3a1177e7f4e192b04c8f",
+  "prompts": {},
+  "sessions": {
+    "s_176206531a7197": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2cc0bde0-0dc6-42ee-918c-444f1b01c881",
+        "model": "claude-gpt-5.6-sol-via-codex"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
