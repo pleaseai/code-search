@@ -10,7 +10,7 @@
 //! async server's tokio tasks.
 
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use indexmap::IndexMap;
 use serde_json::json;
@@ -35,6 +35,10 @@ const CACHE_MAX_SIZE: usize = 10;
 /// the last build's duration — so a slow-to-build repo isn't re-walked on every
 /// query (mirrors semble#211's `_MIN_REVALIDATE_FACTOR`).
 const MIN_REVALIDATE_FACTOR: u32 = 3;
+
+/// Floor for local-path revalidation so fast disk-cache hits do not trigger a
+/// full source-tree fingerprint on nearly every query.
+const MIN_REVALIDATE_COOLDOWN: Duration = Duration::from_secs(2);
 
 /// Build-or-reuse seam — defaults to [`load_or_build_index`]; tests inject a stub
 /// to count calls and assert git-vs-path routing.
@@ -175,7 +179,8 @@ impl<S: LoadOrBuild> IndexCache<S> {
         let index = Arc::new(self.seam.load_or_build(source, &self.content, git_ref)?);
         let build_elapsed = start.elapsed();
         let fingerprint = self.seam.fingerprint(source, &self.content);
-        let revalidate_cooldown = build_elapsed * MIN_REVALIDATE_FACTOR;
+        let revalidate_cooldown =
+            (build_elapsed * MIN_REVALIDATE_FACTOR).max(MIN_REVALIDATE_COOLDOWN);
         self.tasks.insert(
             key,
             CacheEntry {
@@ -441,11 +446,7 @@ mod tests {
 
         cache.get("/tmp/repo", None).unwrap();
         assert_eq!(*cache.seam.path_calls.borrow(), 1);
-
-        // The stub build may complete below the clock resolution, so establish an
-        // explicit cooldown window before checking the within-window behavior.
-        cache.tasks.get_mut(&key).unwrap().revalidate_after =
-            Instant::now() + std::time::Duration::from_secs(1);
+        assert!(cache.tasks.get(&key).unwrap().revalidate_cooldown >= MIN_REVALIDATE_COOLDOWN);
 
         // Within the cooldown window the entry is served without a fingerprint
         // check, so it's not rebuilt even if the fingerprint has drifted.
