@@ -174,7 +174,11 @@ impl SelectableBasicBackend {
         let meta: BackendMeta = serde_json::from_str(&meta_raw).map_err(|e| e.to_string())?;
 
         let bytes = std::fs::read(dir.join("vectors.bin")).map_err(|e| e.to_string())?;
-        let expected = meta.rows * meta.dim * 4;
+        let expected = meta
+            .rows
+            .checked_mul(meta.dim)
+            .and_then(|elements| elements.checked_mul(std::mem::size_of::<f32>()))
+            .ok_or_else(|| "Vector dimensions are too large (overflow)".to_string())?;
         if bytes.len() != expected {
             return Err(format!(
                 "Vector file size mismatch: expected {expected} bytes, got {}",

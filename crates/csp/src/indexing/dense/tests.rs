@@ -248,6 +248,23 @@ fn save_load_round_trips() {
 }
 
 #[test]
+fn load_rejects_overflowing_dimensions() {
+    let dir = tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("args.json"),
+        format!(
+            r#"{{"rows":{},"dim":2,"arguments":{{"metric":"cosine"}}}}"#,
+            usize::MAX
+        ),
+    )
+    .unwrap();
+    std::fs::write(dir.path().join("vectors.bin"), []).unwrap();
+
+    let err = SelectableBasicBackend::load(dir.path()).unwrap_err();
+    assert!(err.contains("overflow"));
+}
+
+#[test]
 fn load_rejects_truncated_vectors() {
     let original = backend(3, 8);
     let dir = tempdir().unwrap();
