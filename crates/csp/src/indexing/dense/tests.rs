@@ -248,6 +248,21 @@ fn save_load_round_trips() {
 }
 
 #[test]
+fn load_preserves_dimension_for_empty_index() {
+    let dir = tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("args.json"),
+        r#"{"rows":0,"dim":8,"arguments":{"metric":"cosine"}}"#,
+    )
+    .unwrap();
+    std::fs::write(dir.path().join("vectors.bin"), []).unwrap();
+
+    let loaded = SelectableBasicBackend::load(dir.path()).unwrap();
+    assert!(loaded.vectors.is_empty());
+    assert_eq!(loaded.dim, 8);
+}
+
+#[test]
 fn load_rejects_zero_dimension_for_non_empty_index() {
     let dir = tempdir().unwrap();
     std::fs::write(

@@ -206,7 +206,11 @@ impl SelectableBasicBackend {
             }
             vectors.push(row);
         }
-        Self::new(vectors, meta.arguments)
+        let mut backend = Self::new(vectors, meta.arguments)?;
+        if meta.rows == 0 {
+            backend.dim = meta.dim;
+        }
+        Ok(backend)
     }
 }
 

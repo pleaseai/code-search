@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::chunking::source::DESIRED_CHUNK_LENGTH_CHARS;
 use crate::indexing::cache::{
-    compute_content_hash, ensure_cache_dir, resolve_cache_dir, CacheFile, CacheLocation,
+    compute_content_hash_from_paths, ensure_cache_dir, resolve_cache_dir, CacheLocation,
 };
 use crate::indexing::create::MAX_FILE_BYTES;
 use crate::indexing::dense::DEFAULT_MODEL_NAME;
@@ -24,8 +24,9 @@ pub struct LoadOrBuildOptions {
     pub model_path: Option<String>,
 }
 
-/// Collect the source files `from_path` would index, as [`CacheFile`] entries.
-fn collect_source_files(root: &Path, content: &[ContentType]) -> Vec<CacheFile> {
+/// Collect the source files `from_path` would index as sorted hash inputs.
+/// File contents are read later, one at a time, by the hashing helper.
+fn collect_source_paths(root: &Path, content: &[ContentType]) -> Vec<(String, PathBuf)> {
     let resolved = get_extensions(content, None);
     let ext_refs: Vec<&str> = resolved.iter().map(String::as_str).collect();
     let mut files = Vec::new();
@@ -36,14 +37,8 @@ fn collect_source_files(root: &Path, content: &[ContentType]) -> Vec<CacheFile> 
         if meta.len() > MAX_FILE_BYTES {
             continue;
         }
-        let Ok(raw) = std::fs::read(&file_path) else {
-            continue;
-        };
         let rel = file_path.strip_prefix(root).unwrap_or(&file_path);
-        files.push(CacheFile {
-            path: rel.to_string_lossy().into_owned(),
-            content: raw,
-        });
+        files.push((rel.to_string_lossy().into_owned(), file_path));
     }
     files
 }
@@ -69,7 +64,7 @@ pub fn load_or_build_index(source: &str, options: &LoadOrBuildOptions) -> Result
     let source_hash = if is_git {
         None
     } else {
-        Some(compute_content_hash(&collect_source_files(
+        Some(compute_content_hash_from_paths(collect_source_paths(
             Path::new(source),
             &content,
         )))

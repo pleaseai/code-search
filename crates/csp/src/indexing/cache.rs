@@ -179,11 +179,31 @@ pub fn compute_content_hash(files: &[CacheFile]) -> String {
 
     let mut hasher = Sha256::new();
     for file in sorted {
-        let len16 = file.path.encode_utf16().count();
-        hasher.update(format!("{len16}:{}", file.path).as_bytes());
-        hasher.update(&file.content);
+        update_content_hash(&mut hasher, &file.path, &file.content);
     }
     to_hex(&hasher.finalize())
+}
+
+/// Compute the same content hash while reading one file at a time, avoiding
+/// retention of every file body for large repositories. Unreadable files are
+/// skipped, matching the indexer's existing best-effort collection behavior.
+pub(crate) fn compute_content_hash_from_paths(mut files: Vec<(String, PathBuf)>) -> String {
+    files.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut hasher = Sha256::new();
+    for (relative_path, path) in files {
+        let Ok(content) = std::fs::read(path) else {
+            continue;
+        };
+        update_content_hash(&mut hasher, &relative_path, &content);
+    }
+    to_hex(&hasher.finalize())
+}
+
+fn update_content_hash(hasher: &mut Sha256, path: &str, content: &[u8]) {
+    let len16 = path.encode_utf16().count();
+    hasher.update(format!("{len16}:{path}").as_bytes());
+    hasher.update(content);
 }
 
 /// Directories from `home` down to `leaf` (inclusive), home-first. When `leaf`
@@ -378,6 +398,22 @@ mod tests {
             content: vec![0x61, 0x62, 0x63],
         }]);
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn streamed_content_hash_matches_in_memory_hash() {
+        let dir = tempdir().unwrap();
+        let a_path = dir.path().join("a.ts");
+        let b_path = dir.path().join("b.ts");
+        std::fs::write(&a_path, "one").unwrap();
+        std::fs::write(&b_path, "two").unwrap();
+
+        let streamed = compute_content_hash_from_paths(vec![
+            ("b.ts".to_string(), b_path),
+            ("a.ts".to_string(), a_path),
+        ]);
+        let in_memory = compute_content_hash(&[cfile("a.ts", "one"), cfile("b.ts", "two")]);
+        assert_eq!(streamed, in_memory);
     }
 
     #[test]
