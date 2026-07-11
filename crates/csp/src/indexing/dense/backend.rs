@@ -58,6 +58,11 @@ impl SelectableBasicBackend {
     /// distance reduces to `1 - dot`). Errors on inconsistent dimensions.
     pub fn new(vectors: Vec<Vec<f32>>, arguments: BasicArgs) -> Result<Self, String> {
         let dim = vectors.first().map(Vec::len).unwrap_or(0);
+        if !vectors.is_empty() && dim == 0 {
+            return Err(
+                "Vector dimension must be greater than 0 for a non-empty index".to_string(),
+            );
+        }
         let mut normalized = Vec::with_capacity(vectors.len());
         for v in vectors {
             if v.len() != dim {

@@ -155,6 +155,12 @@ fn query_rejects_k_below_one() {
 }
 
 #[test]
+fn new_rejects_non_empty_zero_dimension_vectors() {
+    let err = SelectableBasicBackend::from_vectors(vec![vec![]]).unwrap_err();
+    assert!(err.contains("dimension must be greater than 0"));
+}
+
+#[test]
 fn new_rejects_inconsistent_dims() {
     let v0 = stub_embed("x", 8);
     let truncated = v0[..4].to_vec();

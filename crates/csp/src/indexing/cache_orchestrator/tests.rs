@@ -118,11 +118,22 @@ fn load_or_build_miss_then_hit_then_invalidate() {
             git_ref: None,
         },
     );
-    assert!(cache_dir.join("manifest.json").exists());
+    let manifest_path = cache_dir.join("manifest.json");
+    assert!(manifest_path.exists());
 
-    // Hit: a second call reuses the cache (same chunk count).
+    // Add an ignored sentinel to make reuse observable: a rebuild rewrites the
+    // manifest from the typed struct and removes this extra field.
+    let raw = std::fs::read_to_string(&manifest_path).unwrap();
+    let mut manifest: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    manifest["reuseSentinel"] = serde_json::json!(true);
+    std::fs::write(&manifest_path, manifest.to_string()).unwrap();
+
+    // Hit: a second call reuses the cache without rewriting the manifest.
     let second = load_or_build_index(&src_str, &opts).unwrap();
     assert_eq!(second.chunks.len(), first.chunks.len());
+    let after_hit: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+    assert_eq!(after_hit["reuseSentinel"], serde_json::json!(true));
 
     // Invalidation: add a file → content hash changes → rebuild reflects it.
     std::fs::write(

@@ -295,8 +295,19 @@ fn search_empty_inputs() {
 #[test]
 fn search_rerank_applies_multi_chunk_boost() {
     let chunks = make_chunks();
-    let idx = MockSemantic::new(vec![(0, 0.10), (1, 0.20), (2, 0.30)]);
+    let idx = MockSemantic::new(vec![(2, 0.05), (0, 0.10), (1, 0.20)]);
     let bm = MockBm25::new(vec![0.0; 5]);
+    let unranked = search(
+        "q",
+        &MockModel,
+        &idx,
+        &bm,
+        &chunks,
+        3,
+        &opts(Some(1.0), Some(false)),
+    );
+    assert_eq!(unranked[0].chunk.file_path, "src/gamma.ts");
+
     let ranked = search(
         "q",
         &MockModel,
