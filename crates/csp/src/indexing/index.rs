@@ -471,7 +471,9 @@ pub fn parse_manifest(raw: &serde_json::Value) -> Result<IndexManifest, String> 
     })
 }
 
-pub use crate::indexing::cache_orchestrator::{load_or_build_index, LoadOrBuildOptions};
+pub use crate::indexing::cache_orchestrator::{
+    load_or_build_index, source_fingerprint, LoadOrBuildOptions,
+};
 
 #[cfg(test)]
 mod tests;

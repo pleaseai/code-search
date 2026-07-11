@@ -47,6 +47,19 @@ fn collect_source_paths(root: &Path, content: &[ContentType]) -> Vec<(String, Pa
     files
 }
 
+/// Content-hash fingerprint of a local source tree — the same oracle
+/// [`load_or_build_index`] uses to decide cache validity. Returns `None` for git
+/// URLs, which are URL+ref keyed and have no cheap live hash.
+pub fn source_fingerprint(source: &str, content: &[ContentType]) -> Option<String> {
+    if is_git_url(source) {
+        return None;
+    }
+    Some(compute_content_hash_from_paths(collect_source_paths(
+        Path::new(source),
+        content,
+    )))
+}
+
 /// Load a cached index for `source` if fresh, else build, persist, and return.
 pub fn load_or_build_index(source: &str, options: &LoadOrBuildOptions) -> Result<CspIndex, String> {
     let content = normalize_content(options.content.clone());
@@ -65,14 +78,7 @@ pub fn load_or_build_index(source: &str, options: &LoadOrBuildOptions) -> Result
 
     // Local sources: the source-file hash is the cache-validity oracle. Git
     // sources are URL+ref keyed (no cheap live hash).
-    let source_hash = if is_git {
-        None
-    } else {
-        Some(compute_content_hash_from_paths(collect_source_paths(
-            Path::new(source),
-            &content,
-        )))
-    };
+    let source_hash = source_fingerprint(source, &content);
 
     // The resolved model name the index would be (re)built with. A cache built
     // with a different model must not be reused — its vectors are incompatible
