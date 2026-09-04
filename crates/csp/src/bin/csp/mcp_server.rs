@@ -260,10 +260,34 @@ mod tests {
         .is_err());
     }
 
+    /// Resolve a schema node to the one carrying `enum`: either the node
+    /// itself, a `$ref` into the document's `$defs`, or the first `anyOf`
+    /// branch that resolves (schemars wraps `Option<Enum>` as
+    /// `anyOf: [{ $ref }, { type: null }]`).
+    fn enum_values<'a>(
+        doc: &'a serde_json::Value,
+        node: &'a serde_json::Value,
+    ) -> Option<&'a Vec<serde_json::Value>> {
+        if let Some(values) = node.get("enum").and_then(|e| e.as_array()) {
+            return Some(values);
+        }
+        if let Some(reference) = node.get("$ref").and_then(|r| r.as_str()) {
+            let name = reference.strip_prefix("#/$defs/")?;
+            return enum_values(doc, doc.get("$defs")?.get(name)?);
+        }
+        node.get("anyOf")?
+            .as_array()?
+            .iter()
+            .find_map(|branch| enum_values(doc, branch))
+    }
+
     #[test]
     fn tool_schemas_advertise_content_enum() {
         // The wire schema clients see must list the content selection so an
-        // agent can discover the parameter without reading the README.
+        // agent can discover the parameter without reading the README. Compare
+        // the enum values structurally (through the `$ref`), not by substring.
+        let expected: std::collections::BTreeSet<&str> =
+            ["code", "docs", "config", "all"].into_iter().collect();
         let tools = CspMcpServer::tool_router().list_all();
         for tool in tools {
             let schema = serde_json::to_value(&tool.input_schema).unwrap();
@@ -273,14 +297,17 @@ mod tests {
                 "{} schema lacks `content`: {schema}",
                 tool.name
             );
-            let text = content.to_string();
-            for v in ["code", "docs", "config", "all"] {
-                assert!(
-                    text.contains(v),
-                    "{} `content` lacks {v}: {text}",
-                    tool.name
-                );
-            }
+            let values = enum_values(&schema, content)
+                .unwrap_or_else(|| panic!("{} `content` has no enum: {content}", tool.name));
+            let actual: std::collections::BTreeSet<&str> = values
+                .iter()
+                .map(|v| {
+                    v.as_str().unwrap_or_else(|| {
+                        panic!("{} `content` enum has non-string value: {v}", tool.name)
+                    })
+                })
+                .collect();
+            assert_eq!(actual, expected, "{} `content` enum", tool.name);
         }
     }
 
