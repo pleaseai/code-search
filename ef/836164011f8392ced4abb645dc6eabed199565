@@ -1,0 +1,36 @@
+README.md
+  s_1edcf1979f8d98::t_eeccc610e9e7d4 459
+crates/csp/src/indexing/cache.rs
+  s_1edcf1979f8d98::t_b8cfca285be796 9
+  s_1edcf1979f8d98::t_16e9949f76b906 725-756,775-792,798-799,801,805-814,817,825-826,829,831-834,840,844-866
+  s_1edcf1979f8d98::t_667abbae2ef015 326-331,335-361,363-369,386,388-389,392-394,398-401
+  s_1edcf1979f8d98::t_858202a52b2ba8 681-693,697
+  s_1edcf1979f8d98::t_70533590b02b52 332-334
+  s_1edcf1979f8d98::t_51bba8cb5100b0 867
+crates/csp/src/bin/csp/main.rs
+  s_1edcf1979f8d98::t_0d2141f6c0a8e1 698
+  s_1edcf1979f8d98::t_c975026a3b0e82 735-736,738-739
+crates/csp/src/indexing/cache_orchestrator.rs
+  s_1edcf1979f8d98::t_6c48c8704c4e39 117
+README.ko.md
+  s_1edcf1979f8d98::t_391bca9670f709 459
+.please/docs/references/semble.md
+  s_1edcf1979f8d98::t_b76bcfe5c6b01e 303
+  s_1edcf1979f8d98::t_f9969db4ed0405 297-302,304-309
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "ef836164011f8392ced4abb645dc6eabed199565",
+  "prompts": {},
+  "sessions": {
+    "s_1edcf1979f8d98": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "62f3652f-bf84-48b1-8d74-911b1f3853e5",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
