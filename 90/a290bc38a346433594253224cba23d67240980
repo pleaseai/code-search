@@ -1,0 +1,28 @@
+crates/csp/src/bin/csp/mcp_server.rs
+  s_23552ffee24b4d::t_69428ea8e206f5 263-283,287-290,300-306
+  s_1edcf1979f8d98::t_39c674e210a69c 307-310
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "90a290bc38a346433594253224cba23d67240980",
+  "prompts": {},
+  "sessions": {
+    "s_1edcf1979f8d98": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "62f3652f-bf84-48b1-8d74-911b1f3853e5",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    },
+    "s_23552ffee24b4d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ec01b239-c933-4644-912a-0eb35743309b",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
