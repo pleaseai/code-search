@@ -1,0 +1,40 @@
+.please/docs/references/semble.md
+  s_923dd716343962::t_2c603ee8ab02f4 291-294
+crates/csp/src/indexing/file_sizes.rs
+  s_923dd716343962::t_b4880eefa1685e 1-167
+crates/csp/src/indexing/index/tests.rs
+  s_923dd716343962::t_530da309f24d8b 358-383
+crates/csp/src/indexing/mod.rs
+  s_923dd716343962::t_bbd0d3074898b1 11
+crates/csp/src/stats.rs
+  s_923dd716343962::t_a13a9ca643e2f7 17
+  s_923dd716343962::t_4cbfb2bd4942e6 10
+  s_923dd716343962::t_530da309f24d8b 127
+  s_923dd716343962::t_9042597f5845e2 114,470-471
+crates/csp/src/bin/csp/main.rs
+  s_923dd716343962::t_31668bf2ed043b 619-620
+crates/csp/src/indexing/index.rs
+  s_923dd716343962::t_eacab140142700 84-89
+  s_923dd716343962::t_73ff8533bf2ea3 395-396,403-404
+  s_923dd716343962::t_2606ae1902b17c 15
+  s_923dd716343962::t_11ce10417f432b 106
+  s_923dd716343962::t_7b36f1ddb789a6 131-133,140,143-144
+  s_923dd716343962::t_1adf72c540ea9a 166-168
+  s_923dd716343962::t_f2a4aca07c2c7d 379-382,386
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "6f15e0bc7722af7edc1febe165fcd674f09a60ca",
+  "prompts": {},
+  "sessions": {
+    "s_923dd716343962": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d2c679a7-326b-4be9-95e8-bff6997df687",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
