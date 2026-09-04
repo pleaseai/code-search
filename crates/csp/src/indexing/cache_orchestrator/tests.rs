@@ -3,7 +3,7 @@ use crate::indexing::cache::{resolve_cache_dir, CacheLocation};
 use crate::indexing::dense::{make_stub_model, SelectableBasicBackend, DEFAULT_MODEL_NAME};
 use crate::indexing::index::{CspIndexState, DEFAULT_CONTENT};
 use crate::indexing::sparse::Bm25Index;
-use crate::types::Chunk;
+use crate::types::{Chunk, ContentType};
 use tempfile::tempdir;
 
 fn make_chunk(file_path: &str, content: &str) -> Chunk {
@@ -257,6 +257,26 @@ fn load_previous_for_incremental_fails_closed() {
             "case {corrupt} should fail closed"
         );
     }
+}
+
+#[test]
+fn load_previous_for_incremental_compares_content_as_a_set() {
+    let home = tempdir().unwrap();
+    let (_src, cache_dir) = build_valid_cache(home.path());
+    let manifest_path = cache_dir.join("manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    let duplicated = [ContentType::Code, ContentType::Code];
+
+    // Same length, and every requested type is present in the manifest — but
+    // the manifest also covers docs the request does not ask for.
+    manifest["content"] = serde_json::json!(["code", "docs"]);
+    write_json(&manifest_path, &manifest);
+    assert!(load_previous_for_incremental(&cache_dir, DEFAULT_MODEL_NAME, &duplicated).is_none());
+
+    // Repetition on the request side is irrelevant once the sets agree.
+    manifest["content"] = serde_json::json!(["code"]);
+    write_json(&manifest_path, &manifest);
+    assert!(load_previous_for_incremental(&cache_dir, DEFAULT_MODEL_NAME, &duplicated).is_some());
 }
 
 #[test]

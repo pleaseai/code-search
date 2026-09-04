@@ -67,6 +67,95 @@ fn reindex_file(
     Ok(())
 }
 
+/// Split a previous index into the parts the rebuild consumes: its BM25 index
+/// is mutated in place, and its chunk / vector rows are wrapped in `Option` so
+/// unchanged files can move them out without copying.
+type PreviousParts = (
+    Bm25Index,
+    FileManifest,
+    Vec<Option<Chunk>>,
+    Vec<Option<Vec<f32>>>,
+);
+
+fn open_previous(previous: Option<PreviousIndex>) -> PreviousParts {
+    match previous {
+        Some(prev) => (
+            prev.bm25_index,
+            prev.files,
+            prev.chunks.into_iter().map(Some).collect(),
+            prev.vectors.into_iter().map(Some).collect(),
+        ),
+        None => (
+            Bm25Index::new(),
+            FileManifest::new(),
+            Vec::new(),
+            Vec::new(),
+        ),
+    }
+}
+
+/// The path a file is indexed under: relative to `display_root` when set.
+fn display_path(file_path: &Path, display_root: Option<&Path>) -> String {
+    match display_root {
+        Some(root) => file_path
+            .strip_prefix(root)
+            .unwrap_or(file_path)
+            .to_string_lossy()
+            .into_owned(),
+        None => file_path.to_string_lossy().into_owned(),
+    }
+}
+
+/// Move an unchanged file's previous chunk + vector rows out, or `None` when
+/// the file is new, changed, or its manifest range is out of bounds. Each row
+/// is taken at most once because a validated manifest's ranges never overlap.
+fn take_previous_rows(
+    entry: Option<&FileManifestEntry>,
+    hash: &str,
+    previous_chunks: &mut [Option<Chunk>],
+    previous_vectors: &mut [Option<Vec<f32>>],
+) -> Option<(Vec<Chunk>, Vec<Vec<f32>>)> {
+    let entry = entry?;
+    if entry.hash != hash
+        || entry.end() > previous_chunks.len()
+        || entry.end() > previous_vectors.len()
+    {
+        return None;
+    }
+    let rows: Option<Vec<Chunk>> = previous_chunks[entry.start..entry.end()]
+        .iter_mut()
+        .map(Option::take)
+        .collect();
+    let vecs: Option<Vec<Vec<f32>>> = previous_vectors[entry.start..entry.end()]
+        .iter_mut()
+        .map(Option::take)
+        .collect();
+    rows.zip(vecs)
+}
+
+/// Fill the `None` holes left for freshly chunked files with one batched embed
+/// — the tokenizer parallelises per batch, so a call per file would serialise a
+/// cold build. Fresh rows are normalised through the backend so they match the
+/// reused (already-normalised) rows.
+fn embed_fresh_rows(
+    model: &Model,
+    chunks: &[Chunk],
+    fresh_rows: &[usize],
+    mut vectors: Vec<Option<Vec<f32>>>,
+) -> Result<Vec<Vec<f32>>, String> {
+    let fresh_chunks: Vec<&Chunk> = fresh_rows.iter().map(|&i| &chunks[i]).collect();
+    let fresh_vectors =
+        SelectableBasicBackend::from_vectors(embed_chunk_refs(model, &fresh_chunks))?.vectors;
+    if fresh_vectors.len() != fresh_rows.len() {
+        return Err("Embedder returned the wrong number of rows".to_string());
+    }
+    for (&row, vector) in fresh_rows.iter().zip(fresh_vectors) {
+        vectors[row] = Some(vector);
+    }
+    let vectors: Option<Vec<Vec<f32>>> = vectors.into_iter().collect();
+    vectors.ok_or_else(|| "Internal error: an embedding row was left unfilled".to_string())
+}
+
 /// Create an index from a resolved directory, optionally reusing a previous
 /// index's unchanged files. Errors when no chunks are produced.
 pub fn create_index_from_path(
@@ -81,23 +170,8 @@ pub fn create_index_from_path(
     let resolved = get_extensions(&content, options.extensions.as_deref());
     let ext_refs: Vec<&str> = resolved.iter().map(String::as_str).collect();
 
-    // The previous index is consumed: its BM25 index is mutated in place and its
-    // chunk/vector rows are moved out rather than copied.
-    let (mut bm25_index, previous_files, mut previous_chunks, mut previous_vectors) = match previous
-    {
-        Some(prev) => (
-            prev.bm25_index,
-            prev.files,
-            prev.chunks.into_iter().map(Some).collect::<Vec<_>>(),
-            prev.vectors.into_iter().map(Some).collect::<Vec<_>>(),
-        ),
-        None => (
-            Bm25Index::new(),
-            FileManifest::new(),
-            Vec::new(),
-            Vec::new(),
-        ),
-    };
+    let (mut bm25_index, previous_files, mut previous_chunks, mut previous_vectors) =
+        open_previous(previous);
 
     let mut chunks: Vec<Chunk> = Vec::new();
     let mut chunk_ids: Vec<String> = Vec::new();
@@ -121,14 +195,7 @@ pub fn create_index_from_path(
             continue;
         };
         let hash = sha256_hex(&bytes);
-        let indexed_path = match &options.display_root {
-            Some(root) => file_path
-                .strip_prefix(root)
-                .unwrap_or(&file_path)
-                .to_string_lossy()
-                .into_owned(),
-            None => file_path.to_string_lossy().into_owned(),
-        };
+        let indexed_path = display_path(&file_path, options.display_root.as_deref());
         // `to_string_lossy` is not injective: on Unix, file names that differ
         // only in invalid UTF-8 bytes collapse to the same display path, and the
         // BM25 chunk ids derived from it would then collide and abort the whole
@@ -144,26 +211,12 @@ pub fn create_index_from_path(
         }
         let previous_entry = previous_files.get(&indexed_path);
 
-        // Unchanged file: move its previous chunk + vector rows out (each row is
-        // taken at most once because a validated manifest's ranges never overlap).
-        let reused = match previous_entry {
-            Some(entry)
-                if entry.hash == hash
-                    && entry.end() <= previous_chunks.len()
-                    && entry.end() <= previous_vectors.len() =>
-            {
-                let rows: Option<Vec<Chunk>> = previous_chunks[entry.start..entry.end()]
-                    .iter_mut()
-                    .map(Option::take)
-                    .collect();
-                let vecs: Option<Vec<Vec<f32>>> = previous_vectors[entry.start..entry.end()]
-                    .iter_mut()
-                    .map(Option::take)
-                    .collect();
-                rows.zip(vecs)
-            }
-            _ => None,
-        };
+        let reused = take_previous_rows(
+            previous_entry,
+            &hash,
+            &mut previous_chunks,
+            &mut previous_vectors,
+        );
         let start = chunks.len();
         let file_chunks = match reused {
             Some((file_chunks, file_vectors)) => {
@@ -202,22 +255,7 @@ pub fn create_index_from_path(
         ));
     }
 
-    // One batched embed for every changed file's chunks — the tokenizer
-    // parallelises per batch, so a call per file would serialise a cold build.
-    // Normalise through the backend so fresh rows match the reused
-    // (already-normalised) rows.
-    let fresh_chunks: Vec<&Chunk> = fresh_rows.iter().map(|&i| &chunks[i]).collect();
-    let fresh_vectors =
-        SelectableBasicBackend::from_vectors(embed_chunk_refs(options.model, &fresh_chunks))?
-            .vectors;
-    if fresh_vectors.len() != fresh_rows.len() {
-        return Err("Embedder returned the wrong number of rows".to_string());
-    }
-    for (&row, vector) in fresh_rows.iter().zip(fresh_vectors) {
-        vectors[row] = Some(vector);
-    }
-    let vectors: Option<Vec<Vec<f32>>> = vectors.into_iter().collect();
-    let vectors = vectors.ok_or("Internal error: an embedding row was left unfilled")?;
+    let vectors = embed_fresh_rows(options.model, &chunks, &fresh_rows, vectors)?;
 
     bm25_index.set_doc_order(chunk_ids);
     let semantic_index = SelectableBasicBackend::from_normalized(vectors)?;
@@ -231,282 +269,4 @@ pub fn create_index_from_path(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::indexing::dense::make_stub_model;
-    use crate::tokens::tokenize;
-    use tempfile::tempdir;
-
-    fn opts(model: &Model, display_root: Option<PathBuf>) -> CreateIndexOptions<'_> {
-        CreateIndexOptions {
-            model,
-            extensions: None,
-            content: None,
-            display_root,
-        }
-    }
-
-    #[test]
-    fn builds_indexes_for_small_ts_file() {
-        let dir = tempdir().unwrap();
-        std::fs::write(
-            dir.path().join("sample.ts"),
-            "export function greet(name: string) {\n  return `hi ${name}`\n}\n",
-        )
-        .unwrap();
-        let model = make_stub_model(4);
-        let result = create_index_from_path(
-            dir.path(),
-            &opts(&model, Some(dir.path().to_path_buf())),
-            None,
-        )
-        .unwrap();
-
-        assert!(!result.chunks.is_empty());
-        assert_eq!(result.chunks[0].file_path, "sample.ts");
-        assert_eq!(result.semantic_index.vectors.len(), result.chunks.len());
-        assert_eq!(result.bm25_index.num_docs(), result.chunks.len());
-    }
-
-    #[test]
-    fn errors_when_no_supported_files() {
-        let dir = tempdir().unwrap();
-        std::fs::write(dir.path().join("data.bin"), "binary").unwrap();
-        let model = make_stub_model(4);
-        let err = create_index_from_path(dir.path(), &opts(&model, None), None).unwrap_err();
-        assert!(err.contains("No supported files found"));
-    }
-
-    #[test]
-    fn respects_extensions_override() {
-        let dir = tempdir().unwrap();
-        std::fs::write(dir.path().join("a.txt"), "hello world").unwrap();
-        let model = make_stub_model(4);
-        let options = CreateIndexOptions {
-            model: &model,
-            extensions: Some(vec![".txt".to_string()]),
-            content: Some(vec![ContentType::Docs]),
-            display_root: Some(dir.path().to_path_buf()),
-        };
-        let result = create_index_from_path(dir.path(), &options, None).unwrap();
-        assert_eq!(result.chunks.len(), 1);
-        assert_eq!(result.chunks[0].file_path, "a.txt");
-    }
-
-    #[test]
-    fn skips_files_over_max_bytes() {
-        let dir = tempdir().unwrap();
-        std::fs::write(dir.path().join("big.ts"), "a".repeat(2_000_000)).unwrap();
-        std::fs::write(dir.path().join("small.ts"), "export const x = 1\n").unwrap();
-        let model = make_stub_model(4);
-        let result = create_index_from_path(
-            dir.path(),
-            &opts(&model, Some(dir.path().to_path_buf())),
-            None,
-        )
-        .unwrap();
-        let paths: Vec<&str> = result.chunks.iter().map(|c| c.file_path.as_str()).collect();
-        assert!(paths.contains(&"small.ts"));
-        assert!(!paths.contains(&"big.ts"));
-    }
-
-    #[test]
-    fn descends_into_subdirectories() {
-        let dir = tempdir().unwrap();
-        std::fs::create_dir(dir.path().join("sub")).unwrap();
-        std::fs::write(dir.path().join("sub/nested.ts"), "const a = 1\n").unwrap();
-        let model = make_stub_model(4);
-        let result = create_index_from_path(
-            dir.path(),
-            &opts(&model, Some(dir.path().to_path_buf())),
-            None,
-        )
-        .unwrap();
-        assert!(result
-            .chunks
-            .iter()
-            .any(|c| c.file_path.ends_with("nested.ts")));
-    }
-
-    // --- incremental reindex (mirrors upstream tests/index/test_create.py) ---
-
-    fn write_files(root: &Path, files: &[(&str, &str)]) {
-        for (rel, content) in files {
-            let path = root.join(rel);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, content).unwrap();
-        }
-    }
-
-    fn into_previous(result: CreateIndexResult) -> PreviousIndex {
-        PreviousIndex::try_new(
-            result.chunks,
-            result.semantic_index.vectors,
-            result.files,
-            result.bm25_index,
-        )
-        .unwrap()
-    }
-
-    fn score_sum(index: &Bm25Index, query: &str) -> f32 {
-        index.get_scores(&tokenize(query), None).iter().sum()
-    }
-
-    #[test]
-    fn fresh_build_records_a_layout_valid_file_manifest() {
-        let dir = tempdir().unwrap();
-        write_files(
-            dir.path(),
-            &[
-                ("a.ts", "function stable_anchor() { return 1 }\n"),
-                ("sub/b.ts", "function other_value() { return 2 }\n"),
-            ],
-        );
-        let model = make_stub_model(4);
-        let result = create_index_from_path(
-            dir.path(),
-            &opts(&model, Some(dir.path().to_path_buf())),
-            None,
-        )
-        .unwrap();
-
-        assert_eq!(result.files.len(), 2);
-        let total: usize = result.files.values().map(|e| e.count).sum();
-        assert_eq!(total, result.chunks.len());
-        for (path, entry) in &result.files {
-            assert_eq!(entry.hash.len(), 64);
-            assert!(result.chunks[entry.start..entry.end()]
-                .iter()
-                .all(|c| c.file_path == *path));
-        }
-        // The manifest, chunks, vectors, and BM25 order all agree.
-        assert!(into_previous(result).files.contains_key("a.ts"));
-    }
-
-    #[test]
-    fn incremental_reindex_reuses_updates_and_prunes() {
-        let dir = tempdir().unwrap();
-        let root = dir.path().to_path_buf();
-        write_files(
-            &root,
-            &[
-                ("a.ts", "function stable_anchor() { return 1 }\n"),
-                ("b.ts", "function changed_value() { return 2 }\n"),
-                ("c.ts", "function unique_gone() { return 3 }\n"),
-                ("emptying.ts", "function becomes_empty() { return 4 }\n"),
-            ],
-        );
-        let model = make_stub_model(4);
-        let before =
-            create_index_from_path(&root, &opts(&model, Some(root.clone())), None).unwrap();
-        let b_before = before.files["b.ts"].clone();
-        let b_vectors_before =
-            before.semantic_index.vectors[b_before.start..b_before.end()].to_vec();
-        let a_before = before.files["a.ts"].clone();
-
-        // Plant sentinels in the previous index for the unchanged file: they can
-        // only survive into the rebuilt index if its rows were reused, not
-        // re-chunked/re-embedded (the stub embedder is deterministic).
-        let mut previous = into_previous(before);
-        let sentinel_vector = vec![0.0, 1.0, 0.0, 0.0];
-        previous.vectors[a_before.start] = sentinel_vector.clone();
-        previous.chunks[a_before.start]
-            .content
-            .push_str("/*reused*/");
-
-        write_files(
-            &root,
-            &[("b.ts", "function changed_value() { return 999 }\n")],
-        );
-        std::fs::remove_file(root.join("c.ts")).unwrap();
-        write_files(&root, &[("emptying.ts", &" ".repeat(128))]);
-        write_files(
-            &root,
-            &[("d.ts", "function brand_new_term() { return 4 }\n")],
-        );
-
-        let after =
-            create_index_from_path(&root, &opts(&model, Some(root.clone())), Some(previous))
-                .unwrap();
-
-        let a_after = &after.files["a.ts"];
-        assert_eq!(after.semantic_index.vectors[a_after.start], sentinel_vector);
-        assert!(after.chunks[a_after.start].content.ends_with("/*reused*/"));
-        let b_after = &after.files["b.ts"];
-        assert_ne!(
-            after.semantic_index.vectors[b_after.start..b_after.end()].to_vec(),
-            b_vectors_before
-        );
-        assert!(!after.files.contains_key("c.ts"));
-        assert!(after.files.contains_key("d.ts"));
-        assert_eq!(after.files["emptying.ts"].count, 0);
-
-        assert_eq!(score_sum(&after.bm25_index, "unique_gone"), 0.0);
-        assert_eq!(score_sum(&after.bm25_index, "becomes_empty"), 0.0);
-        assert!(score_sum(&after.bm25_index, "brand_new_term") > 0.0);
-        assert!(score_sum(&after.bm25_index, "changed_value") > 0.0);
-
-        let mut expected_ids: Vec<String> = after
-            .files
-            .iter()
-            .flat_map(|(path, entry)| (0..entry.count).map(move |slot| make_chunk_id(path, slot)))
-            .collect();
-        expected_ids.sort();
-        let mut doc_order = after.bm25_index.doc_order().to_vec();
-        doc_order.sort();
-        assert_eq!(doc_order, expected_ids);
-        assert_eq!(after.bm25_index.corpus_size(), after.chunks.len());
-        assert_eq!(after.semantic_index.vectors.len(), after.chunks.len());
-        // The rebuilt index is itself a valid seed for the next incremental pass.
-        into_previous(after);
-    }
-
-    #[test]
-    fn zero_chunk_file_does_not_break_manifest_tiling() {
-        let dir = tempdir().unwrap();
-        let root = dir.path().to_path_buf();
-        // `pkg/` is walked before `pkg.ts` (directory entries sort by file name),
-        // but "pkg.ts" < "pkg/z.ts" lexicographically ('.' 0x2E < '/' 0x2F). The
-        // empty file yields no chunks, so both entries share `start`.
-        write_files(
-            &root,
-            &[
-                ("pkg/z.ts", "   \n"),
-                ("pkg.ts", "function stable_anchor() { return 1 }\n"),
-            ],
-        );
-        let model = make_stub_model(4);
-        let result =
-            create_index_from_path(&root, &opts(&model, Some(root.clone())), None).unwrap();
-        assert_eq!(result.files["pkg/z.ts"].count, 0);
-        assert_eq!(result.files["pkg/z.ts"].start, result.files["pkg.ts"].start);
-        // A freshly built index must always be a valid seed for the next pass.
-        into_previous(result);
-    }
-
-    /// Non-UTF-8 file names only exist on Unix filesystems that allow them
-    /// (APFS rejects them), so this runs on Linux only.
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn colliding_lossy_paths_skip_the_duplicate_instead_of_aborting() {
-        use std::os::unix::ffi::OsStrExt;
-        let dir = tempdir().unwrap();
-        let root = dir.path().to_path_buf();
-        let first = root.join(std::ffi::OsStr::from_bytes(b"a\xff.ts"));
-        let second = root.join(std::ffi::OsStr::from_bytes(b"a\xfe.ts"));
-        std::fs::write(&first, "function first_file() { return 1 }\n").unwrap();
-        std::fs::write(&second, "function second_file() { return 2 }\n").unwrap();
-        assert_eq!(
-            first.to_string_lossy(),
-            second.to_string_lossy(),
-            "test precondition: both names must collapse to one display path"
-        );
-
-        let model = make_stub_model(4);
-        let result =
-            create_index_from_path(&root, &opts(&model, Some(root.clone())), None).unwrap();
-        assert_eq!(result.files.len(), 1);
-        assert_eq!(result.bm25_index.corpus_size(), result.chunks.len());
-        into_previous(result);
-    }
-}
+mod tests;

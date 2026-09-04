@@ -2,6 +2,7 @@
 //! `get_validated_cache` / `load_previous_for_incremental` half of semble
 //! `cache.py`, adapted to csp's content-hash oracle — ADR-0002 / ADR-0005).
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use crate::chunking::source::DESIRED_CHUNK_LENGTH_CHARS;
@@ -156,9 +157,11 @@ pub(crate) fn load_previous_for_incremental(
     if !manifest_compatible(&manifest, expected_model) {
         return None;
     }
-    let same_content = manifest.content.len() == content.len()
-        && content.iter().all(|c| manifest.content.contains(c));
-    if !same_content || manifest.files.is_empty() {
+    // Compare as sets: a length check plus `contains` would accept
+    // `[Code, Code]` against `[Code, Docs]`.
+    let manifest_content: BTreeSet<&str> = manifest.content.iter().map(|c| c.as_str()).collect();
+    let expected_content: BTreeSet<&str> = content.iter().map(|c| c.as_str()).collect();
+    if manifest_content != expected_content || manifest.files.is_empty() {
         return None;
     }
 
