@@ -11,7 +11,7 @@ use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::indexing::create::MAX_FILE_BYTES;
+use crate::indexing::files::get_max_file_bytes;
 
 /// UTF-16 character counts per repo-relative file path, resolved eagerly
 /// (captured) or lazily (read from a local root on demand).
@@ -97,7 +97,7 @@ impl FileSizes {
 /// the file walker never follows symlinks, and a path that has since become a
 /// symlink, FIFO, or device must not be able to redirect or stall the read.
 ///
-/// The read is bounded by [`MAX_FILE_BYTES`], the same ceiling
+/// The read is bounded by [`get_max_file_bytes`], the same ceiling
 /// `create_index_from_path` applies — lazily, this runs inside a live search,
 /// so a file that has grown past the indexing limit since it was chunked must
 /// not be slurped whole on the query path. Decoding is lossy, matching the
@@ -137,12 +137,13 @@ pub(crate) fn read_file_chars(root: &Path, file_path: &str) -> Option<u64> {
     // a local writer who already controls the indexed tree.
     let file = std::fs::File::open(&canonical).ok()?;
     let meta = file.metadata().ok()?;
-    if !meta.is_file() || meta.len() > MAX_FILE_BYTES {
+    let max_file_bytes = get_max_file_bytes();
+    if !meta.is_file() || meta.len() > max_file_bytes {
         return None;
     }
     let mut bytes = Vec::with_capacity(meta.len() as usize);
-    file.take(MAX_FILE_BYTES + 1).read_to_end(&mut bytes).ok()?;
-    if bytes.len() as u64 > MAX_FILE_BYTES {
+    file.take(max_file_bytes + 1).read_to_end(&mut bytes).ok()?;
+    if bytes.len() as u64 > max_file_bytes {
         return None;
     }
     Some(String::from_utf8_lossy(&bytes).encode_utf16().count() as u64)
@@ -260,7 +261,7 @@ mod tests {
     #[test]
     fn lazy_skips_files_larger_than_the_indexing_ceiling() {
         let root = tempdir().unwrap();
-        let big = vec![b'a'; MAX_FILE_BYTES as usize + 1];
+        let big = vec![b'a'; get_max_file_bytes() as usize + 1];
         std::fs::write(root.path().join("grown.ts"), &big).unwrap();
         let sizes = FileSizes::lazy(root.path().to_path_buf());
 

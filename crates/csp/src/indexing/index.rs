@@ -148,6 +148,7 @@ impl CspIndex {
                 extensions: None,
                 content: Some(content.clone()),
                 display_root: Some(path.to_path_buf()),
+                max_file_bytes: None,
             },
             previous,
         )?;

@@ -2,9 +2,54 @@
 //! `src/indexing/files.ts` (← semble `index/files.py`).
 
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Once};
 
 use crate::types::ContentType;
+
+/// Default (1 MB) max file size to read and index. Overridable per process via
+/// [`MAX_FILE_BYTES_ENV`] — see [`get_max_file_bytes`].
+pub const DEFAULT_MAX_FILE_BYTES: u64 = 1_000_000;
+
+/// Environment variable overriding [`DEFAULT_MAX_FILE_BYTES`], in bytes
+/// (upstream `SEMBLE_MAX_FILE_BYTES`).
+pub const MAX_FILE_BYTES_ENV: &str = "CSP_MAX_FILE_BYTES";
+
+/// Parse a raw [`MAX_FILE_BYTES_ENV`] value. `None` (unset) is the default;
+/// a malformed or non-positive value is `Err` carrying the warning to print
+/// before falling back to the default, mirroring upstream `get_max_file_bytes`.
+pub(crate) fn parse_max_file_bytes(raw: Option<&str>) -> Result<u64, String> {
+    let Some(raw) = raw else {
+        return Ok(DEFAULT_MAX_FILE_BYTES);
+    };
+    match raw.trim().parse::<i64>() {
+        Ok(value) if value > 0 => Ok(value as u64),
+        Ok(_) => Err(format!(
+            "{MAX_FILE_BYTES_ENV} must be positive, using the default of \
+             {DEFAULT_MAX_FILE_BYTES} bytes"
+        )),
+        Err(_) => Err(format!(
+            "Invalid {MAX_FILE_BYTES_ENV} {raw:?}, using the default of \
+             {DEFAULT_MAX_FILE_BYTES} bytes"
+        )),
+    }
+}
+
+/// The maximum file size to read and index: [`MAX_FILE_BYTES_ENV`] when set,
+/// else [`DEFAULT_MAX_FILE_BYTES`]. A malformed or non-positive override warns
+/// on stderr (once per process — this also runs per result on the search path)
+/// and falls back to the default rather than aborting indexing.
+pub fn get_max_file_bytes() -> u64 {
+    static WARNED: Once = Once::new();
+    let raw = std::env::var_os(MAX_FILE_BYTES_ENV);
+    let raw = raw.as_deref().map(|s| s.to_string_lossy());
+    match parse_max_file_bytes(raw.as_deref()) {
+        Ok(value) => value,
+        Err(warning) => {
+            WARNED.call_once(|| eprintln!("csp: {warning}"));
+            DEFAULT_MAX_FILE_BYTES
+        }
+    }
+}
 
 /// Extension (including the leading dot, lowercase) → tree-sitter language name.
 /// Transcribed verbatim from the upstream `EXTENSION_TO_LANGUAGE`.
@@ -523,6 +568,25 @@ pub fn get_extensions(types: &[ContentType], extra: Option<&[String]>) -> Vec<St
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn max_file_bytes_env_override_is_honored() {
+        assert_eq!(parse_max_file_bytes(None), Ok(DEFAULT_MAX_FILE_BYTES));
+        assert_eq!(parse_max_file_bytes(Some("2000000")), Ok(2_000_000));
+        assert_eq!(parse_max_file_bytes(Some(" 512 ")), Ok(512));
+    }
+
+    #[test]
+    fn invalid_max_file_bytes_falls_back_to_default_with_warning() {
+        let err = parse_max_file_bytes(Some("1MB")).unwrap_err();
+        assert!(err.contains("Invalid CSP_MAX_FILE_BYTES \"1MB\""), "{err}");
+        assert!(err.contains("using the default of 1000000 bytes"), "{err}");
+
+        let err = parse_max_file_bytes(Some("0")).unwrap_err();
+        assert!(err.contains("CSP_MAX_FILE_BYTES must be positive"), "{err}");
+        let err = parse_max_file_bytes(Some("-5")).unwrap_err();
+        assert!(err.contains("must be positive"), "{err}");
+    }
 
     #[test]
     fn detects_languages_by_extension() {
