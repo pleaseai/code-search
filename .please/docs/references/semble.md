@@ -347,7 +347,8 @@ Clean two-layer split:
 ### 4.18 `utils.rs` — helpers
 
 - `is_git_url` (scheme prefixes + scp-style), `resolve_chunk(chunks, file_path, line) ->
-  Option<&Chunk>` (interior match preferred, boundary fallback), `result_to_dict` /
+  Option<&Chunk>` (interior match preferred, boundary fallback; `\\`/`/` separators compared
+  as equal on both sides — upstream #244), `result_to_dict` /
   `format_results` (snake_case wire dict). Model name resolution honors the env override.
 
 ---
