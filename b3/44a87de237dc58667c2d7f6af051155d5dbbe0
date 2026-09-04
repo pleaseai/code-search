@@ -1,0 +1,41 @@
+README.md
+  s_3f7bc22adf24ae::t_f4e3850d3af38e 410-411
+crates/csp/src/indexing/file_sizes.rs
+  s_3f7bc22adf24ae::t_191a02815efbda 14,100,140-141,145-146,264
+README.ko.md
+  s_3f7bc22adf24ae::t_f4e3850d3af38e 410-411
+crates/csp/src/indexing/create.rs
+  s_3f7bc22adf24ae::t_f4e3850d3af38e 19,28
+  s_3f7bc22adf24ae::t_191a02815efbda 18,20,27,29-32,43-46,59-78,203,216,224-225,285-289
+  s_3f7bc22adf24ae::t_904bfd929b7938 290
+.please/docs/references/semble.md
+  s_3f7bc22adf24ae::t_f4e3850d3af38e 168-172,322-323
+crates/csp/src/indexing/index.rs
+  s_3f7bc22adf24ae::t_191a02815efbda 151
+crates/csp/src/indexing/files.rs
+  s_3f7bc22adf24ae::t_191a02815efbda 5,9-53,572-589
+  s_3f7bc22adf24ae::t_74491882121666 590
+crates/csp/src/indexing/create/tests.rs
+  s_3f7bc22adf24ae::t_f4e3850d3af38e 119-122
+  s_3f7bc22adf24ae::t_191a02815efbda 12,57,81-118,123-124
+  s_3f7bc22adf24ae::t_43113d729b5f9f 125
+crates/csp/src/indexing/cache_orchestrator.rs
+  s_3f7bc22adf24ae::t_191a02815efbda 45-47,52
+  s_3f7bc22adf24ae::t_f4e3850d3af38e 16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "b344a87de237dc58667c2d7f6af051155d5dbbe0",
+  "prompts": {},
+  "sessions": {
+    "s_3f7bc22adf24ae": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "40a3a703-7555-452e-9689-c1925238c1b7",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
