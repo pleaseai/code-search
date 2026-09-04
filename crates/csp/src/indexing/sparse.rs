@@ -330,6 +330,11 @@ impl Bm25Index {
             let mut length = 0u64;
             let mut terms: Vec<(String, u32)> = Vec::with_capacity(counts.len());
             for (term, freq) in counts {
+                // A zero count would still create a posting and inflate the
+                // term's document frequency; treat it as corruption.
+                if freq == 0 {
+                    return Err(invalid("Persisted BM25 term frequencies must be positive"));
+                }
                 length += u64::from(freq);
                 terms.push((term, freq));
             }
@@ -620,6 +625,21 @@ mod tests {
             loaded.get_scores(&query(&["authenticate"]), None),
             index.get_scores(&query(&["authenticate"]), None)
         );
+    }
+
+    #[test]
+    fn load_rejects_zero_term_frequency() {
+        let index = build_ids(&[("a", &["authenticate"])]);
+        let dir = tempfile::tempdir().unwrap();
+        index.save(dir.path()).unwrap();
+        let path = dir.path().join("bm25.json");
+        let mut value: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        value["documents"]["a"]["authenticate"] = serde_json::json!(0);
+        std::fs::write(&path, value.to_string()).unwrap();
+
+        let err = Bm25Index::load(dir.path()).unwrap_err();
+        assert!(err.to_string().contains("must be positive"));
     }
 
     #[test]

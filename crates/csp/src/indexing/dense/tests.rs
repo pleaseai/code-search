@@ -254,6 +254,18 @@ fn save_load_round_trips() {
 }
 
 #[test]
+fn load_takes_persisted_rows_verbatim() {
+    // A deliberately non-unit row: re-normalising on load would turn it into
+    // [0.6, 0.8], so equality proves the persisted bytes are used as-is.
+    let backend = SelectableBasicBackend::from_normalized(vec![vec![3.0, 4.0]]).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    backend.save(dir.path()).unwrap();
+    let loaded = SelectableBasicBackend::load(dir.path()).unwrap();
+    assert_eq!(loaded.vectors, vec![vec![3.0, 4.0]]);
+    assert_eq!(loaded.dim, 2);
+}
+
+#[test]
 fn load_preserves_dimension_for_empty_index() {
     let dir = tempdir().unwrap();
     std::fs::write(

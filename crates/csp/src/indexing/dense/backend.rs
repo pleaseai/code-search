@@ -234,11 +234,15 @@ impl SelectableBasicBackend {
             }
             vectors.push(row);
         }
-        let mut backend = Self::new(vectors, meta.arguments)?;
-        if meta.rows == 0 {
-            backend.dim = meta.dim;
-        }
-        Ok(backend)
+        // Rows were normalised by `new` before they were saved. Re-normalising
+        // here can flip low bits, which would break bit-identical reuse of
+        // unchanged rows on an incremental rebuild — take them verbatim. Every
+        // row has exactly `meta.dim` elements by construction above.
+        Ok(Self {
+            vectors,
+            arguments: meta.arguments,
+            dim: meta.dim,
+        })
     }
 }
 
