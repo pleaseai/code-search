@@ -18,7 +18,7 @@ pub enum CallType {
 }
 
 /// Content type for indexing and search pipeline selection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ContentType {
     Code,

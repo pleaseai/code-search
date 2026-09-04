@@ -327,11 +327,21 @@ Clean two-layer split:
 - **`csp::mcp`** (lib) — the unit-tested tool **core**: `search` / `find_related` handler logic,
   in-process LRU `IndexCache` (`CACHE_MAX_SIZE = 10`, `Arc<CspIndex>` so indexes are `Send`
   across tasks), `_get_index` with git-transport guards.
+- **Per-call `content`** (upstream #247): both tools take `content: Option<ContentSelection>`
+  (`code | docs | config | all`); `resolve_content_selection` maps `None` → the server's
+  `--content` default and `all` → every `ContentType` (upstream `_resolve_content_selection`).
+  `IndexCache` is keyed by `CacheKey { source, content }` where `content` is normalized to enum
+  order and de-duplicated (upstream `_CacheKey = (source_key, tuple[ContentType, ...])`), so one
+  repo searched as `code` and as `docs` holds two independent session entries; `get` / `evict`
+  and fingerprint revalidation all take the content slice. No on-disk change was needed —
+  `indexing/cache.rs::resolve_cache_dir` already hashes `sourceId + content + ref` (upstream
+  instead added `index-<scope>` sibling dirs in `cache.py`).
 - **`csp` bin `mcp_server`** (bin) — **rmcp 1.7** stdio wiring: `CspMcpServer` with
   `#[tool_router]` + `#[tool]` async `search`/`find_related`, `#[tool_handler(router =
   self.tool_router)]` (routes through the stored field; the default `Self::tool_router()` would
   rebuild per call and trip clippy `dead_code`). `run_mcp(path, ref, content)` serves on a tokio
-  runtime. Verified on the wire (initialize / tools/list / tools/call).
+  runtime with `content` as the per-call default. Verified on the wire (initialize / tools/list /
+  tools/call).
 
 ### 4.17 `csp/src/bin/csp/main.rs` — CLI (clap)
 

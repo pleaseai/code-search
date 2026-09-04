@@ -357,6 +357,8 @@ Add to `~/.config/zed/settings.json` (or `.zed/settings.json` in your project):
 
 Both tools accept `max_snippet_lines` to cap the code returned per result. It defaults to `10` — a signature-plus-first-lines preview that lets an agent confirm a location cheaply, then navigate to the file for full context. Pass `0` for the location only, or `null` for the full chunk when the preview lacks context.
 
+Both tools also accept `content` (`code`, `docs`, `config`, or `all`) to choose what a single call searches, e.g. `content: "docs"` to look up a guide in a repo the server otherwise indexes as code. It defaults to the server's configured content (below). Each distinct content selection is indexed and cached separately for the session.
+
 By default the MCP server indexes only code files. To also index documentation, config, or everything, append `--content docs`, `--content config`, or `--content all` to the server command, or a combination, e.g. `--content code docs`. For example, in Claude Code: `claude mcp add csp -s user -- bunx @pleaseai/csp mcp --content all`.
 
 ## Sub-agent setup

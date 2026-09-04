@@ -27,8 +27,52 @@ use crate::utils::{format_results, is_git_url, resolve_chunk};
 pub const SERVER_INSTRUCTIONS: &str = concat!(
     "Instant code search for any local or remote git repository. ",
     "Call `search` to find relevant code; call `find_related` on a result to discover similar code elsewhere. ",
+    "Pass `content` (`code`, `docs`, `config`, or `all`) to choose what a single call searches; ",
+    "it defaults to the server's configured content. ",
     "Prefer these tools over Grep, Glob, or Read for any question about how code works."
 );
+
+/// Every content type in canonical (enum) order — the expansion of `all` and
+/// the ordering used to normalize cache keys.
+const ALL_CONTENT: [ContentType; 3] = [ContentType::Code, ContentType::Docs, ContentType::Config];
+
+/// Per-call content selection accepted by the MCP tools (`code | docs | config
+/// | all`). Mirrors upstream semble's `ContentSelection` literal (#247).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "cli", derive(schemars::JsonSchema))]
+#[serde(rename_all = "lowercase")]
+pub enum ContentSelection {
+    Code,
+    Docs,
+    Config,
+    All,
+}
+
+/// Canonical form of a content list: every [`ContentType`] present, once, in
+/// enum order — so `[Docs, Code, Docs]` and `[Code, Docs]` name the same index.
+pub fn normalize_content(content: &[ContentType]) -> Vec<ContentType> {
+    ALL_CONTENT
+        .iter()
+        .copied()
+        .filter(|c| content.contains(c))
+        .collect()
+}
+
+/// Resolve a per-call `content` selection to exact index content types:
+/// `None` → the server's configured default, `All` → every type, otherwise the
+/// single named type (mirrors upstream `_resolve_content_selection`).
+pub fn resolve_content_selection(
+    selection: Option<ContentSelection>,
+    default_content: &[ContentType],
+) -> Vec<ContentType> {
+    match selection {
+        None => normalize_content(default_content),
+        Some(ContentSelection::All) => ALL_CONTENT.to_vec(),
+        Some(ContentSelection::Code) => vec![ContentType::Code],
+        Some(ContentSelection::Docs) => vec![ContentType::Docs],
+        Some(ContentSelection::Config) => vec![ContentType::Config],
+    }
+}
 
 /// Maximum number of distinct sources held in the session cache (LRU).
 const CACHE_MAX_SIZE: usize = 10;
@@ -96,34 +140,54 @@ struct CacheEntry {
     revalidate_cooldown: std::time::Duration,
 }
 
-/// Session cache of indexed repos/paths, keyed by source (git URL `@ref`, or the
-/// absolutized local path). LRU-bounded to [`CACHE_MAX_SIZE`]. Local-path entries
-/// are revalidated against their live source fingerprint on query (subject to a
-/// build-time-scaled cooldown), so an entry is rebuilt once its files change.
-pub struct IndexCache<S: LoadOrBuild = DiskLoadOrBuild> {
-    tasks: IndexMap<String, CacheEntry>,
+/// Identity of one exact index variant in the session cache: the source (git
+/// URL `@ref`, or the absolutized local path) plus its normalized content list
+/// (upstream `_CacheKey = tuple[str, tuple[ContentType, ...]]`, #247).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct CacheKey {
+    source: String,
     content: Vec<ContentType>,
+}
+
+/// Session cache of indexed repos/paths, keyed by source (git URL `@ref`, or the
+/// absolutized local path) **and** content selection, so one repo searched as
+/// `code` and as `docs` holds two independent entries. LRU-bounded to
+/// [`CACHE_MAX_SIZE`]. Local-path entries are revalidated against their live
+/// source fingerprint on query (subject to a build-time-scaled cooldown), so an
+/// entry is rebuilt once its files change.
+pub struct IndexCache<S: LoadOrBuild = DiskLoadOrBuild> {
+    tasks: IndexMap<CacheKey, CacheEntry>,
     seam: S,
 }
 
 impl IndexCache<DiskLoadOrBuild> {
     /// A cache backed by the real on-disk `load_or_build_index`.
-    pub fn new(content: Vec<ContentType>) -> Self {
-        Self::with_seam(content, DiskLoadOrBuild)
+    pub fn new() -> Self {
+        Self::with_seam(DiskLoadOrBuild)
+    }
+}
+
+impl Default for IndexCache<DiskLoadOrBuild> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 impl<S: LoadOrBuild> IndexCache<S> {
-    pub fn with_seam(content: Vec<ContentType>, seam: S) -> Self {
+    pub fn with_seam(seam: S) -> Self {
         Self {
             tasks: IndexMap::new(),
-            content,
             seam,
         }
     }
 
-    fn compute_key(&self, source: &str, git_ref: Option<&str>) -> String {
-        if is_git_url(source) {
+    fn compute_key(
+        &self,
+        source: &str,
+        git_ref: Option<&str>,
+        content: &[ContentType],
+    ) -> CacheKey {
+        let source = if is_git_url(source) {
             match git_ref {
                 Some(r) if !r.is_empty() => format!("{source}@{r}"),
                 _ => source.to_string(),
@@ -133,22 +197,33 @@ impl<S: LoadOrBuild> IndexCache<S> {
             std::path::absolute(source)
                 .map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_else(|_| source.to_string())
+        };
+        CacheKey {
+            source,
+            content: normalize_content(content),
         }
     }
 
-    /// Return an index for `source`, building and caching it on first access.
-    /// A build failure is not cached (the next call retries).
+    /// Return an index for `source` restricted to `content`, building and
+    /// caching it on first access. Each distinct (source, content) pair is its
+    /// own entry. A build failure is not cached (the next call retries).
     ///
     /// A cached local-path entry is revalidated against its live source
     /// fingerprint once its cooldown has elapsed; a mismatch evicts it so the
     /// index is rebuilt below. Git URLs are never revalidated.
-    pub fn get(&mut self, source: &str, git_ref: Option<&str>) -> Result<Arc<CspIndex>, String> {
-        let key = self.compute_key(source, git_ref);
+    pub fn get(
+        &mut self,
+        source: &str,
+        git_ref: Option<&str>,
+        content: &[ContentType],
+    ) -> Result<Arc<CspIndex>, String> {
+        let key = self.compute_key(source, git_ref, content);
+        let content = key.content.as_slice();
 
         let mut entry = self.tasks.shift_remove(&key);
         let stale = if let Some(entry) = entry.as_mut() {
             if entry.fingerprint.is_some() && Instant::now() >= entry.revalidate_after {
-                if self.seam.fingerprint(source, &self.content) != entry.fingerprint {
+                if self.seam.fingerprint(source, content) != entry.fingerprint {
                     true
                 } else {
                     entry.revalidate_after = Instant::now() + entry.revalidate_cooldown;
@@ -178,9 +253,9 @@ impl<S: LoadOrBuild> IndexCache<S> {
         }
 
         let start = Instant::now();
-        let index = Arc::new(self.seam.load_or_build(source, &self.content, git_ref)?);
+        let index = Arc::new(self.seam.load_or_build(source, content, git_ref)?);
         let build_elapsed = start.elapsed();
-        let fingerprint = self.seam.fingerprint(source, &self.content);
+        let fingerprint = self.seam.fingerprint(source, content);
         let revalidate_cooldown =
             (build_elapsed * MIN_REVALIDATE_FACTOR).max(MIN_REVALIDATE_COOLDOWN);
         self.tasks.insert(
@@ -195,9 +270,9 @@ impl<S: LoadOrBuild> IndexCache<S> {
         Ok(index)
     }
 
-    /// Remove the cached entry for `source`.
-    pub fn evict(&mut self, source: &str, git_ref: Option<&str>) {
-        let key = self.compute_key(source, git_ref);
+    /// Remove the cached entry for `source` at this exact `content` selection.
+    pub fn evict(&mut self, source: &str, git_ref: Option<&str>, content: &[ContentType]) {
+        let key = self.compute_key(source, git_ref, content);
         self.tasks.shift_remove(&key);
     }
 
@@ -207,12 +282,14 @@ impl<S: LoadOrBuild> IndexCache<S> {
     }
 }
 
-/// Resolve a cached index for a repo, rejecting unsafe git transport schemes and
-/// missing-source cases with descriptive errors.
+/// Resolve a cached index for a repo at the given (already resolved) `content`
+/// selection, rejecting unsafe git transport schemes and missing-source cases
+/// with descriptive errors.
 pub fn get_index<S: LoadOrBuild>(
     repo: Option<&str>,
     default_source: Option<&str>,
     default_ref: Option<&str>,
+    content: &[ContentType],
     cache: &mut IndexCache<S>,
 ) -> Result<Arc<CspIndex>, String> {
     if let Some(r) = repo {
@@ -235,13 +312,15 @@ pub fn get_index<S: LoadOrBuild>(
     };
     let git_ref = if use_default { default_ref } else { None };
     cache
-        .get(source, git_ref)
+        .get(source, git_ref, content)
         .map_err(|e| format!("Failed to index {}: {e}", json!(source)))
 }
 
 /// `search` tool handler. Returns a JSON string (results or `{error}`), or an
 /// error message string on failure (mirroring the TS handler's catch).
-/// `stats_file`, when `Some`, records token-savings telemetry (tests pass `None`).
+/// `content` is the per-call selection already resolved against the server
+/// default (see [`resolve_content_selection`]). `stats_file`, when `Some`,
+/// records token-savings telemetry (tests pass `None`).
 // Positional transport params mirror the MCP tool signature; a struct would just
 // move the plumbing without clarifying it (same call as `find_related_tool`).
 #[allow(clippy::too_many_arguments)]
@@ -251,11 +330,12 @@ pub fn search_tool<S: LoadOrBuild>(
     default_ref: Option<&str>,
     query: &str,
     repo: Option<&str>,
+    content: &[ContentType],
     top_k: usize,
     max_snippet_lines: Option<usize>,
     stats_file: Option<&Path>,
 ) -> String {
-    let index = match get_index(repo, default_source, default_ref, cache) {
+    let index = match get_index(repo, default_source, default_ref, content, cache) {
         Ok(idx) => idx,
         Err(e) => return e,
     };
@@ -293,11 +373,12 @@ pub fn find_related_tool<S: LoadOrBuild>(
     file_path: &str,
     line: i64,
     repo: Option<&str>,
+    content: &[ContentType],
     top_k: usize,
     max_snippet_lines: Option<usize>,
     stats_file: Option<&Path>,
 ) -> String {
-    let index = match get_index(repo, default_source, default_ref, cache) {
+    let index = match get_index(repo, default_source, default_ref, content, cache) {
         Ok(idx) => idx,
         Err(e) => return e,
     };
@@ -351,6 +432,8 @@ mod tests {
     use crate::indexing::sparse::Bm25Index;
     use crate::types::Chunk;
     use std::cell::RefCell;
+
+    const CODE: &[ContentType] = &[ContentType::Code];
 
     fn empty_index() -> CspIndex {
         CspIndex::new(CspIndexState {
@@ -434,68 +517,137 @@ mod tests {
 
     #[test]
     fn cache_reuses_second_call() {
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
-        let first = cache.get("/tmp/repo", None).unwrap();
-        let second = cache.get("/tmp/repo", None).unwrap();
+        let mut cache = IndexCache::with_seam(Stub::new());
+        let first = cache.get("/tmp/repo", None, CODE).unwrap();
+        let second = cache.get("/tmp/repo", None, CODE).unwrap();
         assert!(Arc::ptr_eq(&first, &second));
         assert_eq!(*cache.seam.path_calls.borrow(), 1);
     }
 
     #[test]
+    fn cache_keys_on_content() {
+        let mut cache = IndexCache::with_seam(Stub::new());
+        let code = cache.get("/tmp/repo", None, CODE).unwrap();
+        let docs = cache
+            .get("/tmp/repo", None, &[ContentType::Code, ContentType::Docs])
+            .unwrap();
+        // Same repo, different content → a distinct index, not a cache hit.
+        assert!(!Arc::ptr_eq(&code, &docs));
+        assert_eq!(cache.size(), 2);
+        assert_eq!(*cache.seam.path_calls.borrow(), 2);
+
+        // Order and duplicates don't matter: the key is normalized.
+        let again = cache
+            .get(
+                "/tmp/repo",
+                None,
+                &[ContentType::Docs, ContentType::Code, ContentType::Docs],
+            )
+            .unwrap();
+        assert!(Arc::ptr_eq(&docs, &again));
+        assert_eq!(*cache.seam.path_calls.borrow(), 2);
+
+        // Evicting one content variant leaves the other in place.
+        cache.evict("/tmp/repo", None, CODE);
+        assert_eq!(cache.size(), 1);
+        assert!(Arc::ptr_eq(
+            &docs,
+            &cache
+                .get("/tmp/repo", None, &[ContentType::Code, ContentType::Docs])
+                .unwrap()
+        ));
+    }
+
+    #[test]
+    fn resolve_content_selection_maps_default_all_and_single() {
+        let default = [ContentType::Docs, ContentType::Code];
+        // None → the server default, normalized to enum order.
+        assert_eq!(
+            resolve_content_selection(None, &default),
+            vec![ContentType::Code, ContentType::Docs]
+        );
+        assert_eq!(
+            resolve_content_selection(Some(ContentSelection::All), &default),
+            vec![ContentType::Code, ContentType::Docs, ContentType::Config]
+        );
+        assert_eq!(
+            resolve_content_selection(Some(ContentSelection::Config), &default),
+            vec![ContentType::Config]
+        );
+    }
+
+    #[test]
+    fn content_selection_deserializes_lowercase_only() {
+        for (raw, want) in [
+            ("code", ContentSelection::Code),
+            ("docs", ContentSelection::Docs),
+            ("config", ContentSelection::Config),
+            ("all", ContentSelection::All),
+        ] {
+            let got: ContentSelection = serde_json::from_value(json!(raw)).unwrap();
+            assert_eq!(got, want);
+        }
+        assert!(serde_json::from_value::<ContentSelection>(json!("Docs")).is_err());
+        assert!(serde_json::from_value::<ContentSelection>(json!("tests")).is_err());
+    }
+
+    #[test]
     fn cache_evict_forces_rebuild() {
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
-        cache.get("/tmp/repo", None).unwrap();
+        let mut cache = IndexCache::with_seam(Stub::new());
+        cache.get("/tmp/repo", None, CODE).unwrap();
         assert_eq!(*cache.seam.path_calls.borrow(), 1);
-        cache.evict("/tmp/repo", None);
+        cache.evict("/tmp/repo", None, CODE);
         assert_eq!(cache.size(), 0);
-        cache.get("/tmp/repo", None).unwrap();
+        cache.get("/tmp/repo", None, CODE).unwrap();
         assert_eq!(*cache.seam.path_calls.borrow(), 2);
     }
 
     #[test]
     fn cache_lru_evicts_oldest() {
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
+        let mut cache = IndexCache::with_seam(Stub::new());
         for i in 0..10 {
-            cache.get(&format!("/tmp/repo-{i}"), None).unwrap();
+            cache.get(&format!("/tmp/repo-{i}"), None, CODE).unwrap();
         }
         assert_eq!(cache.size(), 10);
-        cache.get("/tmp/repo-10", None).unwrap();
+        cache.get("/tmp/repo-10", None, CODE).unwrap();
         assert_eq!(cache.size(), 10);
         // repo-0 (oldest) was evicted → re-getting it rebuilds.
         let before = *cache.seam.path_calls.borrow();
-        cache.get("/tmp/repo-0", None).unwrap();
+        cache.get("/tmp/repo-0", None, CODE).unwrap();
         assert_eq!(*cache.seam.path_calls.borrow(), before + 1);
     }
 
     #[test]
     fn cache_git_vs_path_routing() {
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
-        cache.get("https://github.com/org/repo.git", None).unwrap();
+        let mut cache = IndexCache::with_seam(Stub::new());
+        cache
+            .get("https://github.com/org/repo.git", None, CODE)
+            .unwrap();
         assert_eq!(*cache.seam.git_calls.borrow(), 1);
         assert_eq!(*cache.seam.path_calls.borrow(), 0);
-        cache.get("/tmp/local", None).unwrap();
+        cache.get("/tmp/local", None, CODE).unwrap();
         assert_eq!(*cache.seam.path_calls.borrow(), 1);
     }
 
     #[test]
     fn cache_revalidates_stale_local_path() {
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
-        let key = cache.compute_key("/tmp/repo", None);
+        let mut cache = IndexCache::with_seam(Stub::new());
+        let key = cache.compute_key("/tmp/repo", None, CODE);
 
-        cache.get("/tmp/repo", None).unwrap();
+        cache.get("/tmp/repo", None, CODE).unwrap();
         assert_eq!(*cache.seam.path_calls.borrow(), 1);
         assert!(cache.tasks.get(&key).unwrap().revalidate_cooldown >= MIN_REVALIDATE_COOLDOWN);
 
         // Within the cooldown window the entry is served without a fingerprint
         // check, so it's not rebuilt even if the fingerprint has drifted.
         *cache.seam.fingerprint.borrow_mut() = Some("fp2".to_string());
-        cache.get("/tmp/repo", None).unwrap();
+        cache.get("/tmp/repo", None, CODE).unwrap();
         assert_eq!(*cache.seam.path_calls.borrow(), 1);
 
         // Force the cooldown to have elapsed → the next get revalidates, sees the
         // changed fingerprint, evicts, and rebuilds.
         cache.tasks.get_mut(&key).unwrap().revalidate_after = Instant::now();
-        cache.get("/tmp/repo", None).unwrap();
+        cache.get("/tmp/repo", None, CODE).unwrap();
         assert_eq!(*cache.seam.path_calls.borrow(), 2);
         assert_eq!(cache.size(), 1);
 
@@ -503,22 +655,22 @@ mod tests {
         // fingerprint → revalidated but matches → served, no rebuild, and the
         // next revalidation is deferred by a fresh cooldown window.
         cache.tasks.get_mut(&key).unwrap().revalidate_after = Instant::now();
-        cache.get("/tmp/repo", None).unwrap();
+        cache.get("/tmp/repo", None, CODE).unwrap();
         assert_eq!(*cache.seam.path_calls.borrow(), 2);
         assert!(cache.tasks.get(&key).unwrap().revalidate_after > Instant::now());
     }
 
     #[test]
     fn cache_git_url_not_revalidated() {
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
+        let mut cache = IndexCache::with_seam(Stub::new());
         let url = "https://github.com/org/repo.git";
-        cache.get(url, None).unwrap();
+        cache.get(url, None, CODE).unwrap();
         assert_eq!(*cache.seam.git_calls.borrow(), 1);
 
         // Even if the (local-only) fingerprint changes, git URLs are keyed by
         // URL+ref and never revalidated → always served from cache.
         *cache.seam.fingerprint.borrow_mut() = Some("fp2".to_string());
-        cache.get(url, None).unwrap();
+        cache.get(url, None, CODE).unwrap();
         assert_eq!(*cache.seam.git_calls.borrow(), 1);
     }
 
@@ -526,47 +678,55 @@ mod tests {
     fn cache_failure_not_poisoned() {
         let mut seam = Stub::new();
         seam.fail = true;
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], seam);
-        assert!(cache.get("/tmp/will-fail", None).is_err());
+        let mut cache = IndexCache::with_seam(seam);
+        assert!(cache.get("/tmp/will-fail", None, CODE).is_err());
         assert_eq!(cache.size(), 0);
     }
 
     #[test]
     fn get_index_rejects_unsafe_schemes() {
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
+        let mut cache = IndexCache::with_seam(Stub::new());
         for url in [
             "ssh://git@github.com/o/r.git",
             "git://github.com/o/r.git",
             "file:///tmp/x",
         ] {
-            let err = get_index(Some(url), None, None, &mut cache).unwrap_err();
+            let err = get_index(Some(url), None, None, CODE, &mut cache).unwrap_err();
             assert!(err.contains("Only https://, http://"), "{url}: {err}");
         }
     }
 
     #[test]
     fn get_index_requires_source() {
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
-        let err = get_index(None, None, None, &mut cache).unwrap_err();
+        let mut cache = IndexCache::with_seam(Stub::new());
+        let err = get_index(None, None, None, CODE, &mut cache).unwrap_err();
         assert!(err.contains("No repo specified"));
     }
 
     #[test]
     fn get_index_allows_https_and_path() {
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
-        assert!(get_index(Some("https://github.com/o/r.git"), None, None, &mut cache).is_ok());
-        assert!(get_index(None, Some("/tmp/default"), None, &mut cache).is_ok());
+        let mut cache = IndexCache::with_seam(Stub::new());
+        assert!(get_index(
+            Some("https://github.com/o/r.git"),
+            None,
+            None,
+            CODE,
+            &mut cache
+        )
+        .is_ok());
+        assert!(get_index(None, Some("/tmp/default"), None, CODE, &mut cache).is_ok());
     }
 
     #[test]
     fn search_tool_no_results() {
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], Stub::new());
+        let mut cache = IndexCache::with_seam(Stub::new());
         let out = search_tool(
             &mut cache,
             Some("/tmp/repo"),
             None,
             "anything",
             None,
+            CODE,
             5,
             None,
             None,
@@ -592,13 +752,14 @@ mod tests {
 
     #[test]
     fn search_tool_returns_results_json() {
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], OneChunkSeam);
+        let mut cache = IndexCache::with_seam(OneChunkSeam);
         let out = search_tool(
             &mut cache,
             Some("/tmp/repo"),
             None,
             "main",
             None,
+            CODE,
             5,
             None,
             None,
@@ -612,7 +773,7 @@ mod tests {
 
     #[test]
     fn search_tool_records_savings_when_stats_file_given() {
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], OneChunkSeam);
+        let mut cache = IndexCache::with_seam(OneChunkSeam);
         let dir = tempfile::tempdir().unwrap();
         let stats_file = dir.path().join("savings.jsonl");
         let _ = search_tool(
@@ -621,6 +782,7 @@ mod tests {
             None,
             "main",
             None,
+            CODE,
             5,
             None,
             Some(&stats_file),
@@ -633,13 +795,14 @@ mod tests {
 
     #[test]
     fn search_tool_respects_max_snippet_lines_zero() {
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], OneChunkSeam);
+        let mut cache = IndexCache::with_seam(OneChunkSeam);
         let out = search_tool(
             &mut cache,
             Some("/tmp/repo"),
             None,
             "main",
             None,
+            CODE,
             5,
             Some(0),
             None,
@@ -653,7 +816,7 @@ mod tests {
 
     #[test]
     fn find_related_no_chunk_message() {
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], OneChunkSeam);
+        let mut cache = IndexCache::with_seam(OneChunkSeam);
         let out = find_related_tool(
             &mut cache,
             Some("/tmp/repo"),
@@ -661,6 +824,7 @@ mod tests {
             "nope.ts",
             1,
             None,
+            CODE,
             5,
             None,
             None,
@@ -670,7 +834,7 @@ mod tests {
 
     #[test]
     fn find_related_returns_json_for_known_chunk() {
-        let mut cache = IndexCache::with_seam(vec![ContentType::Code], OneChunkSeam);
+        let mut cache = IndexCache::with_seam(OneChunkSeam);
         let out = find_related_tool(
             &mut cache,
             Some("/tmp/repo"),
@@ -678,6 +842,7 @@ mod tests {
             "a.ts",
             5,
             None,
+            CODE,
             5,
             None,
             None,
