@@ -325,6 +325,7 @@ mod tests {
             model_path: "test".to_string(),
             root: None,
             content: vec![ContentType::Code],
+            files: Default::default(),
         })
     }
 
@@ -345,6 +346,7 @@ mod tests {
             model_path: "test".to_string(),
             root: None,
             content: vec![ContentType::Code],
+            files: Default::default(),
         })
     }
 

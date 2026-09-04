@@ -35,6 +35,7 @@ fn build_index(chunks: Vec<Chunk>) -> CspIndex {
         model_path: "test-model".to_string(),
         root: None,
         content: DEFAULT_CONTENT.to_vec(),
+        files: Default::default(),
     })
 }
 
@@ -188,7 +189,7 @@ fn save_writes_manifest_fields() {
     idx.save(dir.path(), None).unwrap();
     let raw = std::fs::read_to_string(dir.path().join("manifest.json")).unwrap();
     let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
-    assert_eq!(value["schemaVersion"], 1);
+    assert_eq!(value["schemaVersion"], 2);
     assert_eq!(value["modelId"], "test-model");
     assert_eq!(value["content"], serde_json::json!(["code"]));
     assert!(value["contentHash"].as_str().unwrap().len() == 64);
@@ -196,6 +197,39 @@ fn save_writes_manifest_fields() {
         value["chunkSize"].as_u64(),
         Some(u64::from(DESIRED_CHUNK_LENGTH_CHARS as u32))
     );
+    assert!(value["files"].is_object());
+}
+
+#[test]
+fn save_load_roundtrip_preserves_file_manifest() {
+    let src = tempdir().unwrap();
+    std::fs::write(src.path().join("a.ts"), "export const alpha = 1\n").unwrap();
+    let idx = CspIndex::from_path(src.path(), &LoadOptions::default()).unwrap();
+    assert!(idx.files.contains_key("a.ts"));
+
+    let dir = tempdir().unwrap();
+    idx.save(dir.path(), None).unwrap();
+    let loaded = CspIndex::load_from_disk(dir.path()).unwrap();
+    assert_eq!(loaded.files, idx.files);
+    assert_eq!(loaded.bm25_index.doc_order(), idx.bm25_index.doc_order());
+}
+
+#[test]
+fn load_rejects_inconsistent_component_counts() {
+    let idx = build_index(vec![
+        make_chunk("a.ts", 1, 10, Some("typescript"), "A"),
+        make_chunk("b.ts", 1, 5, Some("python"), "B"),
+    ]);
+    let dir = tempdir().unwrap();
+    idx.save(dir.path(), None).unwrap();
+    let chunks_path = dir.path().join("chunks.json");
+    let mut chunks: Vec<serde_json::Value> =
+        serde_json::from_str(&std::fs::read_to_string(&chunks_path).unwrap()).unwrap();
+    chunks.pop();
+    std::fs::write(&chunks_path, serde_json::to_string(&chunks).unwrap()).unwrap();
+
+    let err = CspIndex::load_from_disk(dir.path()).unwrap_err();
+    assert!(err.contains("inconsistent document counts"));
 }
 
 #[test]

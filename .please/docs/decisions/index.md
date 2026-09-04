@@ -8,3 +8,4 @@
 | [0002](0002-index-storage-cache-model.md) | Index Storage & Caching Model: Global `~/.csp/index/` Content-Hash Cache | 2026-06-18 | Accepted |
 | [0003](0003-rewrite-in-rust.md) | Rewrite `@pleaseai/csp` from TypeScript/Bun to Rust | 2026-06-18 | Proposed |
 | [0004](0004-rust-grammar-coverage-language-pack.md) | Rust grammar coverage via `tree-sitter-language-pack` (downloaded parsers) | 2026-06-20 | Accepted |
+| [0005](0005-per-file-hash-manifest-incremental-reindex.md) | Incremental reindexing keyed on a per-file content hash (not `mtime_ns`) | 2026-09-04 | Accepted |

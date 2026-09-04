@@ -397,7 +397,7 @@ csp find-related src/auth.ts 42 ./my-project
 
 `--content` accepts `code` (default), `docs`, `config`, or `all`. `path` defaults to the current directory when omitted; git URLs are accepted. If `csp` is not on `$PATH`, use `bunx @pleaseai/csp` in its place.
 
-When you run `csp search` or `csp find-related` **without** `--index`, `csp` automatically indexes and caches the source in a global cache at `~/.csp/index/`, keyed by the source and content selection. The cache is reused on the next run and invalidated automatically when the source files change (by content hash), so you do not need to reindex manually. Passing `--index <path>` uses that exact path instead and bypasses the auto-cache. `csp index -o <path>` is for explicit persistence only (`-o` is required) and is independent of the auto-cache.
+When you run `csp search` or `csp find-related` **without** `--index`, `csp` automatically indexes and caches the source in a global cache at `~/.csp/index/`, keyed by the source and content selection. The cache is reused on the next run and invalidated automatically when the source files change (by content hash), so you do not need to reindex manually. A stale cache is rebuilt incrementally: only files whose content changed are re-chunked and re-embedded, and unchanged files keep their existing chunks, vectors, and BM25 postings. Passing `--index <path>` uses that exact path instead and bypasses the auto-cache. `csp index -o <path>` is for explicit persistence only (`-o` is required) and is independent of the auto-cache.
 
 <details>
 <summary>Savings</summary>

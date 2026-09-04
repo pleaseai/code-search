@@ -87,6 +87,29 @@ impl SelectableBasicBackend {
         Self::new(vectors, BasicArgs::default())
     }
 
+    /// Build from rows that are **already** L2-normalised (taken from a persisted
+    /// backend or a fresh [`new`](Self::new)), skipping the normalisation pass so
+    /// reused rows stay bit-identical. Errors on inconsistent dimensions.
+    pub fn from_normalized(vectors: Vec<Vec<f32>>) -> Result<Self, String> {
+        let dim = vectors.first().map(Vec::len).unwrap_or(0);
+        if !vectors.is_empty() && dim == 0 {
+            return Err(
+                "Vector dimension must be greater than 0 for a non-empty index".to_string(),
+            );
+        }
+        if let Some(bad) = vectors.iter().find(|v| v.len() != dim) {
+            return Err(format!(
+                "Inconsistent vector dimensions: expected {dim}, got {}",
+                bad.len()
+            ));
+        }
+        Ok(Self {
+            vectors,
+            arguments: BasicArgs::default(),
+            dim,
+        })
+    }
+
     /// Batched k-NN query. Returns, per query, `[(chunk_index, cosine_distance)]`
     /// sorted by ascending distance. `selector` constrains results to a pool.
     pub fn query(
