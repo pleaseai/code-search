@@ -395,13 +395,17 @@ impl CspIndex {
 /// skipped). Used for sources that won't outlive the build (a git clone's temp
 /// checkout); local paths read lazily via [`FileSizes::lazy`] instead.
 fn compute_file_sizes(root: &Path, chunks: &[Chunk]) -> HashMap<String, u64> {
-    // Dedup paths first so an unreadable file is attempted once, not once per chunk.
+    // Canonicalize once (`read_file_chars` needs a canonical root) and dedup
+    // paths first so an unreadable file is attempted once, not once per chunk.
+    let Ok(root) = root.canonicalize() else {
+        return HashMap::new();
+    };
     chunks
         .iter()
         .map(|c| &c.file_path)
         .collect::<HashSet<_>>()
         .into_iter()
-        .filter_map(|path| read_file_chars(root, path).map(|chars| (path.clone(), chars)))
+        .filter_map(|path| read_file_chars(&root, path).map(|chars| (path.clone(), chars)))
         .collect()
 }
 

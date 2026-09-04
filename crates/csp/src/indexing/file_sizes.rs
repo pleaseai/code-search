@@ -43,8 +43,12 @@ impl FileSizes {
         }
     }
 
-    /// Sizes read on demand from a still-present local source root.
+    /// Sizes read on demand from a still-present local source root. The root
+    /// is canonicalized once here so each lookup's containment check is a plain
+    /// prefix comparison; a root that cannot be canonicalized is kept as-is and
+    /// every lookup then fails containment, which is the safe outcome.
     pub fn lazy(root: PathBuf) -> Self {
+        let root = root.canonicalize().unwrap_or(root);
         Self {
             lazy_root: Some(root),
             ..Self::default()
@@ -81,8 +85,10 @@ impl FileSizes {
 }
 
 /// UTF-16 character count of the repo-relative `file_path` under `root`, or
-/// `None` when it cannot be read. UTF-16 keeps it consistent with
-/// `stats::save_search_stats`'s snippet accounting.
+/// `None` when it cannot be read. `root` must already be canonical (see
+/// [`FileSizes::lazy`]); the containment check below is a prefix comparison
+/// against it. UTF-16 keeps it consistent with `stats::save_search_stats`'s
+/// snippet accounting.
 ///
 /// Chunk paths are repo-relative by construction; a path that is absolute or
 /// escapes `root` via `..` can only come from a tampered on-disk index, so it is
@@ -111,7 +117,7 @@ pub(crate) fn read_file_chars(root: &Path, file_path: &str) -> Option<u64> {
         return None;
     }
     let canonical = full.canonicalize().ok()?;
-    if !canonical.starts_with(root.canonicalize().ok()?) {
+    if !canonical.starts_with(root) {
         return None;
     }
     // fstat the opened handle rather than the path, so the regular-file and
