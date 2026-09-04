@@ -297,3 +297,24 @@ fn from_git_clones_and_builds() {
     assert!(!idx.chunks.is_empty());
     assert_eq!(idx.root.as_deref(), Some(url.as_str()));
 }
+
+#[test]
+fn compute_file_sizes_skips_paths_that_escape_root() {
+    let outer = tempdir().unwrap();
+    let root = outer.path().join("repo");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(root.join("inside.ts"), "abc").unwrap();
+    std::fs::write(outer.path().join("secret.txt"), "top secret").unwrap();
+    let abs = root.join("inside.ts").to_string_lossy().into_owned();
+
+    let chunks = vec![
+        make_chunk("inside.ts", 1, 1, None, "abc"),
+        make_chunk("../secret.txt", 1, 1, None, "x"),
+        make_chunk(&abs, 1, 1, None, "x"),
+    ];
+    let sizes = compute_file_sizes(&root, &chunks);
+
+    assert_eq!(sizes.get("inside.ts"), Some(&3));
+    assert!(!sizes.contains_key("../secret.txt"));
+    assert!(!sizes.contains_key(abs.as_str()));
+}

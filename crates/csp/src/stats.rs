@@ -90,8 +90,15 @@ fn delivered_chars(content: &str, max_snippet_lines: Option<usize>) -> u64 {
         None => utf16_len(content),
         Some(0) => 0,
         Some(n) => {
-            let snippet = content.lines().take(n).collect::<Vec<_>>().join("\n");
-            utf16_len(&snippet)
+            // Sum of the first `n` lines plus one `\n` between each pair, without
+            // materializing the joined snippet.
+            let (len, count) = content
+                .lines()
+                .take(n)
+                .fold((0u64, 0u64), |(len, count), line| {
+                    (len + utf16_len(line), count + 1)
+                });
+            len + count.saturating_sub(1)
         }
     }
 }

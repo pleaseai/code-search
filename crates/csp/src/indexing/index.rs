@@ -388,17 +388,39 @@ impl CspIndex {
 /// read from `root`. Mirrors semble `_compute_file_sizes` (unreadable files are
 /// skipped). Feeds the `file_chars` side of token-savings telemetry; UTF-16 keeps
 /// it consistent with `stats::save_search_stats`'s snippet accounting.
+///
+/// Chunk paths are repo-relative by construction; a path that is absolute or
+/// escapes `root` via `..` can only come from a tampered on-disk index, so it is
+/// skipped rather than resolved (path traversal guard — a deliberate addition
+/// over upstream, which joins the path unchecked).
 fn compute_file_sizes(root: &Path, chunks: &[Chunk]) -> HashMap<String, u64> {
     let mut sizes: HashMap<String, u64> = HashMap::new();
     for chunk in chunks {
         if sizes.contains_key(&chunk.file_path) {
             continue;
         }
-        if let Ok(text) = std::fs::read_to_string(root.join(&chunk.file_path)) {
+        let rel = Path::new(&chunk.file_path);
+        if !is_safe_relative_path(rel) {
+            continue;
+        }
+        if let Ok(text) = std::fs::read_to_string(root.join(rel)) {
             sizes.insert(chunk.file_path.clone(), text.encode_utf16().count() as u64);
         }
     }
     sizes
+}
+
+/// `true` when `path` is relative and contains no `..` or root component, so
+/// joining it onto an index root cannot resolve outside that root.
+fn is_safe_relative_path(path: &Path) -> bool {
+    use std::path::Component;
+    !path.is_absolute()
+        && !path.components().any(|c| {
+            matches!(
+                c,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
 }
 
 /// Shallow-clone `url` into `dir`, non-interactively. Rejects a ref starting
