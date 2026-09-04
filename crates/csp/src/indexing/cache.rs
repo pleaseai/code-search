@@ -335,6 +335,14 @@ fn is_cache_key_name(name: &std::ffi::OsStr) -> bool {
     })
 }
 
+/// The one manifest field the orphan sweep needs. Serde skips every other
+/// field (notably the per-file `files` map) without building a value tree.
+#[derive(serde::Deserialize)]
+struct ManifestSourceId {
+    #[serde(rename = "sourceId")]
+    source_id: Option<String>,
+}
+
 /// Read just the `sourceId` out of `<dir>/manifest.json`, or `None` when the
 /// file is absent, unparseable, or records no string source. Deliberately does
 /// not go through `read_manifest`: the orphan sweep needs one scalar, while a
@@ -342,16 +350,18 @@ fn is_cache_key_name(name: &std::ffi::OsStr) -> bool {
 /// every indexed file.
 fn read_manifest_source_id(dir: &Path) -> Option<String> {
     let raw = std::fs::read_to_string(dir.join("manifest.json")).ok()?;
-    let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
-    let source_id = value.get("sourceId")?.as_str()?;
-    (!source_id.is_empty()).then(|| source_id.to_string())
+    let manifest: ManifestSourceId = serde_json::from_str(&raw).ok()?;
+    let source_id = manifest.source_id?;
+    (!source_id.is_empty()).then_some(source_id)
 }
 
 /// Whether `source_id` names a path that is known to be gone — a genuine
-/// `NotFound`, as opposed to one that merely cannot be reached right now.
-/// `Path::exists` collapses both into `false`, which would delete live caches
-/// for sources on an unmounted volume or under a directory whose permissions
-/// temporarily deny traversal.
+/// `NotFound`, as opposed to one that merely cannot be reached right now
+/// (`PermissionDenied`, a stale network handle, an I/O error). `Path::exists`
+/// collapses both into `false`, which would delete live caches for sources
+/// under a directory whose permissions temporarily deny traversal. A source
+/// below an *unmounted* volume is not distinguishable from a deleted one at
+/// this level — its path is simply absent — and is swept, as upstream does.
 fn source_is_gone(source_id: &str) -> bool {
     matches!(
         std::fs::metadata(source_id),
@@ -372,13 +382,20 @@ pub fn clear_orphan_indexes(loc: &CacheLocation) -> Result<Vec<OrphanIndex>, Str
         return Ok(Vec::new());
     };
 
-    let mut dirs: Vec<PathBuf> = std::fs::read_dir(&real_index_root)
-        .map_err(|e| e.to_string())?
-        .flatten()
+    // Traversal errors surface instead of being skipped: a silently dropped
+    // entry would let an incomplete sweep report "no orphans found".
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    for entry in std::fs::read_dir(&real_index_root).map_err(|e| e.to_string())? {
+        let entry =
+            entry.map_err(|e| format!("failed to read {}: {e}", real_index_root.display()))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("failed to read {}: {e}", entry.path().display()))?;
         // Real directories only: a symlinked entry could point outside the cache.
-        .filter(|entry| entry.file_type().is_ok_and(|t| t.is_dir()))
-        .map(|entry| entry.path())
-        .collect();
+        if file_type.is_dir() {
+            dirs.push(entry.path());
+        }
+    }
     dirs.sort();
 
     let mut removed = Vec::new();
@@ -841,7 +858,7 @@ mod tests {
         assert!(root.join("stray-file").exists());
     }
 
-    /// A source that cannot be stat'd (unmounted volume, unreadable parent) is
+    /// A source that cannot be stat'd (an unreadable parent, a stale handle) is
     /// not the same as a source that was deleted — the cache must survive it.
     #[cfg(unix)]
     #[test]

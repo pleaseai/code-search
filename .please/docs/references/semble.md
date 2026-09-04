@@ -304,8 +304,10 @@ Ported faithfully (`LazyLock<Regex>` for the static patterns, `RefCell<HashMap>`
   the key must not be re-derived here. Git leaves are excluded by `is_git_url(sourceId)`
   (`from_git` re-roots the manifest to the URL, unlike upstream, which stores the temp clone
   dir). Relative `sourceId`s are skipped (they would resolve against the caller's cwd), and
-  only a `NotFound` counts as gone — an unreachable source (unmounted volume, unreadable
-  parent) keeps its cache. Exposed as `csp clear orphans`; not part of `clear all` (matches
+  only a `NotFound` counts as gone — a source that errors for another reason (unreadable
+  parent, stale network handle) keeps its cache; an unmounted volume's path is simply absent
+  and is swept like upstream. Traversal errors in the index root fail the sweep instead of
+  being skipped. Exposed as `csp clear orphans`; not part of `clear all` (matches
   upstream).
 - **Cache validity** (`try_reuse`): a cached index is reused only when the manifest's
   `chunk_size` equals the current `DESIRED_CHUNK_LENGTH_CHARS` (a manifest predating the field
