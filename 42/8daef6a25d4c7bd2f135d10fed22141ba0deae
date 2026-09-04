@@ -1,0 +1,31 @@
+crates/csp/src/indexing/file_sizes.rs
+  s_923dd716343962::t_59d367268d27e9 152,161,166-197
+  s_923dd716343962::t_7359efa4706b8e 13-14,24-28,54-57,64,66,68,77,92-99,106-107,110-111
+  s_923dd716343962::t_d7760ae91b9a61 198
+crates/csp/src/bin/csp/main.rs
+  s_923dd716343962::t_11239353d04102 620-623,632-637
+crates/csp/src/stats.rs
+  s_923dd716343962::t_fa2aed5bcc52c0 10,121-127
+  s_923dd716343962::t_7d6bde62a1f28a 518-542
+  s_923dd716343962::t_08ed851d724d0e 517
+.please/docs/references/semble.md
+  s_923dd716343962::t_82c9a6c9c87f04 292-298
+crates/csp/src/indexing/index/tests.rs
+  s_923dd716343962::t_d62ff6225bd465 367-371
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "428daef6a25d4c7bd2f135d10fed22141ba0deae",
+  "prompts": {},
+  "sessions": {
+    "s_923dd716343962": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d2c679a7-326b-4be9-95e8-bff6997df687",
+        "model": "unknown"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
