@@ -28,9 +28,11 @@ pub struct FileManifestEntry {
 }
 
 impl FileManifestEntry {
-    /// Exclusive end of the chunk range.
+    /// Exclusive end of the chunk range. Saturating: a corrupt on-disk manifest
+    /// must fail the range checks, not overflow (and then panic on a reversed
+    /// slice range in a release build).
     pub fn end(&self) -> usize {
-        self.start + self.count
+        self.start.saturating_add(self.count)
     }
 }
 
@@ -66,8 +68,12 @@ impl PreviousIndex {
         }
 
         // Entries must tile [0, chunk_count) exactly, in ascending `start` order.
+        // A file that produced no chunks shares its `start` with the next file
+        // that did, so ties are broken by `count` to place the empty entries
+        // first — `files` is path-keyed and path order is not walk order
+        // (`pkg.ts` sorts before `pkg/z.ts`, but `pkg/` is walked first).
         let mut entries: Vec<(&String, &FileManifestEntry)> = files.iter().collect();
-        entries.sort_by_key(|(_, entry)| entry.start);
+        entries.sort_by_key(|(_, entry)| (entry.start, entry.count));
         let mut expected_ids: Vec<String> = Vec::with_capacity(chunk_count);
         let mut next_start = 0usize;
         for (indexed_path, entry) in entries {

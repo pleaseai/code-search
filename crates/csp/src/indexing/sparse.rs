@@ -70,10 +70,10 @@ pub fn selector_to_mask(selector: Option<&[u32]>, size: usize) -> Option<Vec<u8>
     })
 }
 
-/// One indexed document: its id, term counts, and token length.
+/// One indexed document: its term counts and token length. The document's
+/// chunk id lives once, as the `Bm25Index::ids` key.
 #[derive(Debug, Clone)]
 struct Doc {
-    chunk_id: String,
     /// term → term frequency, in first-appearance order.
     terms: Vec<(String, u32)>,
     length: usize,
@@ -125,9 +125,6 @@ impl Bm25Index {
 
     /// Index one document, rejecting a duplicate chunk id.
     pub fn add_document(&mut self, chunk_id: &str, tokens: &[String]) -> Result<(), String> {
-        if self.ids.contains_key(chunk_id) {
-            return Err(format!("chunk_id already indexed: {chunk_id}"));
-        }
         // Term frequencies in first-appearance order.
         let mut terms: Vec<(String, u32)> = Vec::new();
         let mut positions: HashMap<&str, usize> = HashMap::new();
@@ -139,6 +136,20 @@ impl Bm25Index {
                     terms.push((token.clone(), 1));
                 }
             }
+        }
+        self.insert_document(chunk_id, terms, tokens.len())
+    }
+
+    /// Index one document from its term counts directly — the shape `bm25.json`
+    /// persists, so `load` never has to materialise a token stream.
+    fn insert_document(
+        &mut self,
+        chunk_id: &str,
+        terms: Vec<(String, u32)>,
+        length: usize,
+    ) -> Result<(), String> {
+        if self.ids.contains_key(chunk_id) {
+            return Err(format!("chunk_id already indexed: {chunk_id}"));
         }
 
         let slot = match self.free_slots.pop() {
@@ -155,14 +166,10 @@ impl Bm25Index {
                 .or_default()
                 .insert(slot, *freq);
         }
-        self.total_doc_length += tokens.len();
+        self.total_doc_length += length;
         self.ids.insert(chunk_id.to_string(), slot);
         self.order_positions[slot as usize] = None;
-        self.docs[slot as usize] = Some(Doc {
-            chunk_id: chunk_id.to_string(),
-            terms,
-            length: tokens.len(),
-        });
+        self.docs[slot as usize] = Some(Doc { terms, length });
         Ok(())
     }
 
@@ -274,16 +281,16 @@ impl Bm25Index {
     pub fn save(&self, dir: &Path) -> std::io::Result<()> {
         std::fs::create_dir_all(dir)?;
         let documents: BTreeMap<&str, BTreeMap<&str, u32>> = self
-            .docs
+            .ids
             .iter()
-            .flatten()
-            .map(|doc| {
+            .filter_map(|(chunk_id, &slot)| {
+                let doc = self.docs[slot as usize].as_ref()?;
                 let counts = doc
                     .terms
                     .iter()
                     .map(|(term, freq)| (term.as_str(), *freq))
                     .collect();
-                (doc.chunk_id.as_str(), counts)
+                Some((chunk_id.as_str(), counts))
             })
             .collect();
         let serialized = Bm25Serialized {
@@ -318,12 +325,18 @@ impl Bm25Index {
 
         let mut index = Self::new();
         for (chunk_id, counts) in parsed.documents {
-            let mut tokens: Vec<String> = Vec::new();
+            // Sum in u64: `length` is derived from untrusted on-disk counts, and
+            // an overflowing document must be rejected, not silently wrapped.
+            let mut length = 0u64;
+            let mut terms: Vec<(String, u32)> = Vec::with_capacity(counts.len());
             for (term, freq) in counts {
-                tokens.extend(std::iter::repeat_n(term, freq as usize));
+                length += u64::from(freq);
+                terms.push((term, freq));
             }
+            let length = usize::try_from(length)
+                .map_err(|_| invalid("Persisted BM25 document length is out of range"))?;
             index
-                .add_document(&chunk_id, &tokens)
+                .insert_document(&chunk_id, terms, length)
                 .map_err(|e| invalid(&e))?;
         }
         index.set_doc_order(parsed.doc_order);

@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use crate::chunking::source::chunk_source;
 use crate::indexing::cache::sha256_hex;
-use crate::indexing::dense::{embed_chunks, Model, SelectableBasicBackend};
+use crate::indexing::dense::{embed_chunk_refs, Model, SelectableBasicBackend};
 use crate::indexing::file_walker::walk_files;
 use crate::indexing::files::{detect_language, get_extensions};
 use crate::indexing::sparse::{enrich_for_bm25, Bm25Index};
@@ -101,7 +101,11 @@ pub fn create_index_from_path(
 
     let mut chunks: Vec<Chunk> = Vec::new();
     let mut chunk_ids: Vec<String> = Vec::new();
-    let mut vectors: Vec<Vec<f32>> = Vec::new();
+    // Reused rows land here directly; freshly chunked files leave a `None` hole
+    // that the single batched embed pass below fills, so the tokenizer keeps the
+    // whole-corpus batching it had before incremental reuse existed.
+    let mut vectors: Vec<Option<Vec<f32>>> = Vec::new();
+    let mut fresh_rows: Vec<usize> = Vec::new();
     let mut files = FileManifest::new();
 
     for file_path in walk_files(path, &ext_refs, &[]) {
@@ -147,30 +151,27 @@ pub fn create_index_from_path(
             }
             _ => None,
         };
-        let (file_chunks, file_vectors) = match reused {
-            Some(reused) => reused,
+        let start = chunks.len();
+        let file_chunks = match reused {
+            Some((file_chunks, file_vectors)) => {
+                vectors.extend(file_vectors.into_iter().map(Some));
+                file_chunks
+            }
             None => {
                 // Lossy UTF-8 decode (invalid bytes → U+FFFD): only an IO error
                 // skips a file, never an encoding error.
                 let source = String::from_utf8_lossy(&bytes).into_owned();
                 let file_chunks = chunk_source(&source, &indexed_path, language);
                 reindex_file(&mut bm25_index, &indexed_path, &file_chunks, previous_entry)?;
-                // Normalise through the backend so fresh rows match the reused
-                // (already-normalised) rows.
-                let file_vectors = SelectableBasicBackend::from_vectors(embed_chunks(
-                    options.model,
-                    &file_chunks,
-                ))?
-                .vectors;
-                (file_chunks, file_vectors)
+                fresh_rows.extend(start..start + file_chunks.len());
+                vectors.extend(std::iter::repeat_n(None, file_chunks.len()));
+                file_chunks
             }
         };
 
-        let start = chunks.len();
         let count = file_chunks.len();
         chunk_ids.extend((0..count).map(|slot| make_chunk_id(&indexed_path, slot)));
         chunks.extend(file_chunks);
-        vectors.extend(file_vectors);
         files.insert(indexed_path, FileManifestEntry { hash, start, count });
     }
 
@@ -187,6 +188,23 @@ pub fn create_index_from_path(
             path.display()
         ));
     }
+
+    // One batched embed for every changed file's chunks — the tokenizer
+    // parallelises per batch, so a call per file would serialise a cold build.
+    // Normalise through the backend so fresh rows match the reused
+    // (already-normalised) rows.
+    let fresh_chunks: Vec<&Chunk> = fresh_rows.iter().map(|&i| &chunks[i]).collect();
+    let fresh_vectors =
+        SelectableBasicBackend::from_vectors(embed_chunk_refs(options.model, &fresh_chunks))?
+            .vectors;
+    if fresh_vectors.len() != fresh_rows.len() {
+        return Err("Embedder returned the wrong number of rows".to_string());
+    }
+    for (&row, vector) in fresh_rows.iter().zip(fresh_vectors) {
+        vectors[row] = Some(vector);
+    }
+    let vectors: Option<Vec<Vec<f32>>> = vectors.into_iter().collect();
+    let vectors = vectors.ok_or("Internal error: an embedding row was left unfilled")?;
 
     bm25_index.set_doc_order(chunk_ids);
     let semantic_index = SelectableBasicBackend::from_normalized(vectors)?;
@@ -428,5 +446,28 @@ mod tests {
         assert_eq!(after.semantic_index.vectors.len(), after.chunks.len());
         // The rebuilt index is itself a valid seed for the next incremental pass.
         into_previous(after);
+    }
+
+    #[test]
+    fn zero_chunk_file_does_not_break_manifest_tiling() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        // `pkg/` is walked before `pkg.ts` (directory entries sort by file name),
+        // but "pkg.ts" < "pkg/z.ts" lexicographically ('.' 0x2E < '/' 0x2F). The
+        // empty file yields no chunks, so both entries share `start`.
+        write_files(
+            &root,
+            &[
+                ("pkg/z.ts", "   \n"),
+                ("pkg.ts", "function stable_anchor() { return 1 }\n"),
+            ],
+        );
+        let model = make_stub_model(4);
+        let result =
+            create_index_from_path(&root, &opts(&model, Some(root.clone())), None).unwrap();
+        assert_eq!(result.files["pkg/z.ts"].count, 0);
+        assert_eq!(result.files["pkg/z.ts"].start, result.files["pkg.ts"].start);
+        // A freshly built index must always be a valid seed for the next pass.
+        into_previous(result);
     }
 }

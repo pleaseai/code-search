@@ -12,7 +12,7 @@ use crate::indexing::cache::sha256_hex;
 use crate::indexing::create::{create_index_from_path, CreateIndexOptions};
 use crate::indexing::dense::{load_model, make_stub_model, Model, SelectableBasicBackend};
 use crate::indexing::sparse::Bm25Index;
-use crate::indexing::types::{FileManifest, FileManifestEntry, PreviousIndex};
+use crate::indexing::types::{FileManifest, PreviousIndex};
 use crate::search::{search as run_search, SearchOptions as RunSearchOptions, SearchResult};
 use crate::types::{chunk_from_dict, chunk_to_dict, Chunk, ChunkDict, ContentType, IndexStats};
 
@@ -498,41 +498,14 @@ pub fn parse_manifest(raw: &serde_json::Value) -> Result<IndexManifest, String> 
 }
 
 /// Parse the per-file manifest. Absent/null → empty (a manifest without one
-/// cannot seed an incremental rebuild); malformed → error.
+/// cannot seed an incremental rebuild); malformed → error. Deserialised through
+/// `FileManifest`'s derive, the same one `save` serialises with, so the two
+/// halves of the on-disk format cannot drift.
 fn parse_file_manifest(raw: Option<&serde_json::Value>) -> Result<FileManifest, String> {
     let Some(raw) = raw.filter(|v| !v.is_null()) else {
         return Ok(FileManifest::new());
     };
-    let obj = raw
-        .as_object()
-        .ok_or("Invalid manifest: files must be an object")?;
-    let mut files = FileManifest::new();
-    for (indexed_path, entry) in obj {
-        let entry_obj = entry
-            .as_object()
-            .ok_or("Invalid manifest: files entries must be objects")?;
-        let hash = entry_obj
-            .get("hash")
-            .and_then(serde_json::Value::as_str)
-            .ok_or("Invalid manifest: files entry hash must be a string")?
-            .to_string();
-        let range = |key: &str| -> Result<usize, String> {
-            entry_obj
-                .get(key)
-                .and_then(serde_json::Value::as_u64)
-                .and_then(|n| usize::try_from(n).ok())
-                .ok_or_else(|| format!("Invalid manifest: files entry {key} must be a usize"))
-        };
-        files.insert(
-            indexed_path.clone(),
-            FileManifestEntry {
-                hash,
-                start: range("start")?,
-                count: range("count")?,
-            },
-        );
-    }
-    Ok(files)
+    serde_json::from_value(raw.clone()).map_err(|e| format!("Invalid manifest: files: {e}"))
 }
 
 pub use crate::indexing::cache_orchestrator::{

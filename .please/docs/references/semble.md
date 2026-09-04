@@ -387,9 +387,16 @@ Clean two-layer split:
    `mtime_ns` per file; csp records the sha256 of the file bytes so the per-file decision uses
    the same oracle as the whole-tree `contentHash` fast path (ADR-0002).
 10. **BM25 scoring unchanged** — csp keeps the Lucene `(k1+1)` numerator and de-duplicates
-    query terms; upstream's own `BM25` (#225) dropped `(k1+1)` and multiplies by the query term
-    frequency. Both differ by a per-term scale factor only, so ranks — the only thing RRF
-    consumes — are identical.
+    query terms; upstream's own `BM25` (#225) dropped `(k1+1)` and multiplies each term's
+    contribution by the query term frequency. The `(k1+1)` factor is a single global constant,
+    so dropping it is rank-neutral. The query-tf factor is **not** — it reweights terms against
+    one another whenever a query tokenises to a repeated token, which the identifier-aware
+    tokenizer makes common (`getUserById getUser` repeats `get` and `user`). Ranks can
+    therefore differ from upstream: for query tokens `[a, a, b]` with per-term contributions
+    `a → 1.0` (doc1) and `b → 1.8` (doc2), upstream scores doc1 `2.0` > doc2 `1.8` while csp
+    scores doc1 `1.0` < doc2 `1.8`. This is a **live parity gap**, not a rank-neutral
+    adaptation, and it predates #225; it is tracked here rather than fixed in the incremental
+    port.
 
 ### 6.2 Open stubs & gaps (verify before claiming runtime parity)
 

@@ -68,8 +68,11 @@ hash** instead of `mtime_ns`:
 - Existing v1 caches are rebuilt once (schema bump), then benefit from incremental reuse.
 - The BM25 **scoring** is intentionally unchanged from the previous csp implementation (Lucene
   IDF with the `(k1+1)` numerator, de-duplicated query terms). Upstream's own class dropped the
-  `(k1+1)` factor and weights repeated query terms by their query frequency; both differences
-  scale scores without changing ranks, and ranks are all that Reciprocal Rank Fusion consumes.
+  `(k1+1)` factor and weights repeated query terms by their query frequency. Only the first is
+  rank-neutral: `(k1+1)` is a global constant, but the query-frequency weight varies per term,
+  so for a query with a repeated token the two implementations can order documents differently.
+  That is a pre-existing parity gap, out of scope here and tracked in
+  `.please/docs/references/semble.md` §6.1 item 10.
   Recorded as an intentional adaptation in `.please/docs/references/semble.md` §6.1.
 - Git sources (`from_git`) are URL+ref keyed and never take the incremental path, matching
   upstream (which only seeds `from_path`).
