@@ -9,6 +9,7 @@
 //! testable. [`IndexCache`] holds `Arc<CspIndex>` so it can be shared across the
 //! async server's tokio tasks.
 
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -49,12 +50,14 @@ pub enum ContentSelection {
 }
 
 /// Canonical form of a content list: every [`ContentType`] present, once, in
-/// enum order — so `[Docs, Code, Docs]` and `[Code, Docs]` name the same index.
+/// enum (`Ord`) order — so `[Docs, Code, Docs]` and `[Code, Docs]` name the
+/// same index.
 pub fn normalize_content(content: &[ContentType]) -> Vec<ContentType> {
-    ALL_CONTENT
+    content
         .iter()
         .copied()
-        .filter(|c| content.contains(c))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
         .collect()
 }
 
