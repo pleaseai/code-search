@@ -617,7 +617,10 @@ mod tests {
         let dir = build_index_dir();
         let idx = CspIndex::from_path(dir.path(), &LoadOptions::default()).unwrap();
         // The source tree is still on disk, so sizes are read lazily per result.
-        assert!(idx.file_sizes.is_available());
+        // Look the size up under the path the chunks actually carry — that is
+        // the key `save_search_stats` will use.
+        let indexed_path = idx.chunks[0].file_path.clone();
+        assert!(idx.file_sizes.get(&indexed_path).is_some());
 
         let stats = tempdir().unwrap();
         let stats_file = stats.path().join("savings.jsonl");
@@ -626,8 +629,12 @@ mod tests {
         let content = std::fs::read_to_string(&stats_file).unwrap();
         let lines: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();
         assert_eq!(lines.len(), 1);
-        assert!(lines[0].contains("\"call\":\"search\""));
-        assert!(lines[0].contains("file_chars"));
+        let record: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        assert_eq!(record["call"], "search");
+        // A nonzero value, not just the key: a lazy lookup that resolved nothing
+        // would still serialize `"file_chars":0`.
+        assert!(record["file_chars"].as_u64().unwrap() > 0);
+        assert!(record["snippet_chars"].as_u64().unwrap() > 0);
     }
 
     #[test]

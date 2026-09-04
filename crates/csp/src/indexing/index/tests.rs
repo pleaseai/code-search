@@ -364,7 +364,11 @@ fn from_path_reads_file_sizes_lazily() {
     let idx = CspIndex::from_path(dir.path(), &LoadOptions::default()).unwrap();
 
     assert!(idx.file_sizes.is_available());
-    assert_eq!(idx.file_sizes.get("sample.ts"), Some(19));
+    // Look it up under the path the chunks carry, so a chunk-path/root drift
+    // (absolute paths, a stray prefix) fails here instead of silently zeroing
+    // `file_chars` at telemetry time.
+    assert_eq!(idx.chunks[0].file_path, "sample.ts");
+    assert_eq!(idx.file_sizes.get(&idx.chunks[0].file_path), Some(19));
 }
 
 #[test]

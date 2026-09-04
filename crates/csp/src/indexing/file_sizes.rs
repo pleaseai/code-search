@@ -10,6 +10,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use crate::indexing::create::MAX_FILE_BYTES;
+
 /// UTF-16 character counts per repo-relative file path, resolved eagerly
 /// (captured) or lazily (read from a local root on demand).
 #[derive(Debug, Default)]
@@ -19,9 +21,11 @@ pub struct FileSizes {
     captured: HashMap<String, u64>,
     /// Local source root read on demand for paths not in `captured`.
     lazy_root: Option<PathBuf>,
-    /// Memo of lazily read sizes; `Mutex` because `CspIndex` is shared as
-    /// `Arc<CspIndex>` across MCP calls.
-    memo: Mutex<HashMap<String, u64>>,
+    /// Memo of lazily resolved sizes, negatives included — a path that cannot
+    /// be read must not re-pay the syscalls (and, for a file the indexer
+    /// accepted, a full read) on every later query. `Mutex` because `CspIndex`
+    /// is shared as `Arc<CspIndex>` across MCP calls.
+    memo: Mutex<HashMap<String, Option<u64>>>,
 }
 
 impl FileSizes {
@@ -47,18 +51,21 @@ impl FileSizes {
     }
 
     /// Character count for `file_path`: captured → memo → read from the lazy
-    /// root (memoized on success). `None` when unavailable or unreadable.
+    /// root. `None` when unavailable or unreadable; both outcomes are memoized,
+    /// so an unreadable path costs one read attempt per index, not one per
+    /// query. The memo lock is released across the read so concurrent lookups
+    /// of different files don't serialize.
     pub fn get(&self, file_path: &str) -> Option<u64> {
         if let Some(size) = self.captured.get(file_path) {
             return Some(*size);
         }
         let root = self.lazy_root.as_deref()?;
         if let Some(size) = self.lock_memo().get(file_path) {
-            return Some(*size);
+            return *size;
         }
-        let size = read_file_chars(root, file_path)?;
+        let size = read_file_chars(root, file_path);
         self.lock_memo().insert(file_path.to_string(), size);
-        Some(size)
+        size
     }
 
     /// `true` when sizes can be produced at all. Prefer this over inspecting
@@ -67,7 +74,7 @@ impl FileSizes {
         !self.captured.is_empty() || self.lazy_root.is_some()
     }
 
-    fn lock_memo(&self) -> std::sync::MutexGuard<'_, HashMap<String, u64>> {
+    fn lock_memo(&self) -> std::sync::MutexGuard<'_, HashMap<String, Option<u64>>> {
         self.memo.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
@@ -82,20 +89,26 @@ impl FileSizes {
 /// over upstream, which joins the path unchecked). Only regular files are read:
 /// the file walker never follows symlinks, and a path that has since become a
 /// symlink, FIFO, or device must not be able to redirect or stall the read.
+///
+/// The read is bounded by [`MAX_FILE_BYTES`], the same ceiling
+/// `create_index_from_path` applies — lazily, this runs inside a live search,
+/// so a file that has grown past the indexing limit since it was chunked must
+/// not be slurped whole on the query path. Decoding is lossy, matching the
+/// indexer (`String::from_utf8_lossy`) and upstream `read_file_text`'s
+/// `errors="replace"`: a file with invalid UTF-8 still gets indexed, so it must
+/// still be sized instead of silently contributing 0 `file_chars`.
 pub(crate) fn read_file_chars(root: &Path, file_path: &str) -> Option<u64> {
     let rel = Path::new(file_path);
     if !is_safe_relative_path(rel) {
         return None;
     }
     let full = root.join(rel);
-    let is_regular_file = std::fs::symlink_metadata(&full)
-        .map(|m| m.is_file())
-        .unwrap_or(false);
-    if !is_regular_file {
+    let meta = std::fs::symlink_metadata(&full).ok()?;
+    if !meta.is_file() || meta.len() > MAX_FILE_BYTES {
         return None;
     }
-    let text = std::fs::read_to_string(&full).ok()?;
-    Some(text.encode_utf16().count() as u64)
+    let bytes = std::fs::read(&full).ok()?;
+    Some(String::from_utf8_lossy(&bytes).encode_utf16().count() as u64)
 }
 
 /// `true` when `path` is relative and contains no `..` or root component, so
@@ -136,6 +149,7 @@ mod tests {
         std::fs::create_dir(&root).unwrap();
         std::fs::write(outer.path().join("secret.txt"), "top secret").unwrap();
         std::fs::write(root.join("real.ts"), "abcd").unwrap();
+        std::fs::create_dir(root.join("dir.ts")).unwrap();
         #[cfg(unix)]
         std::os::unix::fs::symlink(outer.path().join("secret.txt"), root.join("link.ts")).unwrap();
         let abs = root.join("real.ts").to_string_lossy().into_owned();
@@ -144,8 +158,42 @@ mod tests {
         assert_eq!(sizes.get("../secret.txt"), None);
         assert_eq!(sizes.get(&abs), None);
         assert_eq!(sizes.get("missing.ts"), None);
+        assert_eq!(sizes.get("dir.ts"), None);
         #[cfg(unix)]
         assert_eq!(sizes.get("link.ts"), None);
+    }
+
+    #[test]
+    fn lazy_memoizes_misses_so_they_are_read_once() {
+        let root = tempdir().unwrap();
+        let sizes = FileSizes::lazy(root.path().to_path_buf());
+
+        assert_eq!(sizes.get("later.ts"), None);
+        // The miss is cached: a file appearing afterwards does not resurrect it,
+        // which is what proves no second read was attempted.
+        std::fs::write(root.path().join("later.ts"), "abcd").unwrap();
+        assert_eq!(sizes.get("later.ts"), None);
+    }
+
+    #[test]
+    fn lazy_sizes_non_utf8_files_lossily_like_the_indexer() {
+        let root = tempdir().unwrap();
+        // Latin-1 byte: `create_index_from_path` decodes it lossily and indexes
+        // the file, so sizing must not reject it.
+        std::fs::write(root.path().join("legacy.js"), b"ab\xffcd").unwrap();
+        let sizes = FileSizes::lazy(root.path().to_path_buf());
+
+        assert_eq!(sizes.get("legacy.js"), Some(5));
+    }
+
+    #[test]
+    fn lazy_skips_files_larger_than_the_indexing_ceiling() {
+        let root = tempdir().unwrap();
+        let big = vec![b'a'; MAX_FILE_BYTES as usize + 1];
+        std::fs::write(root.path().join("grown.ts"), &big).unwrap();
+        let sizes = FileSizes::lazy(root.path().to_path_buf());
+
+        assert_eq!(sizes.get("grown.ts"), None);
     }
 
     #[test]

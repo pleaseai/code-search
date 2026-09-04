@@ -7,7 +7,7 @@
 //! Time bucketing uses UTC `YYYY-MM-DD` (compared lexicographically, which is
 //! chronological); `now_secs` is injected so summaries/reports are testable.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::io::{IsTerminal, Write as _};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -118,13 +118,13 @@ pub fn save_search_stats(
         .iter()
         .map(|r| delivered_chars(&r.chunk.content, max_snippet_lines))
         .sum();
-    let mut unique_paths: Vec<&str> = Vec::new();
-    for r in results {
-        if !unique_paths.contains(&r.chunk.file_path.as_str()) {
-            unique_paths.push(r.chunk.file_path.as_str());
-        }
-    }
-    let file_chars: u64 = unique_paths.iter().filter_map(|p| file_sizes.get(p)).sum();
+    // Each source file is counted once, however many of its chunks ranked.
+    let mut seen: HashSet<&str> = HashSet::new();
+    let file_chars: u64 = results
+        .iter()
+        .filter(|r| seen.insert(r.chunk.file_path.as_str()))
+        .filter_map(|r| file_sizes.get(&r.chunk.file_path))
+        .sum();
 
     let record = StatsRecord {
         ts: now_secs(),
@@ -512,6 +512,32 @@ mod tests {
         assert_eq!(record.results, 2);
         assert_eq!(record.snippet_chars, 22);
         assert_eq!(record.file_chars, 300);
+    }
+
+    #[test]
+    fn save_reads_sizes_through_a_lazy_root() {
+        // The variant every local `from_path` / `load_from_disk` index uses:
+        // `save_search_stats` must resolve repo-relative result paths against
+        // the source root, not just a pre-seeded map.
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join("a.ts"), "0123456789").unwrap();
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("savings.jsonl");
+        let results = vec![result("hello", "a.ts"), result("world", "gone.ts")];
+
+        save_search_stats(
+            &file,
+            &results,
+            CallType::Search,
+            &FileSizes::lazy(root.path().to_path_buf()),
+            None,
+        );
+
+        let content = std::fs::read_to_string(&file).unwrap();
+        let record: StatsRecord = serde_json::from_str(content.lines().next().unwrap()).unwrap();
+        // `a.ts` resolves off the root; the missing path simply contributes 0.
+        assert_eq!(record.file_chars, 10);
+        assert_eq!(record.snippet_chars, 10);
     }
 
     #[test]
