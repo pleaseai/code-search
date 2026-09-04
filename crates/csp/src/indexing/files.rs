@@ -51,6 +51,16 @@ fn non_positive_warning() -> String {
 /// non-positive override warns on stderr that one time and falls back to the
 /// default rather than aborting indexing.
 pub fn get_max_file_bytes() -> u64 {
+    // The crate's own tests must not inherit the developer's or CI's ambient
+    // `CSP_MAX_FILE_BYTES`: the value is process-global and `OnceLock`-memoized,
+    // so a single exported override (which the README tells users to set) would
+    // otherwise silently resize every indexing fixture — failing unrelated tests
+    // at a small value and allocating gigabytes at a large one. The env parsing
+    // itself is covered directly by `parse_max_file_bytes`'s tests, and the
+    // per-call limit by `honors_configured_max_file_bytes`.
+    if cfg!(test) {
+        return DEFAULT_MAX_FILE_BYTES;
+    }
     static MAX_FILE_BYTES: OnceLock<u64> = OnceLock::new();
     *MAX_FILE_BYTES.get_or_init(|| {
         let raw = std::env::var_os(MAX_FILE_BYTES_ENV);

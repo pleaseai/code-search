@@ -182,7 +182,7 @@ fn resolve_content(filters: &[ContentFilter]) -> Vec<ContentType> {
         return vec![ContentType::Code];
     }
     if filters.contains(&ContentFilter::All) {
-        return vec![ContentType::Code, ContentType::Docs, ContentType::Config];
+        return ContentType::ALL.to_vec();
     }
     let mut out = Vec::new();
     for f in filters {
@@ -361,11 +361,19 @@ fn run_clear_at(what: &str, cache_loc: &CacheLocation, stats_file: &Path) -> u8 
     // Mirrors upstream: `orphans` is its own choice, never folded into `all`.
     if what == "orphans" {
         match clear_orphan_indexes(cache_loc) {
-            Ok(removed) if removed.is_empty() => println!("No orphaned indexes found"),
-            Ok(removed) => {
-                for orphan in removed {
+            Ok(sweep) => {
+                if sweep.removed.is_empty() && sweep.errors.is_empty() {
+                    println!("No orphaned indexes found");
+                }
+                // Report what was actually removed before the failures, so a
+                // partial sweep is never mistaken for a no-op.
+                for orphan in &sweep.removed {
                     println!("Cleared orphaned index for `{}`", orphan.source_id);
                 }
+                for error in &sweep.errors {
+                    eprintln!("{error}");
+                }
+                failed |= !sweep.errors.is_empty();
             }
             Err(e) => {
                 eprintln!("{e}");

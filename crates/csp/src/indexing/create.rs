@@ -95,14 +95,14 @@ fn escape_control(path: &str) -> String {
 /// gaps in results. `from_env` selects the hint: the env var when the limit
 /// was resolved from it, else the `max_file_bytes` option the caller pinned.
 pub(crate) fn skipped_large_warning(
-    skipped: &[String],
+    skipped: &SkippedLarge,
     max_file_bytes: u64,
     from_env: bool,
 ) -> Option<String> {
     if skipped.is_empty() {
         return None;
     }
-    let shown: Vec<String> = skipped.iter().take(5).map(|p| escape_control(p)).collect();
+    let shown: Vec<String> = skipped.samples.iter().map(|p| escape_control(p)).collect();
     let knob = if from_env {
         MAX_FILE_BYTES_ENV
     } else {
@@ -111,12 +111,42 @@ pub(crate) fn skipped_large_warning(
     Some(format!(
         "Skipped {} file(s) exceeding the maximum file size of {} bytes \
          (raise {} to include them): {}{}",
-        skipped.len(),
+        skipped.count,
         max_file_bytes,
         knob,
         shown.join(", "),
-        if skipped.len() > 5 { " ..." } else { "" },
+        if skipped.count > SKIPPED_SAMPLE_LIMIT {
+            " ..."
+        } else {
+            ""
+        },
     ))
+}
+
+/// How many skipped paths the warning names before eliding.
+const SKIPPED_SAMPLE_LIMIT: usize = 5;
+
+/// Oversized files seen during one index build. Only the count and the first
+/// [`SKIPPED_SAMPLE_LIMIT`] paths are ever rendered, so a `data/` tree of 80k
+/// oversized files must not retain 80k `String`s across the (already
+/// memory-hungry) chunk-and-embed pass.
+#[derive(Debug, Default)]
+pub(crate) struct SkippedLarge {
+    count: usize,
+    samples: Vec<String>,
+}
+
+impl SkippedLarge {
+    fn push(&mut self, path: impl FnOnce() -> String) {
+        self.count += 1;
+        if self.samples.len() < SKIPPED_SAMPLE_LIMIT {
+            self.samples.push(path());
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.count == 0
+    }
 }
 
 /// Replace a file's BM25 postings: remove its old slots (if any), then add its
@@ -256,7 +286,7 @@ pub fn create_index_from_path(
     let mut vectors: Vec<Option<Vec<f32>>> = Vec::new();
     let mut fresh_rows: Vec<usize> = Vec::new();
     let mut files = FileManifest::new();
-    let mut skipped_large: Vec<String> = Vec::new();
+    let mut skipped_large = SkippedLarge::default();
 
     for file_path in walk_files(path, &ext_refs, &[]) {
         let language = detect_language(&file_path.to_string_lossy());
@@ -265,7 +295,7 @@ pub fn create_index_from_path(
             Err(_) => continue,
         };
         if size > max_file_bytes {
-            skipped_large.push(display_path(&file_path, options.display_root.as_deref()));
+            skipped_large.push(|| display_path(&file_path, options.display_root.as_deref()));
             continue;
         }
         let Ok(bytes) = std::fs::read(&file_path) else {

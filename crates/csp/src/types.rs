@@ -29,6 +29,13 @@ pub enum ContentType {
 }
 
 impl ContentType {
+    /// Every variant, in canonical (`Ord`) order — the one definition of what
+    /// "all content" expands to. Both the CLI's `--content all` and the MCP
+    /// tools' `content: "all"` read it, so the two can never disagree about
+    /// what a user asked for. Kept next to `as_str`, whose exhaustive `match`
+    /// fails to compile if a variant is added without updating this.
+    pub const ALL: [ContentType; 3] = [ContentType::Code, ContentType::Docs, ContentType::Config];
+
     /// The lowercase string form (matches the serde `rename_all = "lowercase"`
     /// serialization and the TS `String(ContentType.X)` value).
     pub fn as_str(self) -> &'static str {

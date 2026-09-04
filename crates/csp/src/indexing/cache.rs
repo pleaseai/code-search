@@ -404,17 +404,32 @@ fn source_is_gone(source_id: &str) -> bool {
     normalized == source_id || is_not_found(&normalized)
 }
 
+/// Outcome of [`clear_orphan_indexes`]: the entries actually removed, plus any
+/// per-entry removal failures. A failure never aborts the sweep — the entries
+/// already deleted from disk must still be reported, and one undeletable leaf
+/// must not permanently block every orphan behind it (the scan order is
+/// deterministic, so an abort would re-fail on the same leaf forever).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OrphanSweep {
+    /// Entries removed, sorted by path.
+    pub removed: Vec<OrphanIndex>,
+    /// One message per entry that matched but could not be removed.
+    pub errors: Vec<String>,
+}
+
 /// Remove cached indexes whose local source directory no longer exists (port of
 /// upstream `_clear_orphans`, semble#243). An entry qualifies only when it sits
 /// in a cache-key-shaped directory and its manifest records an absolute, local
 /// `sourceId` that is now `NotFound` — git-URL entries, unreadable or malformed
 /// manifests, relative `sourceId`s (which would be judged against the caller's
-/// cwd), and sources that merely cannot be reached are left untouched. Returns
-/// the removed entries, sorted by path. `clear all` deliberately does not
-/// include this pass.
-pub fn clear_orphan_indexes(loc: &CacheLocation) -> Result<Vec<OrphanIndex>, String> {
+/// cwd), and sources that merely cannot be reached are left untouched. `Err`
+/// means the sweep could not start (unsafe root, unreadable index root); a
+/// failure to remove one matched entry is reported in
+/// [`OrphanSweep::errors`] and the sweep continues. `clear all` deliberately
+/// does not include this pass.
+pub fn clear_orphan_indexes(loc: &CacheLocation) -> Result<OrphanSweep, String> {
     let Some(real_index_root) = guarded_index_root(loc)? else {
-        return Ok(Vec::new());
+        return Ok(OrphanSweep::default());
     };
 
     // Traversal errors surface instead of being skipped: a silently dropped
@@ -438,7 +453,7 @@ pub fn clear_orphan_indexes(loc: &CacheLocation) -> Result<Vec<OrphanIndex>, Str
     }
     dirs.sort();
 
-    let mut removed = Vec::new();
+    let mut sweep = OrphanSweep::default();
     for dir in dirs {
         if !dir.file_name().is_some_and(is_cache_key_name) {
             continue;
@@ -458,14 +473,17 @@ pub fn clear_orphan_indexes(loc: &CacheLocation) -> Result<Vec<OrphanIndex>, Str
         if !Path::new(&source_id).is_absolute() || !source_is_gone(&source_id) {
             continue;
         }
-        std::fs::remove_dir_all(&dir)
-            .map_err(|e| format!("failed to remove {}: {e}", dir.display()))?;
-        removed.push(OrphanIndex {
-            path: dir,
-            source_id,
-        });
+        match std::fs::remove_dir_all(&dir) {
+            Ok(()) => sweep.removed.push(OrphanIndex {
+                path: dir,
+                source_id,
+            }),
+            Err(e) => sweep
+                .errors
+                .push(format!("failed to remove {}: {e}", dir.display())),
+        }
     }
-    Ok(removed)
+    Ok(sweep)
 }
 
 #[cfg(test)]
@@ -825,9 +843,10 @@ mod tests {
         let gone = tmp.path().join("gone-repo");
         let dir = write_entry(&gone.to_string_lossy(), &loc(&base));
 
-        let removed = clear_orphan_indexes(&loc(&base)).unwrap();
+        let sweep = clear_orphan_indexes(&loc(&base)).unwrap();
+        assert!(sweep.errors.is_empty());
         assert_eq!(
-            removed,
+            sweep.removed,
             vec![OrphanIndex {
                 path: std::fs::canonicalize(&base)
                     .unwrap()
@@ -850,9 +869,9 @@ mod tests {
         let gone = tmp.path().join("gone-repo");
         let dir = write_entry_keyed(".", &gone.to_string_lossy(), &loc(&base));
 
-        let removed = clear_orphan_indexes(&loc(&base)).unwrap();
-        assert_eq!(removed.len(), 1);
-        assert_eq!(removed[0].source_id, gone.to_string_lossy());
+        let sweep = clear_orphan_indexes(&loc(&base)).unwrap();
+        assert_eq!(sweep.removed.len(), 1);
+        assert_eq!(sweep.removed[0].source_id, gone.to_string_lossy());
         assert!(!dir.exists());
     }
 
@@ -867,7 +886,7 @@ mod tests {
         ref_loc.git_ref = Some("main".to_string());
         let dir = write_entry(&gone.to_string_lossy(), &ref_loc);
 
-        assert_eq!(clear_orphan_indexes(&loc(&base)).unwrap().len(), 1);
+        assert_eq!(clear_orphan_indexes(&loc(&base)).unwrap().removed.len(), 1);
         assert!(!dir.exists());
     }
 
@@ -879,7 +898,10 @@ mod tests {
         std::fs::create_dir_all(&live).unwrap();
         let dir = write_entry(&live.to_string_lossy(), &loc(&base));
 
-        assert!(clear_orphan_indexes(&loc(&base)).unwrap().is_empty());
+        assert_eq!(
+            clear_orphan_indexes(&loc(&base)).unwrap(),
+            OrphanSweep::default()
+        );
         assert!(dir.join("manifest.json").exists());
     }
 
@@ -895,7 +917,10 @@ mod tests {
         // keeping it out of the sweep.
         let no_ref = write_entry("https://github.com/x/z.git", &loc(&base));
 
-        assert!(clear_orphan_indexes(&loc(&base)).unwrap().is_empty());
+        assert_eq!(
+            clear_orphan_indexes(&loc(&base)).unwrap(),
+            OrphanSweep::default()
+        );
         assert!(with_ref.join("manifest.json").exists());
         assert!(no_ref.join("manifest.json").exists());
     }
@@ -908,7 +933,10 @@ mod tests {
         let base = tmp.path().join(".csp");
         let dir = write_entry("gone-repo", &loc(&base));
 
-        assert!(clear_orphan_indexes(&loc(&base)).unwrap().is_empty());
+        assert_eq!(
+            clear_orphan_indexes(&loc(&base)).unwrap(),
+            OrphanSweep::default()
+        );
         assert!(dir.join("manifest.json").exists());
     }
 
@@ -930,7 +958,10 @@ mod tests {
             .unwrap();
         }
 
-        assert!(clear_orphan_indexes(&loc(&base)).unwrap().is_empty());
+        assert_eq!(
+            clear_orphan_indexes(&loc(&base)).unwrap(),
+            OrphanSweep::default()
+        );
         assert!(resolve_index_root(&loc(&base)).join("notes").exists());
     }
 
@@ -951,7 +982,10 @@ mod tests {
         std::fs::write(sourceless.join("manifest.json"), r#"{"sourceId":""}"#).unwrap();
         std::fs::write(root.join("stray-file"), "x").unwrap();
 
-        assert!(clear_orphan_indexes(&loc(&base)).unwrap().is_empty());
+        assert_eq!(
+            clear_orphan_indexes(&loc(&base)).unwrap(),
+            OrphanSweep::default()
+        );
         assert!(malformed.exists());
         assert!(missing.exists());
         assert!(sourceless.exists());
@@ -977,7 +1011,7 @@ mod tests {
         let swept = clear_orphan_indexes(&loc(&base)).unwrap();
         std::fs::set_permissions(&vault, std::fs::Permissions::from_mode(0o700)).unwrap();
         if blocked {
-            assert!(swept.is_empty());
+            assert!(swept.removed.is_empty());
             assert!(dir.join("manifest.json").exists());
         }
     }
@@ -999,15 +1033,63 @@ mod tests {
         std::fs::remove_dir_all(&via).unwrap();
 
         assert!(std::fs::metadata(&recorded).is_err(), "precondition");
-        assert!(clear_orphan_indexes(&loc(&base)).unwrap().is_empty());
+        assert_eq!(
+            clear_orphan_indexes(&loc(&base)).unwrap(),
+            OrphanSweep::default()
+        );
         assert!(dir.join("manifest.json").exists());
+    }
+
+    /// One undeletable leaf must not abort the sweep, hide the entries already
+    /// removed, or permanently block the orphans scanned after it.
+    #[cfg(unix)]
+    #[test]
+    fn orphans_reports_removal_failures_and_keeps_sweeping() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempdir().unwrap();
+        let base = tmp.path().join(".csp");
+        let root = resolve_index_root(&loc(&base));
+        let gone = tmp.path().join("gone-repo");
+        // Key-shaped names chosen so the blocked leaf sorts first.
+        let blocked = root.join("00000000000000000000000000000000");
+        let removable = root.join("ffffffffffffffffffffffffffffffff");
+        for dir in [&blocked, &removable] {
+            std::fs::create_dir_all(dir).unwrap();
+            std::fs::write(
+                dir.join("manifest.json"),
+                manifest_json(&gone.to_string_lossy(), &[ContentType::Code]),
+            )
+            .unwrap();
+        }
+        // Read+execute only: the manifest inside cannot be unlinked.
+        std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o500)).unwrap();
+
+        let sweep = clear_orphan_indexes(&loc(&base)).unwrap();
+        std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o700)).unwrap();
+        // Running as root ignores the permission bits; only assert when it bit.
+        if blocked.exists() {
+            assert_eq!(sweep.errors.len(), 1, "{sweep:?}");
+            assert!(sweep.errors[0].contains("failed to remove"), "{sweep:?}");
+            // The later entry was still swept and is still reported.
+            assert_eq!(sweep.removed.len(), 1, "{sweep:?}");
+            // The reported path is rooted at the canonicalized index root.
+            assert_eq!(
+                sweep.removed[0].path.file_name(),
+                removable.file_name(),
+                "{sweep:?}"
+            );
+        }
+        assert!(!removable.exists());
     }
 
     #[test]
     fn orphans_reports_nothing_without_index_root() {
         let tmp = tempdir().unwrap();
         let base = tmp.path().join(".csp");
-        assert!(clear_orphan_indexes(&loc(&base)).unwrap().is_empty());
+        assert_eq!(
+            clear_orphan_indexes(&loc(&base)).unwrap(),
+            OrphanSweep::default()
+        );
     }
 
     #[cfg(unix)]

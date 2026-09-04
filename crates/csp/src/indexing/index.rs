@@ -12,6 +12,7 @@ use crate::indexing::cache::sha256_hex;
 use crate::indexing::create::{create_index_from_path, CreateIndexOptions};
 use crate::indexing::dense::{load_model, make_stub_model, Model, SelectableBasicBackend};
 use crate::indexing::file_sizes::{read_file_chars, FileSizes};
+use crate::indexing::files::get_max_file_bytes;
 use crate::indexing::sparse::Bm25Index;
 use crate::indexing::types::{FileManifest, PreviousIndex};
 use crate::search::{search as run_search, SearchOptions as RunSearchOptions, SearchResult};
@@ -424,12 +425,16 @@ fn compute_file_sizes(root: &Path, chunks: &[Chunk]) -> HashMap<String, u64> {
     let Ok(root) = root.canonicalize() else {
         return HashMap::new();
     };
+    // Same ceiling the indexer applied, resolved once for the whole pass.
+    let max_file_bytes = get_max_file_bytes();
     chunks
         .iter()
         .map(|c| &c.file_path)
         .collect::<HashSet<_>>()
         .into_iter()
-        .filter_map(|path| read_file_chars(&root, path).map(|chars| (path.clone(), chars)))
+        .filter_map(|path| {
+            read_file_chars(&root, path, max_file_bytes).map(|chars| (path.clone(), chars))
+        })
         .collect()
 }
 

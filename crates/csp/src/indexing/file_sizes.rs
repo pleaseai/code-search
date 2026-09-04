@@ -11,7 +11,13 @@ use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::indexing::files::get_max_file_bytes;
+use crate::indexing::files::{get_max_file_bytes, DEFAULT_MAX_FILE_BYTES};
+
+/// Upper bound on the buffer `read_file_chars` pre-allocates. The read itself is
+/// still capped at the index ceiling; this only stops a raised
+/// `CSP_MAX_FILE_BYTES` from turning a single search result into a multi-GB
+/// `Vec::with_capacity` before a byte has been read.
+const READ_PREALLOC_CAP: u64 = DEFAULT_MAX_FILE_BYTES;
 
 /// UTF-16 character counts per repo-relative file path, resolved eagerly
 /// (captured) or lazily (read from a local root on demand).
@@ -22,6 +28,9 @@ pub struct FileSizes {
     captured: HashMap<String, u64>,
     /// Local source root read on demand for paths not in `captured`.
     lazy_root: Option<PathBuf>,
+    /// Ceiling for the lazy read, resolved once when the root is set (rather
+    /// than per result). `None` only when there is no lazy root to read from.
+    lazy_max_bytes: Option<u64>,
     /// Memo of lazily resolved sizes, negatives included — a path that cannot
     /// be read must not re-pay the syscalls (and, for a file the indexer
     /// accepted, a full read) on every later query. `Mutex` because `CspIndex`
@@ -48,9 +57,18 @@ impl FileSizes {
     /// prefix comparison; a root that cannot be canonicalized is kept as-is and
     /// every lookup then fails containment, which is the safe outcome.
     pub fn lazy(root: PathBuf) -> Self {
+        Self::lazy_with_limit(root, get_max_file_bytes())
+    }
+
+    /// [`FileSizes::lazy`] with the read ceiling pinned instead of resolved from
+    /// `CSP_MAX_FILE_BYTES`, so a caller that pinned
+    /// `CreateIndexOptions::max_file_bytes` (and a test) can size the reader to
+    /// the same limit the index was actually built with.
+    pub fn lazy_with_limit(root: PathBuf, max_file_bytes: u64) -> Self {
         let root = root.canonicalize().unwrap_or(root);
         Self {
             lazy_root: Some(root),
+            lazy_max_bytes: Some(max_file_bytes),
             ..Self::default()
         }
     }
@@ -68,7 +86,11 @@ impl FileSizes {
         if let Some(size) = self.lock_memo().get(file_path) {
             return *size;
         }
-        let size = read_file_chars(root, file_path);
+        let size = read_file_chars(
+            root,
+            file_path,
+            self.lazy_max_bytes.unwrap_or_else(get_max_file_bytes),
+        );
         self.lock_memo().insert(file_path.to_string(), size);
         size
     }
@@ -97,14 +119,14 @@ impl FileSizes {
 /// the file walker never follows symlinks, and a path that has since become a
 /// symlink, FIFO, or device must not be able to redirect or stall the read.
 ///
-/// The read is bounded by [`get_max_file_bytes`], the same ceiling
-/// `create_index_from_path` applies — lazily, this runs inside a live search,
+/// The read is bounded by `max_file_bytes`, the ceiling the index was built
+/// with (see [`FileSizes::lazy_with_limit`]) — lazily, this runs inside a live search,
 /// so a file that has grown past the indexing limit since it was chunked must
 /// not be slurped whole on the query path. Decoding is lossy, matching the
 /// indexer (`String::from_utf8_lossy`) and upstream `read_file_text`'s
 /// `errors="replace"`: a file with invalid UTF-8 still gets indexed, so it must
 /// still be sized instead of silently contributing 0 `file_chars`.
-pub(crate) fn read_file_chars(root: &Path, file_path: &str) -> Option<u64> {
+pub(crate) fn read_file_chars(root: &Path, file_path: &str, max_file_bytes: u64) -> Option<u64> {
     let rel = Path::new(file_path);
     if !is_safe_relative_path(rel) {
         return None;
@@ -137,11 +159,14 @@ pub(crate) fn read_file_chars(root: &Path, file_path: &str) -> Option<u64> {
     // a local writer who already controls the indexed tree.
     let file = std::fs::File::open(&canonical).ok()?;
     let meta = file.metadata().ok()?;
-    let max_file_bytes = get_max_file_bytes();
     if !meta.is_file() || meta.len() > max_file_bytes {
         return None;
     }
-    let mut bytes = Vec::with_capacity(meta.len() as usize);
+    // Reserve what the file claims, but never more than the default ceiling: a
+    // raised `CSP_MAX_FILE_BYTES` must not let one search result reserve
+    // gigabytes up front. `read_to_end` grows past it if the file really is
+    // that large.
+    let mut bytes = Vec::with_capacity(meta.len().min(READ_PREALLOC_CAP) as usize);
     file.take(max_file_bytes.saturating_add(1))
         .read_to_end(&mut bytes)
         .ok()?;
@@ -262,12 +287,16 @@ mod tests {
 
     #[test]
     fn lazy_skips_files_larger_than_the_indexing_ceiling() {
+        // The ceiling is pinned, not read from the ambient `CSP_MAX_FILE_BYTES`:
+        // the fixture size must not depend on the environment the suite runs in.
+        const LIMIT: u64 = 1_024;
         let root = tempdir().unwrap();
-        let big = vec![b'a'; get_max_file_bytes() as usize + 1];
-        std::fs::write(root.path().join("grown.ts"), &big).unwrap();
-        let sizes = FileSizes::lazy(root.path().to_path_buf());
+        std::fs::write(root.path().join("grown.ts"), vec![b'a'; LIMIT as usize + 1]).unwrap();
+        std::fs::write(root.path().join("fits.ts"), vec![b'a'; LIMIT as usize]).unwrap();
+        let sizes = FileSizes::lazy_with_limit(root.path().to_path_buf(), LIMIT);
 
         assert_eq!(sizes.get("grown.ts"), None);
+        assert_eq!(sizes.get("fits.ts"), Some(LIMIT));
     }
 
     #[test]

@@ -297,26 +297,35 @@ Ported faithfully (`LazyLock<Regex>` for the static patterns, `RefCell<HashMap>`
 - **Cache key source identity** (`normalize_source`): local paths are made absolute with
   `std::path::absolute` and then path-normalized before hashing, so `.`, `./r/../r`, and
   `/abs/r` share one leaf and two repos searched with the default `.` no longer collide
-  (#100; upstream `cache_key` uses `Path.resolve()`). The keyed form equals the manifest
-  `sourceId` that `from_path` records. Git URLs stay verbatim.
+  (#100; upstream `cache_key` uses `Path.resolve()`). It is **not** byte-identical to the
+  manifest `sourceId`: `from_path` records bare `std::path::absolute(root)`, which keeps the
+  `..` segments this collapses, so anything comparing the two must normalize both sides.
+  The `\`→`/` rewrite is Windows-only — on Unix a backslash is an ordinary filename byte, and
+  folding it would collide `/repos/a\b` with `/repos/a/b`. Git URLs stay verbatim.
 - `clear_index_cache` removes only the index dir — never the `~/.csp` home (which also holds
   `savings.jsonl`).
 - `clear_orphan_indexes` (← upstream `cli.py::_clear_orphans`, #243) removes per-source leaves
   whose manifest `sourceId` is a local path that is now `NotFound`. Same root guard as
   `clear_index_cache`; a leaf is considered only when its directory name has the cache-key
   shape (32 lowercase hex, mirroring upstream's `_SHA_256_REGEX`), so stray directories are
-  never swept. **Drift note:** upstream can guard with `cache_key(root_path) == dir name`
-  because its `cache_key` resolves the path (`Path(p).expanduser().resolve()`); csp's
-  `resolve_cache_dir` normalizes only lexically while the manifest records
-  `std::path::absolute`, so the two never agree for a relative source (`csp search "q" .`) —
-  the key must not be re-derived here. Git leaves are excluded by `is_git_url(sourceId)`
-  (`from_git` re-roots the manifest to the URL, unlike upstream, which stores the temp clone
-  dir). Relative `sourceId`s are skipped (they would resolve against the caller's cwd), and
-  only a `NotFound` counts as gone — a source that errors for another reason (unreadable
-  parent, stale network handle) keeps its cache; an unmounted volume's path is simply absent
-  and is swept like upstream. Traversal errors in the index root fail the sweep instead of
-  being skipped. Exposed as `csp clear orphans`; not part of `clear all` (matches
-  upstream).
+  never swept. **Drift note:** upstream guards with `cache_key(root_path) == dir name`; csp
+  cannot, because `resolve_cache_dir` folds `CacheLocation::git_ref` into the key while
+  `IndexManifest` has no `ref` field — a local entry built with `--ref` would never re-derive
+  its own key (see `orphans_removes_local_entry_built_with_a_ref`). Since #100 the source
+  identities *do* agree for a plain relative source; the ref (and `from_path` keeping `..`
+  segments the key collapses) is what still blocks re-derivation. Git leaves are excluded by
+  `is_git_url(sourceId)` (`from_git` re-roots the manifest to the URL, unlike upstream, which
+  stores the temp clone dir). Relative `sourceId`s are skipped (they would resolve against the
+  caller's cwd), and only a `NotFound` counts as gone — a source that errors for another
+  reason (unreadable parent, stale network handle) keeps its cache; an unmounted volume's path
+  is simply absent and is swept like upstream. Because `from_path` records an unnormalized
+  absolute path, `source_is_gone` requires *both* the recorded spelling and its normalized form
+  to be `NotFound`: the kernel resolves `..` component-by-component, so `csp search "q" ../b`
+  records `/cwd/../b` and deleting only `/cwd` would otherwise sweep the live `/b` index.
+  Traversal errors in the index root fail the sweep before anything is deleted; a per-entry
+  removal failure is collected in `OrphanSweep::errors` and the sweep continues, so partial
+  progress is still reported and one undeletable leaf cannot permanently block the rest.
+  Exposed as `csp clear orphans`; not part of `clear all` (matches upstream).
 - **Cache validity** (`try_reuse`): a cached index is reused only when the manifest's
   `chunk_size` equals the current `DESIRED_CHUNK_LENGTH_CHARS` (a manifest predating the field
   → `None` → rebuild) **and**, for local sources, the live source-file content hash matches.

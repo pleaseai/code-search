@@ -33,10 +33,6 @@ pub const SERVER_INSTRUCTIONS: &str = concat!(
     "Prefer these tools over Grep, Glob, or Read for any question about how code works."
 );
 
-/// Every content type in canonical (enum) order — the expansion of `all` and
-/// the ordering used to normalize cache keys.
-const ALL_CONTENT: [ContentType; 3] = [ContentType::Code, ContentType::Docs, ContentType::Config];
-
 /// Per-call content selection accepted by the MCP tools (`code | docs | config
 /// | all`). Mirrors upstream semble's `ContentSelection` literal (#247).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -51,8 +47,9 @@ pub enum ContentSelection {
 
 /// Canonical form of a content list: every [`ContentType`] present, once, in
 /// enum (`Ord`) order — so `[Docs, Code, Docs]` and `[Code, Docs]` name the
-/// same index.
-pub fn normalize_content(content: &[ContentType]) -> Vec<ContentType> {
+/// same index. Named apart from `indexing::index::normalize_content`, which
+/// fills in the default selection rather than canonicalizing one.
+pub fn canonical_content(content: &[ContentType]) -> Vec<ContentType> {
     content
         .iter()
         .copied()
@@ -69,8 +66,8 @@ pub fn resolve_content_selection(
     default_content: &[ContentType],
 ) -> Vec<ContentType> {
     match selection {
-        None => normalize_content(default_content),
-        Some(ContentSelection::All) => ALL_CONTENT.to_vec(),
+        None => canonical_content(default_content),
+        Some(ContentSelection::All) => ContentType::ALL.to_vec(),
         Some(ContentSelection::Code) => vec![ContentType::Code],
         Some(ContentSelection::Docs) => vec![ContentType::Docs],
         Some(ContentSelection::Config) => vec![ContentType::Config],
@@ -204,7 +201,7 @@ impl<S: LoadOrBuild> IndexCache<S> {
         };
         CacheKey {
             source,
-            content: normalize_content(content),
+            content: canonical_content(content),
         }
     }
 

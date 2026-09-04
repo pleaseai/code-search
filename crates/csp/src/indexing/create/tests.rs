@@ -64,12 +64,13 @@ fn skips_files_over_max_bytes() {
     std::fs::write(dir.path().join("big.ts"), "a".repeat(2_000_000)).unwrap();
     std::fs::write(dir.path().join("small.ts"), "export const x = 1\n").unwrap();
     let model = make_stub_model(4);
-    let result = create_index_from_path(
-        dir.path(),
-        &opts(&model, Some(dir.path().to_path_buf())),
-        None,
-    )
-    .unwrap();
+    // Pin the default explicitly: this test is about the ceiling, so it must not
+    // read whatever `CSP_MAX_FILE_BYTES` the suite happens to run under.
+    let options = CreateIndexOptions {
+        max_file_bytes: Some(DEFAULT_MAX_FILE_BYTES),
+        ..opts(&model, Some(dir.path().to_path_buf()))
+    };
+    let result = create_index_from_path(dir.path(), &options, None).unwrap();
     let paths: Vec<&str> = result.chunks.iter().map(|c| c.file_path.as_str()).collect();
     assert!(paths.contains(&"small.ts"));
     assert!(!paths.contains(&"big.ts"));
@@ -100,9 +101,20 @@ fn honors_configured_max_file_bytes() {
 
 #[test]
 fn skipped_large_warning_names_first_five_paths_and_count() {
-    assert_eq!(skipped_large_warning(&[], 1_000_000, true), None);
+    fn skipped(paths: &[&str]) -> SkippedLarge {
+        let mut out = SkippedLarge::default();
+        for p in paths {
+            out.push(|| (*p).to_string());
+        }
+        out
+    }
 
-    let two = vec!["a.ts".to_string(), "b.ts".to_string()];
+    assert_eq!(
+        skipped_large_warning(&SkippedLarge::default(), 1_000_000, true),
+        None
+    );
+
+    let two = skipped(&["a.ts", "b.ts"]);
     let msg = skipped_large_warning(&two, 1_000_000, true).unwrap();
     assert_eq!(
         msg,
@@ -110,8 +122,11 @@ fn skipped_large_warning_names_first_five_paths_and_count() {
          (raise CSP_MAX_FILE_BYTES to include them): a.ts, b.ts"
     );
 
-    let seven: Vec<String> = (1..=7).map(|i| format!("f{i}.ts")).collect();
+    let names: Vec<String> = (1..=7).map(|i| format!("f{i}.ts")).collect();
+    let seven = skipped(&names.iter().map(String::as_str).collect::<Vec<_>>());
     let msg = skipped_large_warning(&seven, 500, true).unwrap();
+    // Only the rendered sample is retained, never all seven.
+    assert_eq!(seven.samples.len(), 5);
     assert!(msg.starts_with("Skipped 7 file(s) exceeding the maximum file size of 500 bytes"));
     assert!(
         msg.ends_with("f1.ts, f2.ts, f3.ts, f4.ts, f5.ts ..."),
@@ -130,7 +145,8 @@ fn skipped_large_warning_names_first_five_paths_and_count() {
 
 #[test]
 fn skipped_large_warning_escapes_control_characters_in_paths() {
-    let hostile = vec!["evil\x1b[31m\nfake: ok.ts".to_string()];
+    let mut hostile = SkippedLarge::default();
+    hostile.push(|| "evil\x1b[31m\nfake: ok.ts".to_string());
     let msg = skipped_large_warning(&hostile, 10, true).unwrap();
     assert!(msg.ends_with("evil\\u{1b}[31m\\nfake: ok.ts"), "{msg}");
     assert!(!msg.contains('\n'));
