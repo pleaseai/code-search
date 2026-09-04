@@ -130,11 +130,16 @@ fn is_scp_git_url(path: &str) -> bool {
 ///
 /// A strict inner match (`line < end_line`) wins immediately; a boundary match
 /// (`line == end_line`) is kept only as a fallback so end-of-file lines still
-/// resolve. Mirrors `semble.utils.resolve_chunk`.
+/// resolve. Path separators (`\\` and `/`) are treated as equal on both sides,
+/// since chunk paths are stored with the platform-native separator and callers
+/// may pass either form (upstream semble #244). Mirrors `semble.utils.resolve_chunk`.
 pub fn resolve_chunk<'a>(chunks: &'a [Chunk], file_path: &str, line: u32) -> Option<&'a Chunk> {
     let mut fallback: Option<&Chunk> = None;
     for chunk in chunks {
-        if chunk.file_path == file_path && chunk.start_line <= line && line <= chunk.end_line {
+        if paths_eq_normalized(&chunk.file_path, file_path)
+            && chunk.start_line <= line
+            && line <= chunk.end_line
+        {
             if line < chunk.end_line {
                 return Some(chunk);
             }
@@ -144,6 +149,18 @@ pub fn resolve_chunk<'a>(chunks: &'a [Chunk], file_path: &str, line: u32) -> Opt
         }
     }
     fallback
+}
+
+/// Compare two paths treating `\\` and `/` as the same separator, without
+/// allocating. Equivalent to upstream's `a.replace("\\", "/") == b.replace("\\", "/")`.
+fn paths_eq_normalized(a: &str, b: &str) -> bool {
+    fn is_sep(c: u8) -> bool {
+        c == b'/' || c == b'\\'
+    }
+    a.len() == b.len()
+        && a.bytes()
+            .zip(b.bytes())
+            .all(|(x, y)| x == y || (is_sep(x) && is_sep(y)))
 }
 
 #[cfg(test)]
@@ -279,5 +296,25 @@ mod tests {
         let chunks = [chunk("a.ts", 1, 5)];
         assert_eq!(resolve_chunk(&chunks, "b.ts", 3), None);
         assert_eq!(resolve_chunk(&chunks, "a.ts", 99), None);
+    }
+
+    #[test]
+    fn resolve_chunk_backslash_input_matches_forward_slash_chunk() {
+        // Windows-style input against a chunk stored with `/` (semble #244).
+        let chunks = [chunk("src/lib/a.ts", 1, 10)];
+        assert_eq!(
+            resolve_chunk(&chunks, "src\\lib\\a.ts", 5),
+            Some(&chunks[0])
+        );
+    }
+
+    #[test]
+    fn resolve_chunk_forward_slash_input_matches_backslash_chunk() {
+        // Forward-slash input (e.g. copied from docs) against a chunk stored
+        // with the Windows-native `\` separator; boundary fallback still applies.
+        let chunks = [chunk("src\\lib\\a.ts", 1, 5)];
+        assert_eq!(resolve_chunk(&chunks, "src/lib/a.ts", 3), Some(&chunks[0]));
+        assert_eq!(resolve_chunk(&chunks, "src/lib/a.ts", 5), Some(&chunks[0]));
+        assert_eq!(resolve_chunk(&chunks, "src/lib/b.ts", 3), None);
     }
 }
