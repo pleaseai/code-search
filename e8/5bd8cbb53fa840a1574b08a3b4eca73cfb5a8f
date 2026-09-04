@@ -1,0 +1,28 @@
+crates/csp/src/indexing/file_sizes.rs
+  s_923dd716343962::t_fadfcdd2b7998d 10,107-120,124-128,184-199
+  s_18fa8c79afab57::t_cb74007599a112 200
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "e85bd8cbb53fa840a1574b08a3b4eca73cfb5a8f",
+  "prompts": {},
+  "sessions": {
+    "s_18fa8c79afab57": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc972861-ad16-41bc-87a2-78db96cdea30",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    },
+    "s_923dd716343962": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d2c679a7-326b-4be9-95e8-bff6997df687",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
