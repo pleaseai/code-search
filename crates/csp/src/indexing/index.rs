@@ -1,24 +1,26 @@
-//! `CspIndex` — the hybrid (dense + BM25) search orchestrator. Port of
-//! `src/indexing/index.ts` (← semble `index/index.py`).
+//! `CspIndex` — the hybrid (dense + BM25) search orchestrator. Port of semble
+//! `index/index.py`.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fmt::Write as _;
 use std::path::Path;
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::chunking::source::DESIRED_CHUNK_LENGTH_CHARS;
+use crate::indexing::cache::sha256_hex;
 use crate::indexing::create::{create_index_from_path, CreateIndexOptions};
 use crate::indexing::dense::{load_model, make_stub_model, Model, SelectableBasicBackend};
 use crate::indexing::file_sizes::{read_file_chars, FileSizes};
 use crate::indexing::sparse::Bm25Index;
+use crate::indexing::types::{FileManifest, PreviousIndex};
 use crate::search::{search as run_search, SearchOptions as RunSearchOptions, SearchResult};
 use crate::types::{chunk_from_dict, chunk_to_dict, Chunk, ChunkDict, ContentType, IndexStats};
 
-/// On-disk index schema version.
-pub const INDEX_SCHEMA_VERSION: u32 = 1;
+/// On-disk index schema version. Bump when the persisted layout changes so
+/// older caches are rebuilt rather than misread (v2: per-file `files` manifest
+/// + id-keyed `bm25.json`, upstream #225).
+pub const INDEX_SCHEMA_VERSION: u32 = 2;
 
 /// Default content selection (code-only).
 pub const DEFAULT_CONTENT: &[ContentType] = &[ContentType::Code];
@@ -43,6 +45,10 @@ pub struct IndexManifest {
     /// (mirrors semble `_metadata_matches`). `None` = built before this field
     /// existed → treated as a mismatch.
     pub chunk_size: Option<u32>,
+    /// Per-file content hash + chunk range, used for incremental reindexing
+    /// (mirrors upstream metadata `files`; hash-keyed instead of `mtime_ns`).
+    #[serde(default)]
+    pub files: FileManifest,
 }
 
 /// Query options for [`CspIndex::search`] / [`CspIndex::find_related`].
@@ -69,6 +75,8 @@ pub struct CspIndexState {
     pub model_path: String,
     pub root: Option<String>,
     pub content: Vec<ContentType>,
+    /// Per-file content hash + chunk range (empty for hand-built fixtures).
+    pub files: FileManifest,
 }
 
 /// Hybrid (dense + BM25) code search index.
@@ -81,6 +89,8 @@ pub struct CspIndex {
     pub model_path: String,
     pub root: Option<String>,
     pub content: Vec<ContentType>,
+    /// Per-file content hash + chunk range, used for incremental reindexing.
+    pub files: FileManifest,
     /// Per-file character counts (repo-relative path → UTF-16 length) for
     /// token-savings telemetry: read lazily from a still-present local source
     /// root, or captured at build time when the source won't outlive the build
@@ -103,12 +113,25 @@ impl CspIndex {
             model_path: state.model_path,
             root: state.root,
             content: state.content,
+            files: state.files,
             file_sizes: FileSizes::empty(),
         }
     }
 
     /// Build an index from a local directory.
     pub fn from_path(path: &Path, options: &LoadOptions) -> Result<Self, String> {
+        Self::from_path_with_previous(path, options, None)
+    }
+
+    /// Build an index from a local directory, reusing the unchanged files of a
+    /// compatible previous index (see
+    /// `cache_orchestrator::load_previous_for_incremental`). Only files whose
+    /// content hash changed are re-chunked and re-embedded.
+    pub fn from_path_with_previous(
+        path: &Path,
+        options: &LoadOptions,
+        previous: Option<PreviousIndex>,
+    ) -> Result<Self, String> {
         let meta = std::fs::metadata(path)
             .map_err(|_| format!("Path does not exist: {}", path.display()))?;
         if !meta.is_dir() {
@@ -126,6 +149,7 @@ impl CspIndex {
                 content: Some(content.clone()),
                 display_root: Some(path.to_path_buf()),
             },
+            previous,
         )?;
 
         // Absolute, like upstream's `path.resolve()`, so an index built from
@@ -139,6 +163,7 @@ impl CspIndex {
             model_path,
             root: Some(root.to_string_lossy().into_owned()),
             content,
+            files: result.files,
         });
         // The source tree stays on disk, so sizes are read lazily per result.
         index.file_sizes = FileSizes::lazy(root);
@@ -176,6 +201,7 @@ impl CspIndex {
             model_path: index.model_path,
             root: Some(url.to_string()),
             content: index.content,
+            files: index.files,
         });
         rerooted.file_sizes = file_sizes;
         Ok(rerooted)
@@ -306,12 +332,13 @@ impl CspIndex {
             schema_version: INDEX_SCHEMA_VERSION,
             content_hash: content_hash
                 .map(str::to_string)
-                .unwrap_or_else(|| hash_chunks(&chunks_json)),
+                .unwrap_or_else(|| sha256_hex(chunks_json.as_bytes())),
             source_id: self.root.clone(),
             content: self.content.clone(),
             model_id: self.model_path.clone(),
             model_kind: Some(self.model.kind().to_string()),
             chunk_size: Some(DESIRED_CHUNK_LENGTH_CHARS as u32),
+            files: self.files.clone(),
         };
         let manifest_json = serde_json::to_string(&manifest).map_err(|e| e.to_string())?;
         std::fs::write(dir.join("manifest.json"), manifest_json).map_err(|e| e.to_string())
@@ -347,17 +374,12 @@ impl CspIndex {
         }
         let manifest = parse_manifest(&value)?;
 
-        let chunks_raw =
-            std::fs::read_to_string(dir.join("chunks.json")).map_err(|e| e.to_string())?;
-        let chunk_values: Vec<serde_json::Value> =
-            serde_json::from_str(&chunks_raw).map_err(|e| e.to_string())?;
-        let mut chunks = Vec::with_capacity(chunk_values.len());
-        for v in &chunk_values {
-            chunks.push(chunk_from_dict(v).map_err(|e| e.to_string())?);
-        }
-
+        let chunks = read_chunks(dir)?;
         let bm25_index = Bm25Index::load(dir).map_err(|e| e.to_string())?;
         let semantic_index = SelectableBasicBackend::load(dir)?;
+        if chunks.len() != bm25_index.num_docs() || chunks.len() != semantic_index.vectors.len() {
+            return Err("Persisted index components have inconsistent document counts".to_string());
+        }
 
         let (model, model_path) = load_model(Some(&manifest.model_id));
         // Align the query model's dim with the persisted vectors.
@@ -375,6 +397,7 @@ impl CspIndex {
             model_path,
             root: manifest.source_id,
             content: manifest.content,
+            files: manifest.files,
         });
         // Read file sizes lazily from the source when it's a still-present local
         // directory — a deliberate divergence from upstream semble, which
@@ -409,6 +432,18 @@ fn compute_file_sizes(root: &Path, chunks: &[Chunk]) -> HashMap<String, u64> {
         .collect()
 }
 
+/// Read and validate `<dir>/chunks.json`.
+pub(crate) fn read_chunks(dir: &Path) -> Result<Vec<Chunk>, String> {
+    let chunks_raw = std::fs::read_to_string(dir.join("chunks.json")).map_err(|e| e.to_string())?;
+    let chunk_values: Vec<serde_json::Value> =
+        serde_json::from_str(&chunks_raw).map_err(|e| e.to_string())?;
+    let mut chunks = Vec::with_capacity(chunk_values.len());
+    for v in &chunk_values {
+        chunks.push(chunk_from_dict(v).map_err(|e| e.to_string())?);
+    }
+    Ok(chunks)
+}
+
 /// Shallow-clone `url` into `dir`, non-interactively. Rejects a ref starting
 /// with `-` (git-flag injection, CWE-88).
 fn clone_shallow(url: &str, dir: &Path, git_ref: Option<&str>) -> Result<(), String> {
@@ -440,18 +475,6 @@ fn clone_shallow(url: &str, dir: &Path, git_ref: Option<&str>) -> Result<(), Str
         return Err(format!("git clone failed for {url}: {detail}"));
     }
     Ok(())
-}
-
-/// Deterministic sha256 (hex) of the serialized chunks JSON.
-fn hash_chunks(chunks_json: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(chunks_json.as_bytes());
-    let digest = hasher.finalize();
-    let mut out = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        let _ = write!(out, "{byte:02x}");
-    }
-    out
 }
 
 /// Parse and validate a persisted manifest (an on-disk trust boundary).
@@ -508,6 +531,8 @@ pub fn parse_manifest(raw: &serde_json::Value) -> Result<IndexManifest, String> 
         content.push(parsed);
     }
 
+    let files = parse_file_manifest(obj.get("files"))?;
+
     Ok(IndexManifest {
         schema_version: u32::try_from(schema_version)
             .map_err(|_| "Invalid manifest: schemaVersion out of range")?,
@@ -517,7 +542,19 @@ pub fn parse_manifest(raw: &serde_json::Value) -> Result<IndexManifest, String> 
         model_id,
         model_kind,
         chunk_size,
+        files,
     })
+}
+
+/// Parse the per-file manifest. Absent/null → empty (a manifest without one
+/// cannot seed an incremental rebuild); malformed → error. Deserialised through
+/// `FileManifest`'s derive, the same one `save` serialises with, so the two
+/// halves of the on-disk format cannot drift.
+fn parse_file_manifest(raw: Option<&serde_json::Value>) -> Result<FileManifest, String> {
+    let Some(raw) = raw.filter(|v| !v.is_null()) else {
+        return Ok(FileManifest::new());
+    };
+    serde_json::from_value(raw.clone()).map_err(|e| format!("Invalid manifest: files: {e}"))
 }
 
 pub use crate::indexing::cache_orchestrator::{

@@ -13,3 +13,4 @@ pub mod file_walker;
 pub mod files;
 pub mod index;
 pub mod sparse;
+pub mod types;

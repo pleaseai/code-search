@@ -184,6 +184,12 @@ fn load_model_with(
 
 /// Embed chunks with the model — one row per chunk, `[]` for empty input.
 pub fn embed_chunks(model: &Model, chunks: &[Chunk]) -> Vec<Vec<f32>> {
+    embed_chunk_refs(model, &chunks.iter().collect::<Vec<_>>())
+}
+
+/// [`embed_chunks`] over borrowed chunks, so a caller embedding a subset of a
+/// chunk list does not have to clone the chunks to gather them.
+pub fn embed_chunk_refs(model: &Model, chunks: &[&Chunk]) -> Vec<Vec<f32>> {
     if chunks.is_empty() {
         return Vec::new();
     }

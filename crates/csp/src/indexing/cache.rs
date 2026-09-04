@@ -200,6 +200,14 @@ pub(crate) fn compute_content_hash_from_paths(mut files: Vec<(String, PathBuf)>)
     to_hex(&hasher.finalize())
 }
 
+/// sha256 (hex) of raw bytes — the per-file hash recorded in the index's file
+/// manifest for incremental reindexing.
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    to_hex(&hasher.finalize())
+}
+
 fn update_content_hash(hasher: &mut Sha256, path: &str, content: &[u8]) {
     let len16 = path.encode_utf16().count();
     hasher.update(format!("{len16}:{path}").as_bytes());

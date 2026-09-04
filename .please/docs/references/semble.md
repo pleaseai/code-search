@@ -77,10 +77,11 @@ The full ranking in `ranking::{boosting,penalties}` is now **wired** into `searc
 | `index/file_walker.py` | `csp/src/indexing/file_walker.rs` | ported (`.cspignore`) | gitignore-aware recursive walk (`ignore` crate idioms) |
 | `index/files.py` | `csp/src/indexing/files.rs` | ported | ext→language map, content-type sets, file status checks |
 | `index/dense.py` | `csp/src/indexing/dense.rs` | ported (real + stub) | `Model` enum, `embed_chunks`, `SelectableBasicBackend` cosine |
-| `index/sparse.py` | `csp/src/indexing/sparse.rs` | ported | `Bm25Index`, `enrich_for_bm25`, selector→mask |
-| `index/create.py` | `csp/src/indexing/create.rs` | ported | build BM25 + dense + chunks from a path |
+| `index/sparse.py` + `index/bm25.py` | `csp/src/indexing/sparse.rs` | ported (incremental) | id-keyed incremental `Bm25Index` (add/remove/doc order, `bm25.json` v2), `enrich_for_bm25`, selector→mask |
+| `index/types.py` | `csp/src/indexing/types.rs` | adapted (hash, not mtime) | `FileManifestEntry {hash,start,count}`, `PreviousIndex::try_new` alignment checks, `make_chunk_id` |
+| `index/create.py` | `csp/src/indexing/create.rs` | ported (incremental) | build BM25 + dense + chunks + `files` manifest from a path, reusing a `PreviousIndex`'s unchanged files |
 | `index/index.py` | `csp/src/indexing/index.rs` | ported | `CspIndex` orchestrator (from_path/from_git/search/find_related/save/load) + `load_or_build_index` |
-| `cache.py` | `csp/src/indexing/cache.rs` | adapted | content-hash cache at `~/.csp/index/` (ADR-0002), 0700 perms |
+| `cache.py` | `csp/src/indexing/cache.rs` + `cache_orchestrator.rs` | adapted | content-hash cache at `~/.csp/index/` (ADR-0002), 0700 perms; `try_reuse` + `load_previous_for_incremental` (ADR-0005) |
 | `search.py` | `csp/src/search.rs` | ported (ranking wired) | hybrid RRF + alpha blend; trait seams |
 | `ranking/weighting.py` | `csp/src/ranking/weighting.rs` | ported | adaptive alpha |
 | `ranking/boosting.py` | `csp/src/ranking/boosting.rs` | ported (wired) | query-type detection + definition/stem/embedded boosts |
@@ -185,24 +186,43 @@ Same contract as semble `tokens.py`:
 ### 4.7 `indexing/sparse.rs` — BM25 + enrichment
 
 - `enrich_for_bm25(chunk)` → `"{content} {stem} {stem} {dir[-3:]}"` — stem repeated twice to
-  up-weight path matches; last 3 parent dir components. `Bm25Index` ports the BM25 scoring
-  (`get_scores(tokens, weight_mask)`). `selector_to_mask(selector, size)` → `Vec<u8>` mask.
+  up-weight path matches; last 3 parent dir components. `selector_to_mask(selector, size)` →
+  `Vec<u8>` mask.
+- `Bm25Index` ports upstream's own incremental `BM25` class (`index/bm25.py`, #225): documents
+  are keyed on a stable chunk id (`"{path}:{slot}"`), `add_document` rejects duplicates,
+  `remove_document` drops a document's postings, and `set_doc_order(ids)` fixes the global
+  chunk-list order that `get_scores(tokens, weight_mask)` output is aligned to (ids not in the
+  corpus score 0). Internally ids are interned to `u32` slots (recycled on removal) and postings
+  are `term → {slot → tf}` so a removal is `O(terms in doc)`. `bm25.json` (v2) persists
+  `{documents: {id → {term → tf}}, docOrder}`; postings are rebuilt on load, and an order that
+  does not describe exactly the persisted documents is rejected. `build(docs)` remains as a
+  positional-id convenience for fixtures.
 
 ### 4.8 `indexing/create.rs` — index construction
 
-`create_index_from_path`: walk → per file: `detect_language`, size/empty gate, read text, store
-path **relative to `display_root`**, `chunk_source`. Then `embed_chunks` → dense matrix; build
-`Bm25Index` over `tokenize(enrich_for_bm25(chunk))`; wrap dense in `SelectableBasicBackend`.
-Empty → error.
+`create_index_from_path(path, options, previous)`: walk → per file: `detect_language`, size
+gate, read bytes, **sha256 the bytes**, store path **relative to `display_root`**. If `previous`
+has a manifest entry for the path with the same hash, the file's chunks and (already-normalised)
+vector rows are **moved** out of the previous index; otherwise the file is decoded, `chunk_source`d,
+its old BM25 slots removed and new ones added (`reindex_file`), and its chunks embedded. Paths in
+the previous manifest that the walk no longer yields have their postings removed. Finally
+`set_doc_order(chunk_ids)` and the rows are wrapped via `SelectableBasicBackend::from_normalized`.
+Returns chunks + BM25 + dense + a `files: FileManifest` (`{hash, start, count}` per file; a valid
+file that yields no chunks gets `count = 0`). Empty → error. Divergence from upstream: the reuse
+key is the content hash, not `mtime_ns` (ADR-0005); the "same vector layout → mutate in place"
+special case is unnecessary because rows are moved, never copied.
 
 ### 4.9 `indexing/index.rs` — `CspIndex` orchestrator
 
 The public façade (parallels `SembleIndex`):
-- `from_path`, `from_git` (git clone into a tempdir; repo-relative chunk paths), `search`
-  (`QueryOptions`), `find_related` (semantic kNN on the seed, same-language, excludes seed),
-  `save` / `load_from_disk` (persists chunks + bm25 + semantic + metadata).
+- `from_path` (= `from_path_with_previous(path, options, None)`), `from_git` (git clone into a
+  tempdir; repo-relative chunk paths), `search` (`QueryOptions`), `find_related` (semantic kNN
+  on the seed, same-language, excludes seed), `save` / `load_from_disk` (persists chunks + bm25 +
+  semantic + `manifest.json` incl. the per-file `files` manifest; `INDEX_SCHEMA_VERSION = 2`;
+  load rejects other versions and chunk/vector/BM25-order count mismatches).
 - `load_or_build_index` (`LoadOrBuildOptions`) — the cache-aware entry the CLI/MCP use: load from
-  `~/.csp/index/<hash>` on a validated hit, else build and persist.
+  `~/.csp/index/<hash>` on a validated hit; on a miss for a local path, seed the rebuild with
+  `load_previous_for_incremental` so unchanged files are reused (ADR-0005), then persist.
 - Builds file→indices and language→indices maps for selectors and stats.
 
 ### 4.10 `search.rs` — hybrid retrieval & fusion
@@ -277,7 +297,11 @@ Ported faithfully (`LazyLock<Regex>` for the static patterns, `RefCell<HashMap>`
   `chunk_size` equals the current `DESIRED_CHUNK_LENGTH_CHARS` (a manifest predating the field
   → `None` → rebuild) **and**, for local sources, the live source-file content hash matches.
   This mirrors upstream `_metadata_matches`, which gained a `chunk_size` check so the 1500→750
-  change auto-invalidates stale caches.
+  change auto-invalidates stale caches. The same `manifest_compatible` check (schema version,
+  chunk size, model id, model kind) gates `load_previous_for_incremental`, which then loads
+  chunks + vectors + BM25 and runs `PreviousIndex::try_new` alignment checks (counts agree,
+  manifest ranges tile the chunk list, chunk paths match their range, BM25 order == manifest-
+  derived ids). Any failure → `None` → full rebuild (mirrors upstream fail-closed behaviour).
 - **Divergence from upstream**: semble uses the OS cache dir (`~/Library/Caches/semble`, XDG,
   `%LOCALAPPDATA%`) + `SEMBLE_CACHE_LOCATION`; csp fixes a global `~/.csp/index/` per ADR-0002.
 
@@ -367,6 +391,20 @@ Clean two-layer split:
 7. **Storage** — fixed `~/.csp/index/` (0700) + `~/.csp/savings.jsonl` (ADR-0002), not the OS
    cache dir / `SEMBLE_CACHE_LOCATION`. `.cspignore` (not `.sembleignore`).
 8. **CLI** — clap; `init` (not `install`/`uninstall`); explicit `mcp` subcommand; adds `index`.
+9. **Incremental reindex keyed on per-file content hash** (ADR-0005) — upstream #225 records
+   `mtime_ns` per file; csp records the sha256 of the file bytes so the per-file decision uses
+   the same oracle as the whole-tree `contentHash` fast path (ADR-0002).
+10. **BM25 scoring unchanged** — csp keeps the Lucene `(k1+1)` numerator and de-duplicates
+    query terms; upstream's own `BM25` (#225) dropped `(k1+1)` and multiplies each term's
+    contribution by the query term frequency. The `(k1+1)` factor is a single global constant,
+    so dropping it is rank-neutral. The query-tf factor is **not** — it reweights terms against
+    one another whenever a query tokenises to a repeated token, which the identifier-aware
+    tokenizer makes common (`getUserById getUser` repeats `get` and `user`). Ranks can
+    therefore differ from upstream: for query tokens `[a, a, b]` with per-term contributions
+    `a → 1.0` (doc1) and `b → 1.8` (doc2), upstream scores doc1 `2.0` > doc2 `1.8` while csp
+    scores doc1 `1.0` < doc2 `1.8`. This is a **live parity gap**, not a rank-neutral
+    adaptation, and it predates #225; it is tracked here rather than fixed in the incremental
+    port.
 
 ### 6.2 Open stubs & gaps (verify before claiming runtime parity)
 
@@ -389,6 +427,11 @@ Clean two-layer split:
   manifest as `chunk_size` and validated in `try_reuse`, so the change auto-invalidates stale
   caches (mirrors upstream's added metadata field + cache check). The TS source still uses 1500,
   but per the current direction Python upstream — not TS — is the source of truth.
+- **Partial (incremental) reindexing (#225, `204ae4e`) — ported** ([#84](https://github.com/pleaseai/code-search/issues/84),
+  ADR-0005): per-file `files` manifest, id-keyed incremental `Bm25Index`, `PreviousIndex`
+  reuse in `create_index_from_path`, `load_previous_for_incremental` in the orchestrator,
+  `INDEX_SCHEMA_VERSION` 1 → 2. See §4.7 / §4.8 / §4.9 / §4.14 and §6.1 items 9–10 for the
+  two intentional deviations (hash vs mtime, scoring scale).
 
 ---
 
