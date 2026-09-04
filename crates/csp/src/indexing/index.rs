@@ -132,7 +132,14 @@ impl CspIndex {
             semantic_index: result.semantic_index,
             chunks: result.chunks,
             model_path,
-            root: Some(path.to_string_lossy().into_owned()),
+            // Absolute, like upstream's `path.resolve()`, so an index built from
+            // `.` still finds its source tree when loaded from another cwd.
+            root: Some(
+                std::path::absolute(path)
+                    .unwrap_or_else(|_| path.to_path_buf())
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
             content,
         });
         // Capture file sizes now, while the source tree is on disk.
@@ -392,7 +399,9 @@ impl CspIndex {
 /// Chunk paths are repo-relative by construction; a path that is absolute or
 /// escapes `root` via `..` can only come from a tampered on-disk index, so it is
 /// skipped rather than resolved (path traversal guard — a deliberate addition
-/// over upstream, which joins the path unchecked).
+/// over upstream, which joins the path unchecked). Only regular files are read:
+/// the file walker never follows symlinks, and a path that has since become a
+/// symlink, FIFO, or device must not be able to redirect or stall the read.
 fn compute_file_sizes(root: &Path, chunks: &[Chunk]) -> HashMap<String, u64> {
     let mut sizes: HashMap<String, u64> = HashMap::new();
     for chunk in chunks {
@@ -403,7 +412,14 @@ fn compute_file_sizes(root: &Path, chunks: &[Chunk]) -> HashMap<String, u64> {
         if !is_safe_relative_path(rel) {
             continue;
         }
-        if let Ok(text) = std::fs::read_to_string(root.join(rel)) {
+        let full = root.join(rel);
+        let is_regular_file = std::fs::symlink_metadata(&full)
+            .map(|m| m.is_file())
+            .unwrap_or(false);
+        if !is_regular_file {
+            continue;
+        }
+        if let Ok(text) = std::fs::read_to_string(&full) {
             sizes.insert(chunk.file_path.clone(), text.encode_utf16().count() as u64);
         }
     }

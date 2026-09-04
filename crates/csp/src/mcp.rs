@@ -242,6 +242,8 @@ pub fn get_index<S: LoadOrBuild>(
 /// `search` tool handler. Returns a JSON string (results or `{error}`), or an
 /// error message string on failure (mirroring the TS handler's catch).
 /// `stats_file`, when `Some`, records token-savings telemetry (tests pass `None`).
+// Positional transport params mirror the MCP tool signature; a struct would just
+// move the plumbing without clarifying it (same call as `find_related_tool`).
 #[allow(clippy::too_many_arguments)]
 pub fn search_tool<S: LoadOrBuild>(
     cache: &mut IndexCache<S>,

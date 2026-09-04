@@ -241,6 +241,20 @@ fn from_path_builds_index() {
     assert_eq!(idx.content, DEFAULT_CONTENT.to_vec());
 }
 
+#[test]
+fn from_path_stores_absolute_root_for_relative_path() {
+    // Built from a cwd-relative path; `root` must still come out absolute so a
+    // reload from another cwd can find the source tree (upstream `path.resolve()`).
+    let dir = tempfile::Builder::new().tempdir_in(".").unwrap();
+    std::fs::write(dir.path().join("sample.ts"), "export const x = 1\n").unwrap();
+    let relative = Path::new(dir.path().file_name().unwrap());
+    assert!(relative.is_relative());
+    let idx = CspIndex::from_path(relative, &LoadOptions::default()).unwrap();
+    let root = idx.root.as_deref().unwrap();
+    assert!(Path::new(root).is_absolute(), "root was {root}");
+    assert!(root.ends_with(relative.to_str().unwrap()));
+}
+
 // --- from_git ---
 
 #[test]
@@ -317,4 +331,27 @@ fn compute_file_sizes_skips_paths_that_escape_root() {
     assert_eq!(sizes.get("inside.ts"), Some(&3));
     assert!(!sizes.contains_key("../secret.txt"));
     assert!(!sizes.contains_key(abs.as_str()));
+}
+
+#[cfg(unix)]
+#[test]
+fn compute_file_sizes_skips_symlinks_and_non_regular_files() {
+    let outer = tempdir().unwrap();
+    let root = outer.path().join("repo");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(root.join("real.ts"), "abcd").unwrap();
+    std::fs::write(outer.path().join("secret.txt"), "top secret").unwrap();
+    std::os::unix::fs::symlink(outer.path().join("secret.txt"), root.join("link.ts")).unwrap();
+    std::fs::create_dir(root.join("dir.ts")).unwrap();
+
+    let chunks = vec![
+        make_chunk("real.ts", 1, 1, None, "abcd"),
+        make_chunk("link.ts", 1, 1, None, "x"),
+        make_chunk("dir.ts", 1, 1, None, "x"),
+    ];
+    let sizes = compute_file_sizes(&root, &chunks);
+
+    assert_eq!(sizes.get("real.ts"), Some(&4));
+    assert!(!sizes.contains_key("link.ts"));
+    assert!(!sizes.contains_key("dir.ts"));
 }
