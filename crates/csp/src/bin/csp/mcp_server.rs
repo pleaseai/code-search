@@ -11,10 +11,10 @@ use anyhow::Result;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content, ServerCapabilities, ServerInfo};
-use rmcp::transport::stdio;
 use rmcp::{tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler, ServiceExt};
 use tokio::sync::Mutex;
 
+use crate::mcp_transport::ContentLengthTransport;
 use csp::mcp::{find_related_tool, search_tool, IndexCache, SERVER_INSTRUCTIONS};
 use csp::types::ContentType;
 
@@ -131,7 +131,7 @@ pub fn run_mcp(
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async move {
         let service = CspMcpServer::new(default_source, default_ref, content)
-            .serve(stdio())
+            .serve(ContentLengthTransport::<rmcp::RoleServer>::stdio())
             .await?;
         service.waiting().await?;
         Ok::<(), anyhow::Error>(())

@@ -3,9 +3,8 @@
 //! Wires the clap subcommands to the `csp` core: search / find-related route
 //! through the on-disk auto-cache (or an explicit `--index`), index builds and
 //! persists, savings/clear drive telemetry, and init writes an agent file.
-
 mod mcp_server;
-
+mod mcp_transport;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
