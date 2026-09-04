@@ -1,0 +1,42 @@
+crates/csp/src/chunking/core.rs
+  s_13cf2c960d5894::t_1eeba350e418d9 212-214
+crates/csp/src/stats.rs
+  s_13cf2c960d5894::t_1eeba350e418d9 85-105,107-108,114,116-119,506,519-555,561-567,579-585,600,607
+crates/csp/src/mcp.rs
+  s_13cf2c960d5894::t_1eeba350e418d9 12,22-23,244-247,255-256,269-277,281,286-288,297-298,324-332,336-341,564-573,596-605,609-651,657-667,674-684
+crates/csp/src/bin/csp/mcp_server.rs
+  s_13cf2c960d5894::t_1eeba350e418d9 19,21-27,39-43,57-60,69-71,86,106-107,128-129,180-181,186-187,192-203,241,246-247,253,281
+README.ko.md
+  s_13cf2c960d5894::t_1eeba350e418d9 133-138,358
+  s_13cf2c960d5894::t_c07d4ad2be5e3f 359
+crates/csp/src/indexing/index/tests.rs
+  s_13cf2c960d5894::t_1eeba350e418d9 278-291,348-391
+crates/csp/src/indexing/index.rs
+  s_13cf2c960d5894::t_1eeba350e418d9 4,93-97,115,153,159-166,169-172,193-195,198,207-209,394,403-413,417-462
+  s_13cf2c960d5894::t_48cc59954c7540 463
+  s_13cf2c960d5894::t_e60f0de33c71bb 464
+README.md
+  s_13cf2c960d5894::t_1eeba350e418d9 133-138,358
+  s_13cf2c960d5894::t_51199f8b951b04 359
+crates/csp/src/bin/csp/main.rs
+  s_13cf2c960d5894::t_1eeba350e418d9 17-21,61-64,82-85,223-231,239-247,251,262-263,285-293,297-301,376-382,433,446-455,469,487-494,588,593-598,603-632,637,645,701-702,705,710-721,725-737,741-753,755-758,769
+crates/csp/src/utils.rs
+  s_13cf2c960d5894::t_1eeba350e418d9 5,7,9-27,29-32,34-51,55-61,64-67,153-167,178-225
+  s_13cf2c960d5894::t_6adf18e522e082 226
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "de6ff29a391b6572f8dcff421bf466343c9cd9c0",
+  "prompts": {},
+  "sessions": {
+    "s_13cf2c960d5894": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4cbe7dfc-c928-48d7-aa2a-4e59464bdf95",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
