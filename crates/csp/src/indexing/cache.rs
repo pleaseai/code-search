@@ -136,14 +136,24 @@ fn normalize_posix(path: &str) -> String {
     joined
 }
 
-/// Normalize a source identity: local paths are path-normalized, URLs (scheme://
-/// or scp-style `git@`) kept verbatim.
+/// Normalize a source identity: URLs (scheme:// or scp-style `git@`) are kept
+/// verbatim; local paths are made absolute against the current directory and
+/// then path-normalized, so `.`, `./repo/../repo`, and `/abs/repo` all key the
+/// same entry (mirrors upstream `cache_key`'s `Path.resolve()`). Absolutizing
+/// here — rather than only at the CLI edge — is what keeps every caller of
+/// `resolve_cache_dir` (CLI, MCP, SDK) on one key, and keeps the keyed form
+/// equal to the `sourceId` that `from_path` records in the manifest.
+/// `std::path::absolute` does not touch the filesystem, matching the in-memory
+/// MCP cache key and the manifest, so a path that does not exist yet still
+/// keys deterministically.
 fn normalize_source(source: &str) -> String {
     if is_url_scheme(source) || source.starts_with("git@") {
-        source.to_string()
-    } else {
-        normalize_posix(source)
+        return source.to_string();
     }
+    let absolute = std::path::absolute(source)
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| source.to_string());
+    normalize_posix(&absolute.replace('\\', "/"))
 }
 
 #[derive(Serialize)]
@@ -483,6 +493,52 @@ mod tests {
         let a = resolve_cache_dir("/repo", &[ContentType::Code], &loc(base));
         let b = resolve_cache_dir("/repo", &[ContentType::Code, ContentType::Docs], &loc(base));
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn cache_dir_relative_and_absolute_source_share_a_key() {
+        let base = Path::new("/h/.csp");
+        let cwd = std::env::current_dir().unwrap();
+        let dot = resolve_cache_dir(".", &[ContentType::Code], &loc(base));
+        let abs = resolve_cache_dir(&cwd.to_string_lossy(), &[ContentType::Code], &loc(base));
+        assert_eq!(dot, abs);
+
+        // Lexical detours resolve to the same absolute form.
+        let sub = cwd.join("sub");
+        let detour = resolve_cache_dir("./sub/../sub", &[ContentType::Code], &loc(base));
+        let direct = resolve_cache_dir(&sub.to_string_lossy(), &[ContentType::Code], &loc(base));
+        assert_eq!(detour, direct);
+        assert_ne!(dot, detour);
+    }
+
+    #[test]
+    fn cache_dir_relative_sources_key_by_their_absolute_form() {
+        // Two different relative names must not collide, and each must equal
+        // the key its absolute form produces — this is what makes `csp search`
+        // from two repos with the default `.` land in two cache entries.
+        let base = Path::new("/h/.csp");
+        let cwd = std::env::current_dir().unwrap();
+        let a = resolve_cache_dir("repo-a", &[ContentType::Code], &loc(base));
+        let b = resolve_cache_dir("repo-b", &[ContentType::Code], &loc(base));
+        assert_ne!(a, b);
+        let a_abs = cwd.join("repo-a");
+        assert_eq!(
+            a,
+            resolve_cache_dir(&a_abs.to_string_lossy(), &[ContentType::Code], &loc(base))
+        );
+    }
+
+    #[test]
+    fn cache_dir_keeps_git_urls_verbatim() {
+        let base = Path::new("/h/.csp");
+        let a = resolve_cache_dir("https://x/r.git", &[ContentType::Code], &loc(base));
+        let b = resolve_cache_dir("git@github.com:x/r.git", &[ContentType::Code], &loc(base));
+        assert_ne!(a, b);
+        // Re-resolving must not absolutize a URL against the cwd.
+        assert_eq!(
+            a,
+            resolve_cache_dir("https://x/r.git", &[ContentType::Code], &loc(base))
+        );
     }
 
     #[test]

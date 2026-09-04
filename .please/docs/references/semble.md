@@ -294,6 +294,11 @@ Ported faithfully (`LazyLock<Regex>` for the static patterns, `RefCell<HashMap>`
 - Cache home `$HOME/.csp` (override via `CacheLocation`), index root `<home>/index`, per-source
   leaf `<home>/index/<sha256-key>`. `ensure_cache_dir` creates the chain with **0700** perms
   (NFR-003), tightening pre-existing dirs on Unix.
+- **Cache key source identity** (`normalize_source`): local paths are made absolute with
+  `std::path::absolute` and then path-normalized before hashing, so `.`, `./r/../r`, and
+  `/abs/r` share one leaf and two repos searched with the default `.` no longer collide
+  (#100; upstream `cache_key` uses `Path.resolve()`). The keyed form equals the manifest
+  `sourceId` that `from_path` records. Git URLs stay verbatim.
 - `clear_index_cache` removes only the index dir — never the `~/.csp` home (which also holds
   `savings.jsonl`).
 - `clear_orphan_indexes` (← upstream `cli.py::_clear_orphans`, #243) removes per-source leaves
