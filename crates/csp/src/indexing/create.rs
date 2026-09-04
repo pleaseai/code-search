@@ -129,6 +129,19 @@ pub fn create_index_from_path(
                 .into_owned(),
             None => file_path.to_string_lossy().into_owned(),
         };
+        // `to_string_lossy` is not injective: on Unix, file names that differ
+        // only in invalid UTF-8 bytes collapse to the same display path, and the
+        // BM25 chunk ids derived from it would then collide and abort the whole
+        // build. Keep the first such file and skip the rest, as a valid UTF-8
+        // tree can never hit this.
+        if files.contains_key(&indexed_path) {
+            eprintln!(
+                "csp: skipping {}: its display path collides with an already indexed file \
+                 (non-UTF-8 file name)",
+                file_path.display()
+            );
+            continue;
+        }
         let previous_entry = previous_files.get(&indexed_path);
 
         // Unchanged file: move its previous chunk + vector rows out (each row is
@@ -468,6 +481,32 @@ mod tests {
         assert_eq!(result.files["pkg/z.ts"].count, 0);
         assert_eq!(result.files["pkg/z.ts"].start, result.files["pkg.ts"].start);
         // A freshly built index must always be a valid seed for the next pass.
+        into_previous(result);
+    }
+
+    /// Non-UTF-8 file names only exist on Unix filesystems that allow them
+    /// (APFS rejects them), so this runs on Linux only.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn colliding_lossy_paths_skip_the_duplicate_instead_of_aborting() {
+        use std::os::unix::ffi::OsStrExt;
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        let first = root.join(std::ffi::OsStr::from_bytes(b"a\xff.ts"));
+        let second = root.join(std::ffi::OsStr::from_bytes(b"a\xfe.ts"));
+        std::fs::write(&first, "function first_file() { return 1 }\n").unwrap();
+        std::fs::write(&second, "function second_file() { return 2 }\n").unwrap();
+        assert_eq!(
+            first.to_string_lossy(),
+            second.to_string_lossy(),
+            "test precondition: both names must collapse to one display path"
+        );
+
+        let model = make_stub_model(4);
+        let result =
+            create_index_from_path(&root, &opts(&model, Some(root.clone())), None).unwrap();
+        assert_eq!(result.files.len(), 1);
+        assert_eq!(result.bm25_index.corpus_size(), result.chunks.len());
         into_previous(result);
     }
 }
