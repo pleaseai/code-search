@@ -196,10 +196,11 @@ impl<S: LoadOrBuild> IndexCache<S> {
                 _ => source.to_string(),
             }
         } else {
-            // Absolutize without requiring existence (matches `path.resolve`).
-            std::path::absolute(source)
-                .map(|p| p.to_string_lossy().into_owned())
-                .unwrap_or_else(|_| source.to_string())
+            // Local paths go through the same normalizer as the on-disk cache
+            // key, so `.`, `./r/../r`, and `/abs/r` name one session entry too —
+            // a second spelling of the same repo must not cost a duplicate
+            // `Arc<CspIndex>` and an LRU slot, or make `evict` silently miss.
+            crate::indexing::cache::normalize_source(source)
         };
         CacheKey {
             source,
