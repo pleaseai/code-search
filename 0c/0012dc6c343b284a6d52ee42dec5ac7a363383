@@ -1,0 +1,32 @@
+README.ko.md
+  s_23552ffee24b4d::t_1ac0b2585fa084 360-361
+README.md
+  s_23552ffee24b4d::t_1ac0b2585fa084 360-361
+.please/docs/references/semble.md
+  s_23552ffee24b4d::t_1ac0b2585fa084 330-338,343-344
+crates/csp/src/mcp.rs
+  s_23552ffee24b4d::t_5291cbd78096fa 184-189,623-625,709-716
+  s_23552ffee24b4d::t_da08f4caac56da 30-31,35-76,143-151,153-157,159,165-172,177,190,200-203,207-209,214-221,226,256,258,273-275,285-287,292,315,321-323,333,338,376,381,436-437,520-522,527-593,596-597,599,601,607,609,612,616,622,628,634-635,637,644,650,658,665,667,673,681-682,688,694,701-702,708,717,722,729,755,762,776,785,798,805,819,827,837,845
+crates/csp/src/bin/csp/mcp_server.rs
+  s_23552ffee24b4d::t_5291cbd78096fa 18-21,47-49,67-69,72-73,79-81,96,99,112,120,135,144,168-169,199,237-284,322,336-400,416
+plugins/csp/README.md
+  s_23552ffee24b4d::t_1ac0b2585fa084 34
+crates/csp/src/types.rs
+  s_23552ffee24b4d::t_f1e79fabe49836 21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "0c0012dc6c343b284a6d52ee42dec5ac7a363383",
+  "prompts": {},
+  "sessions": {
+    "s_23552ffee24b4d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ec01b239-c933-4644-912a-0eb35743309b",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
