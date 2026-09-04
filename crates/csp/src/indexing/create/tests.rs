@@ -240,8 +240,13 @@ fn zero_chunk_file_does_not_break_manifest_tiling() {
     );
     let model = make_stub_model(4);
     let result = create_index_from_path(&root, &opts(&model, Some(root.clone())), None).unwrap();
-    assert_eq!(result.files["pkg/z.ts"].count, 0);
-    assert_eq!(result.files["pkg/z.ts"].start, result.files["pkg.ts"].start);
+    // `display_path` keeps the platform separator, so build the key with `join`.
+    let zero_path = Path::new("pkg").join("z.ts").to_string_lossy().into_owned();
+    assert_eq!(result.files[zero_path.as_str()].count, 0);
+    assert_eq!(
+        result.files[zero_path.as_str()].start,
+        result.files["pkg.ts"].start
+    );
     // A freshly built index must always be a valid seed for the next pass.
     into_previous(result);
 }
