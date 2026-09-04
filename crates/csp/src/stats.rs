@@ -7,13 +7,14 @@
 //! Time bucketing uses UTC `YYYY-MM-DD` (compared lexicographically, which is
 //! chronological); `now_secs` is injected so summaries/reports are testable.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::io::{IsTerminal, Write as _};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use crate::indexing::file_sizes::FileSizes;
 use crate::search::SearchResult;
 use crate::types::CallType;
 
@@ -110,7 +111,7 @@ pub fn save_search_stats(
     stats_file: &Path,
     results: &[SearchResult],
     call_type: CallType,
-    file_sizes: &HashMap<String, u64>,
+    file_sizes: &FileSizes,
     max_snippet_lines: Option<usize>,
 ) {
     let snippet_chars: u64 = results
@@ -123,10 +124,7 @@ pub fn save_search_stats(
             unique_paths.push(r.chunk.file_path.as_str());
         }
     }
-    let file_chars: u64 = unique_paths
-        .iter()
-        .filter_map(|p| file_sizes.get(*p).copied())
-        .sum();
+    let file_chars: u64 = unique_paths.iter().filter_map(|p| file_sizes.get(p)).sum();
 
     let record = StatsRecord {
         ts: now_secs(),
@@ -469,8 +467,8 @@ mod tests {
         }
     }
 
-    fn sizes(pairs: &[(&str, u64)]) -> HashMap<String, u64> {
-        pairs.iter().map(|(p, s)| ((*p).to_string(), *s)).collect()
+    fn sizes(pairs: &[(&str, u64)]) -> FileSizes {
+        FileSizes::captured(pairs.iter().map(|(p, s)| ((*p).to_string(), *s)).collect())
     }
 
     #[test]

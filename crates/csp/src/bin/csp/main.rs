@@ -616,8 +616,8 @@ mod tests {
     fn search_output_records_savings_when_stats_file_given() {
         let dir = build_index_dir();
         let idx = CspIndex::from_path(dir.path(), &LoadOptions::default()).unwrap();
-        // file_sizes is captured at build time from the source tree.
-        assert!(!idx.file_sizes.is_empty());
+        // The source tree is still on disk, so sizes are read lazily per result.
+        assert!(idx.file_sizes.is_available());
 
         let stats = tempdir().unwrap();
         let stats_file = stats.path().join("savings.jsonl");

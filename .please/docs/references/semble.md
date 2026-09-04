@@ -288,6 +288,10 @@ Ported faithfully (`LazyLock<Regex>` for the static patterns, `RefCell<HashMap>`
   (Total saved, efficiency bar, By Period; By Call Type gated behind `--verbose`). `clear_savings`.
 - **Divergence**: fixed `~/.csp/savings.jsonl` (not the OS cache dir); no `flock` (sub-4KB
   appends are atomic on POSIX); header is "Csp".
+- **Divergence** (issue #90): `file_chars` sizes come from `indexing::file_sizes::FileSizes` —
+  a local source root is read lazily per returned result with a memo, where upstream
+  `_compute_file_sizes` runs eagerly over every indexed file in `SembleIndex.__init__`. Git
+  sources still capture eagerly at clone time (the temp checkout is gone by search time).
 
 ### 4.16 MCP — `csp/src/mcp.rs` (core) + `csp/src/bin/csp/mcp_server.rs` (rmcp transport)
 

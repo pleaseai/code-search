@@ -355,3 +355,29 @@ fn compute_file_sizes_skips_symlinks_and_non_regular_files() {
     assert!(!sizes.contains_key("link.ts"));
     assert!(!sizes.contains_key("dir.ts"));
 }
+
+#[test]
+fn from_path_reads_file_sizes_lazily() {
+    let dir = tempdir().unwrap();
+    std::fs::write(dir.path().join("sample.ts"), "export const x = 1\n").unwrap();
+
+    let idx = CspIndex::from_path(dir.path(), &LoadOptions::default()).unwrap();
+
+    assert!(idx.file_sizes.is_available());
+    assert_eq!(idx.file_sizes.get("sample.ts"), Some(19));
+}
+
+#[test]
+fn load_from_disk_has_no_file_sizes_when_source_is_gone() {
+    let source = tempdir().unwrap();
+    std::fs::write(source.path().join("sample.ts"), "export const x = 1\n").unwrap();
+    let idx = CspIndex::from_path(source.path(), &LoadOptions::default()).unwrap();
+    let cache = tempdir().unwrap();
+    idx.save(cache.path(), None).unwrap();
+    std::fs::remove_dir_all(source.path()).unwrap();
+
+    let loaded = CspIndex::load_from_disk(cache.path()).unwrap();
+
+    assert!(!loaded.file_sizes.is_available());
+    assert_eq!(loaded.file_sizes.get("sample.ts"), None);
+}
