@@ -385,7 +385,12 @@ pub fn clear_orphan_indexes(loc: &CacheLocation) -> Result<Vec<OrphanIndex>, Str
     // Traversal errors surface instead of being skipped: a silently dropped
     // entry would let an incomplete sweep report "no orphans found".
     let mut dirs: Vec<PathBuf> = Vec::new();
-    for entry in std::fs::read_dir(&real_index_root).map_err(|e| e.to_string())? {
+    for entry in std::fs::read_dir(&real_index_root).map_err(|e| {
+        format!(
+            "failed to read index root {}: {e}",
+            real_index_root.display()
+        )
+    })? {
         let entry =
             entry.map_err(|e| format!("failed to read {}: {e}", real_index_root.display()))?;
         let file_type = entry
