@@ -209,8 +209,9 @@ pub fn merge_node<N: AstNode>(node: &N, desired_length: usize) -> Vec<ChunkBound
 
 /// Split `text` into lines preserving the trailing newline on each line —
 /// equivalent to Python's `str.splitlines(keepends=True)` for `\n`, `\r\n`,
-/// and bare `\r`.
-fn split_lines_keep_ends(text: &str) -> Vec<&str> {
+/// and bare `\r`. Shared with `utils::result_to_dict` so a snippet cap counts
+/// lines exactly the way chunk `start_line`/`end_line` do.
+pub fn split_lines_keep_ends(text: &str) -> Vec<&str> {
     if text.is_empty() {
         return Vec::new();
     }
