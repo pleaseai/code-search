@@ -6,6 +6,7 @@
 //! - `compute_content_hash` — order-independent sha256 of a file set.
 //! - `ensure_cache_dir` — create the `~/.csp → index → leaf` chain with 0700 permissions (NFR-003), tightening any pre-existing directory (Unix).
 //! - `clear_index_cache` — safety-guarded removal of the index root only.
+//! - `clear_orphan_indexes` — remove entries whose local source path no longer exists.
 //!
 //! The `load_or_build_index` orchestration lands in T016 (it composes `CspIndex`,
 //! which depends on the dense index — T013).
@@ -20,7 +21,9 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+use crate::indexing::cache_orchestrator::read_manifest;
 use crate::types::ContentType;
+use crate::utils::is_git_url;
 
 /// Owner-only permissions for every cache directory (NFR-003).
 #[cfg(unix)]
@@ -53,6 +56,15 @@ pub struct ClearIndexResult {
     pub cleared: bool,
     /// Number of top-level cache entries removed (0 when nothing existed).
     pub entries: usize,
+}
+
+/// A cache entry removed by [`clear_orphan_indexes`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrphanIndex {
+    /// The removed entry directory (`<home>/index/<key>`).
+    pub path: PathBuf,
+    /// The local source path the entry's manifest recorded, which no longer exists.
+    pub source_id: String,
 }
 
 fn home_dir() -> PathBuf {
@@ -257,20 +269,15 @@ pub fn ensure_cache_dir(dir: &Path, loc: &CacheLocation) -> Result<(), String> {
     Ok(())
 }
 
-/// Remove the cached-index root (`<home>/index`) and report how many entries it
-/// held. Safety-critical (AC-015): deletes *only* the `index` directory — the
-/// resolved target must be the direct `index` child of the resolved home, so a
-/// symlinked or misconfigured root cannot escalate into a wider delete.
-pub fn clear_index_cache(loc: &CacheLocation) -> Result<ClearIndexResult, String> {
+/// Resolve the canonical index root the clear commands may delete under.
+/// Safety-critical (AC-015): the resolved target must be the direct `index`
+/// child of the resolved home, so a symlinked or misconfigured root cannot
+/// escalate into a wider delete. `Ok(None)` when no index root exists yet.
+fn guarded_index_root(loc: &CacheLocation) -> Result<Option<PathBuf>, String> {
     let home = cache_home(loc);
     let index_root = resolve_index_root(loc);
-
     if !index_root.exists() {
-        return Ok(ClearIndexResult {
-            path: index_root,
-            cleared: false,
-            entries: 0,
-        });
+        return Ok(None);
     }
 
     // Resolve symlinks before the guard so a symlinked `index` (or home) cannot
@@ -290,6 +297,20 @@ pub fn clear_index_cache(loc: &CacheLocation) -> Result<ClearIndexResult, String
             real_index_root.display()
         ));
     }
+    Ok(Some(real_index_root))
+}
+
+/// Remove the cached-index root (`<home>/index`) and report how many entries it
+/// held. Deletes *only* the `index` directory (see [`guarded_index_root`]).
+pub fn clear_index_cache(loc: &CacheLocation) -> Result<ClearIndexResult, String> {
+    let index_root = resolve_index_root(loc);
+    let Some(real_index_root) = guarded_index_root(loc)? else {
+        return Ok(ClearIndexResult {
+            path: index_root,
+            cleared: false,
+            entries: 0,
+        });
+    };
 
     let entries = std::fs::read_dir(&real_index_root)
         .map(Iterator::count)
@@ -301,6 +322,61 @@ pub fn clear_index_cache(loc: &CacheLocation) -> Result<ClearIndexResult, String
         cleared: true,
         entries,
     })
+}
+
+/// Remove cached indexes whose local source directory no longer exists (port of
+/// upstream `_clear_orphans`, semble#243). An entry qualifies only when its
+/// manifest records a non-empty local `sourceId` whose recomputed cache key
+/// equals the entry's directory name — git-URL entries (keyed by URL + ref, and
+/// built from a temp clone), unreadable or malformed manifests, and key
+/// mismatches are left untouched. Returns the removed entries, sorted by path.
+/// `clear all` deliberately does not include this pass.
+pub fn clear_orphan_indexes(loc: &CacheLocation) -> Result<Vec<OrphanIndex>, String> {
+    let Some(real_index_root) = guarded_index_root(loc)? else {
+        return Ok(Vec::new());
+    };
+    // Local sources carry no git ref in their key.
+    let key_loc = CacheLocation {
+        base_dir: loc.base_dir.clone(),
+        git_ref: None,
+    };
+
+    let mut dirs: Vec<PathBuf> = std::fs::read_dir(&real_index_root)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        // Real directories only: a symlinked entry could point outside the cache.
+        .filter(|entry| entry.file_type().is_ok_and(|t| t.is_dir()))
+        .map(|entry| entry.path())
+        .collect();
+    dirs.sort();
+
+    let mut removed = Vec::new();
+    for dir in dirs {
+        let Some(manifest) = read_manifest(&dir) else {
+            continue;
+        };
+        let Some(source_id) = manifest.source_id.filter(|s| !s.is_empty()) else {
+            continue;
+        };
+        if is_git_url(&source_id) {
+            continue;
+        }
+        // Trust the manifest only when it reproduces the entry's own key.
+        let expected = resolve_cache_dir(&source_id, &manifest.content, &key_loc);
+        if expected.file_name() != dir.file_name() {
+            continue;
+        }
+        if Path::new(&source_id).exists() {
+            continue;
+        }
+        std::fs::remove_dir_all(&dir)
+            .map_err(|e| format!("failed to remove {}: {e}", dir.display()))?;
+        removed.push(OrphanIndex {
+            path: dir,
+            source_id,
+        });
+    }
+    Ok(removed)
 }
 
 #[cfg(test)]
@@ -549,5 +625,137 @@ mod tests {
         let err = clear_index_cache(&loc(&base)).unwrap_err();
         assert!(err.contains("Refusing to clear unsafe"));
         assert!(outside_index.join("precious.txt").exists());
+    }
+
+    // --- clear_orphan_indexes ---
+
+    fn manifest_json(source_id: &str, content: &[ContentType]) -> String {
+        let manifest = crate::indexing::index::IndexManifest {
+            schema_version: crate::indexing::index::INDEX_SCHEMA_VERSION,
+            content_hash: "hash".to_string(),
+            source_id: Some(source_id.to_string()),
+            content: content.to_vec(),
+            model_id: "model".to_string(),
+            model_kind: Some("stub".to_string()),
+            chunk_size: Some(750),
+            files: Default::default(),
+        };
+        serde_json::to_string(&manifest).unwrap()
+    }
+
+    /// Write a cache entry keyed exactly as `load_or_build_index` would for
+    /// `source_id`, with a manifest recording that source.
+    fn write_entry(source_id: &str, entry_loc: &CacheLocation) -> PathBuf {
+        let dir = resolve_cache_dir(source_id, &[ContentType::Code], entry_loc);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("manifest.json"),
+            manifest_json(source_id, &[ContentType::Code]),
+        )
+        .unwrap();
+        dir
+    }
+
+    #[test]
+    fn orphans_removes_entry_whose_source_is_gone() {
+        let tmp = tempdir().unwrap();
+        let base = tmp.path().join(".csp");
+        let gone = tmp.path().join("gone-repo");
+        let dir = write_entry(&gone.to_string_lossy(), &loc(&base));
+
+        let removed = clear_orphan_indexes(&loc(&base)).unwrap();
+        assert_eq!(
+            removed,
+            vec![OrphanIndex {
+                path: std::fs::canonicalize(&base)
+                    .unwrap()
+                    .join("index")
+                    .join(dir.file_name().unwrap()),
+                source_id: gone.to_string_lossy().into_owned(),
+            }]
+        );
+        assert!(!dir.exists());
+        assert!(resolve_index_root(&loc(&base)).exists());
+    }
+
+    #[test]
+    fn orphans_keeps_entry_whose_source_exists() {
+        let tmp = tempdir().unwrap();
+        let base = tmp.path().join(".csp");
+        let live = tmp.path().join("live-repo");
+        std::fs::create_dir_all(&live).unwrap();
+        let dir = write_entry(&live.to_string_lossy(), &loc(&base));
+
+        assert!(clear_orphan_indexes(&loc(&base)).unwrap().is_empty());
+        assert!(dir.join("manifest.json").exists());
+    }
+
+    #[test]
+    fn orphans_keeps_git_entry() {
+        let tmp = tempdir().unwrap();
+        let base = tmp.path().join(".csp");
+        let mut git_loc = loc(&base);
+        git_loc.git_ref = Some("main".to_string());
+        let dir = write_entry("https://github.com/x/y.git", &git_loc);
+
+        assert!(clear_orphan_indexes(&loc(&base)).unwrap().is_empty());
+        assert!(dir.join("manifest.json").exists());
+    }
+
+    #[test]
+    fn orphans_keeps_entry_when_key_does_not_match_manifest() {
+        let tmp = tempdir().unwrap();
+        let base = tmp.path().join(".csp");
+        let gone = tmp.path().join("gone-repo");
+        let dir = resolve_index_root(&loc(&base)).join("0123456789abcdef0123456789abcdef");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("manifest.json"),
+            manifest_json(&gone.to_string_lossy(), &[ContentType::Code]),
+        )
+        .unwrap();
+
+        assert!(clear_orphan_indexes(&loc(&base)).unwrap().is_empty());
+        assert!(dir.join("manifest.json").exists());
+    }
+
+    #[test]
+    fn orphans_skips_malformed_or_missing_manifest() {
+        let tmp = tempdir().unwrap();
+        let base = tmp.path().join(".csp");
+        let root = resolve_index_root(&loc(&base));
+        let malformed = root.join("malformed");
+        std::fs::create_dir_all(&malformed).unwrap();
+        std::fs::write(malformed.join("manifest.json"), "not json").unwrap();
+        let missing = root.join("missing");
+        std::fs::create_dir_all(&missing).unwrap();
+        std::fs::write(root.join("stray-file"), "x").unwrap();
+
+        assert!(clear_orphan_indexes(&loc(&base)).unwrap().is_empty());
+        assert!(malformed.exists());
+        assert!(missing.exists());
+        assert!(root.join("stray-file").exists());
+    }
+
+    #[test]
+    fn orphans_reports_nothing_without_index_root() {
+        let tmp = tempdir().unwrap();
+        let base = tmp.path().join(".csp");
+        assert!(clear_orphan_indexes(&loc(&base)).unwrap().is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn orphans_refuses_symlinked_index_root() {
+        use std::os::unix::fs::symlink;
+        let tmp = tempdir().unwrap();
+        let base = tmp.path().join(".csp");
+        let victim = tmp.path().join("victim");
+        std::fs::create_dir_all(&victim).unwrap();
+        std::fs::create_dir_all(&base).unwrap();
+        symlink(&victim, resolve_index_root(&loc(&base))).unwrap();
+
+        let err = clear_orphan_indexes(&loc(&base)).unwrap_err();
+        assert!(err.contains("Refusing to clear unsafe"));
     }
 }

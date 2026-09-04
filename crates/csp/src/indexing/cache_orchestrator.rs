@@ -114,7 +114,7 @@ pub fn load_or_build_index(source: &str, options: &LoadOrBuildOptions) -> Result
 }
 
 /// Read and parse `<cache_dir>/manifest.json`, or `None` when absent/malformed.
-fn read_manifest(cache_dir: &Path) -> Option<IndexManifest> {
+pub(crate) fn read_manifest(cache_dir: &Path) -> Option<IndexManifest> {
     let raw = std::fs::read_to_string(cache_dir.join("manifest.json")).ok()?;
     let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
     parse_manifest(&value).ok()

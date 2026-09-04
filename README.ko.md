@@ -451,9 +451,12 @@ stdout이 컬러를 지원하는 TTY일 때 출력에 색이 입혀집니다(`NO
 csp clear savings  # ~/.csp/savings.jsonl 삭제
 csp clear index    # 글로벌 인덱스 캐시 ~/.csp/index/ 삭제
 csp clear all      # 인덱스 캐시와 savings 모두 삭제
+csp clear orphans  # 소스 디렉터리가 더 이상 없는 캐시 인덱스만 삭제
 ```
 
 `clear index`는 글로벌 인덱스 캐시 `~/.csp/index/`(여기에 `csp search`/`find-related`가 인덱스를 자동 캐시합니다)를 삭제하고 제거된 캐시 엔트리 수를 보고합니다. `~/.csp/savings.jsonl`은 보존됩니다. `clear all`은 `~/.csp/index/`와 `~/.csp/savings.jsonl`을 각각 독립적으로 삭제합니다.
+
+`clear orphans`는 `~/.csp/index/`를 순회하며 기록된 로컬 소스 경로가 더 이상 존재하지 않는 엔트리(예: 삭제했거나 옮긴 저장소)만 제거합니다. git URL로 만든 인덱스는 orphan으로 취급하지 않으며, 매니페스트로부터 재계산한 캐시 키가 엔트리 자신의 키와 일치할 때만 삭제합니다. `clear orphans`는 별도의 선택지이며 `clear all`에는 포함되지 않습니다.
 
 `csp index -o <경로>`로 명시적으로 기록한 인덱스 경로는 자동 캐시 대상이 아니므로 `clear`가 건드리지 않습니다. 해당 디렉터리는 직접 삭제하세요.
 

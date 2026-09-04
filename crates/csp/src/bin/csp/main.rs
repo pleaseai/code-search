@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use csp::indexing::cache::{clear_index_cache, CacheLocation};
+use csp::indexing::cache::{clear_index_cache, clear_orphan_indexes, CacheLocation};
 use csp::indexing::index::{
     load_or_build_index, CspIndex, LoadOptions, LoadOrBuildOptions, QueryOptions,
 };
@@ -120,12 +120,13 @@ enum Command {
     },
     /// Clear cached data.
     Clear {
-        /// One of: all, index, savings.
+        /// One of: all, index, savings, orphans. `orphans` removes cached
+        /// indexes whose source path no longer exists (not part of `all`).
         what: String,
     },
 }
 
-const CLEAR_CHOICES: &str = "all, index, savings";
+const CLEAR_CHOICES: &str = "all, index, savings, orphans";
 
 /// Process exit codes returned by `dispatch` / `run_clear` (mapped to
 /// `ExitCode` in `run`). Plain `u8` so tests can assert on them directly.
@@ -326,7 +327,7 @@ fn run_clear(what: &str) -> u8 {
 /// `run_clear` with the cache location and savings file injected, so tests can
 /// exercise the destructive branches against temp dirs instead of real `~/.csp`.
 fn run_clear_at(what: &str, cache_loc: &CacheLocation, stats_file: &Path) -> u8 {
-    if !["all", "index", "savings"].contains(&what) {
+    if !["all", "index", "savings", "orphans"].contains(&what) {
         eprintln!("Invalid clear type: {what}. Choices: {CLEAR_CHOICES}");
         return EXIT_FAILURE;
     }
@@ -355,6 +356,21 @@ fn run_clear_at(what: &str, cache_loc: &CacheLocation, stats_file: &Path) -> u8 
             println!("Cleared savings at `{}`", path.display());
         } else {
             println!("No savings file found at `{}`", path.display());
+        }
+    }
+    // Mirrors upstream: `orphans` is its own choice, never folded into `all`.
+    if what == "orphans" {
+        match clear_orphan_indexes(cache_loc) {
+            Ok(removed) if removed.is_empty() => println!("No orphaned indexes found"),
+            Ok(removed) => {
+                for orphan in removed {
+                    println!("Cleared orphaned index for `{}`", orphan.source_id);
+                }
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                failed = true;
+            }
         }
     }
     if failed {
@@ -673,6 +689,50 @@ mod tests {
         // Nothing there yet → still a clean (success) exit for each branch.
         assert_eq!(run_clear_at("index", &loc, &stats), EXIT_SUCCESS);
         assert_eq!(run_clear_at("savings", &loc, &stats), EXIT_SUCCESS);
+        assert_eq!(run_clear_at("all", &loc, &stats), EXIT_SUCCESS);
+        assert_eq!(run_clear_at("orphans", &loc, &stats), EXIT_SUCCESS);
+    }
+
+    #[test]
+    fn run_clear_at_orphans_removes_only_dead_sources() {
+        use csp::indexing::cache::resolve_cache_dir;
+        use csp::indexing::index::{IndexManifest, INDEX_SCHEMA_VERSION};
+
+        let home = tempdir().unwrap();
+        let loc = CacheLocation {
+            base_dir: Some(home.path().join(".csp")),
+            ..Default::default()
+        };
+        let stats = home.path().join("savings.jsonl");
+        let write_entry = |source: &Path| -> PathBuf {
+            let dir = resolve_cache_dir(&source.to_string_lossy(), &[ContentType::Code], &loc);
+            std::fs::create_dir_all(&dir).unwrap();
+            let manifest = IndexManifest {
+                schema_version: INDEX_SCHEMA_VERSION,
+                content_hash: "hash".to_string(),
+                source_id: Some(source.to_string_lossy().into_owned()),
+                content: vec![ContentType::Code],
+                model_id: "model".to_string(),
+                model_kind: Some("stub".to_string()),
+                chunk_size: Some(750),
+                files: Default::default(),
+            };
+            std::fs::write(
+                dir.join("manifest.json"),
+                serde_json::to_string(&manifest).unwrap(),
+            )
+            .unwrap();
+            dir
+        };
+        let live = home.path().join("live");
+        std::fs::create_dir_all(&live).unwrap();
+        let live_dir = write_entry(&live);
+        let dead_dir = write_entry(&home.path().join("gone"));
+
+        assert_eq!(run_clear_at("orphans", &loc, &stats), EXIT_SUCCESS);
+        assert!(live_dir.exists());
+        assert!(!dead_dir.exists());
+        // `all` never sweeps orphans on its own; it removes the whole root.
         assert_eq!(run_clear_at("all", &loc, &stats), EXIT_SUCCESS);
     }
 

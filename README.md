@@ -451,9 +451,12 @@ Stats are stored in `~/.csp/savings.jsonl`.
 csp clear savings  # delete ~/.csp/savings.jsonl
 csp clear index    # delete the global index cache at ~/.csp/index/
 csp clear all      # delete both the index cache and savings
+csp clear orphans  # delete cached indexes whose source directory no longer exists
 ```
 
 `clear index` removes the global index cache at `~/.csp/index/` (where `csp search`/`find-related` auto-cache indexes) and reports how many cached entries were removed; your `~/.csp/savings.jsonl` is preserved. `clear all` removes both `~/.csp/index/` and `~/.csp/savings.jsonl` as two independent actions.
+
+`clear orphans` walks `~/.csp/index/` and removes only the entries whose recorded local source path no longer exists (for example, a repo you deleted or moved). Indexes built from git URLs are never treated as orphans, and an entry is only removed when its manifest reproduces the entry's own cache key. `clear orphans` is a separate choice — `clear all` does not run it.
 
 Explicit index paths written with `csp index -o <path>` are not part of the auto-cache, so `clear` never touches them — delete those directories yourself.
 

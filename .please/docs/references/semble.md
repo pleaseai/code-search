@@ -293,6 +293,11 @@ Ported faithfully (`LazyLock<Regex>` for the static patterns, `RefCell<HashMap>`
   (NFR-003), tightening pre-existing dirs on Unix.
 - `clear_index_cache` removes only the index dir — never the `~/.csp` home (which also holds
   `savings.jsonl`).
+- `clear_orphan_indexes` (← upstream `cli.py::_clear_orphans`, #243) removes per-source leaves
+  whose manifest `sourceId` is a local path that no longer exists. Same root guard as
+  `clear_index_cache`; an entry is trusted only when `resolve_cache_dir(sourceId, content)`
+  reproduces its directory name, so git-URL leaves (URL + ref keyed) and malformed manifests
+  are skipped. Exposed as `csp clear orphans`; not part of `clear all` (matches upstream).
 - **Cache validity** (`try_reuse`): a cached index is reused only when the manifest's
   `chunk_size` equals the current `DESIRED_CHUNK_LENGTH_CHARS` (a manifest predating the field
   → `None` → rebuild) **and**, for local sources, the live source-file content hash matches.
@@ -336,7 +341,7 @@ Clean two-layer split:
 ### 4.17 `csp/src/bin/csp/main.rs` — CLI (clap)
 
 - `#[derive(Parser)]` with a `Command` `#[derive(Subcommand)]` enum: **search**, **find-related**,
-  **index** (build + persist a standalone index), **savings**, **clear** (`all|index|savings`),
+  **index** (build + persist a standalone index), **savings**, **clear** (`all|index|savings|orphans`),
   **init** (write an agent file), **mcp** (run the stdio server).
 - `search` / `find-related` route through `load_or_build_index` (or an explicit `--index` via
   `LoadOptions`). Output is the snake_case wire JSON (`utils::format_results`).
