@@ -120,9 +120,14 @@ pub(crate) fn read_file_chars(root: &Path, file_path: &str) -> Option<u64> {
     if !canonical.starts_with(root) {
         return None;
     }
-    // fstat the opened handle rather than the path, so the regular-file and
-    // size checks apply to what is actually read, and cap the read itself.
-    //
+    // Reject a non-regular file *before* opening it: `open(2)` on a FIFO
+    // blocks until a writer shows up, which would stall the search path, and
+    // opening a device node can have side effects. The fstat below re-checks
+    // the opened handle so the regular-file and size checks apply to what is
+    // actually read, and the read itself is capped.
+    if !std::fs::symlink_metadata(&canonical).ok()?.is_file() {
+        return None;
+    }
     // Residual race: `canonicalize` and `File::open` are separate path walks,
     // so a writer swapping a parent directory for a symlink in between can make
     // the open follow it to a regular file outside `root`. Closing that needs a
@@ -210,6 +215,23 @@ mod tests {
 
         let sizes = FileSizes::lazy(root);
         assert_eq!(sizes.get("vendor/leak.ts"), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn lazy_rejects_fifo_without_blocking() {
+        let root = tempdir().unwrap();
+        let fifo = root.path().join("pipe.ts");
+        let status = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap();
+        assert!(status.success());
+
+        // A FIFO with no writer would block `File::open` forever; the
+        // pre-open regular-file check must skip it instead.
+        let sizes = FileSizes::lazy(root.path().to_path_buf());
+        assert_eq!(sizes.get("pipe.ts"), None);
     }
 
     #[test]
