@@ -7,6 +7,7 @@
 //! returns is touched. Git sources still capture eagerly, at clone time.
 
 use std::collections::HashMap;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -103,11 +104,28 @@ pub(crate) fn read_file_chars(root: &Path, file_path: &str) -> Option<u64> {
         return None;
     }
     let full = root.join(rel);
-    let meta = std::fs::symlink_metadata(&full).ok()?;
+    // Reject a symlink at the leaf (the walker never indexes one) and, via
+    // canonicalization, a symlinked intermediate directory that would resolve
+    // the read outside `root`.
+    if std::fs::symlink_metadata(&full).ok()?.is_symlink() {
+        return None;
+    }
+    let canonical = full.canonicalize().ok()?;
+    if !canonical.starts_with(root.canonicalize().ok()?) {
+        return None;
+    }
+    // fstat the opened handle rather than the path, so the regular-file and
+    // size checks apply to what is actually read, and cap the read itself.
+    let file = std::fs::File::open(&canonical).ok()?;
+    let meta = file.metadata().ok()?;
     if !meta.is_file() || meta.len() > MAX_FILE_BYTES {
         return None;
     }
-    let bytes = std::fs::read(&full).ok()?;
+    let mut bytes = Vec::with_capacity(meta.len() as usize);
+    file.take(MAX_FILE_BYTES + 1).read_to_end(&mut bytes).ok()?;
+    if bytes.len() as u64 > MAX_FILE_BYTES {
+        return None;
+    }
     Some(String::from_utf8_lossy(&bytes).encode_utf16().count() as u64)
 }
 
@@ -161,6 +179,23 @@ mod tests {
         assert_eq!(sizes.get("dir.ts"), None);
         #[cfg(unix)]
         assert_eq!(sizes.get("link.ts"), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn lazy_rejects_symlinked_intermediate_directory() {
+        let outer = tempdir().unwrap();
+        let root = outer.path().join("repo");
+        std::fs::create_dir(&root).unwrap();
+        let outside = outer.path().join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::write(outside.join("leak.ts"), "top secret").unwrap();
+        // `repo/vendor` -> `../outside`: the leaf is a regular file, but the
+        // path only reaches it through a symlinked directory.
+        std::os::unix::fs::symlink(&outside, root.join("vendor")).unwrap();
+
+        let sizes = FileSizes::lazy(root);
+        assert_eq!(sizes.get("vendor/leak.ts"), None);
     }
 
     #[test]
