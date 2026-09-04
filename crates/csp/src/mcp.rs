@@ -9,6 +9,7 @@
 //! testable. [`IndexCache`] holds `Arc<CspIndex>` so it can be shared across the
 //! async server's tokio tasks.
 
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -18,7 +19,8 @@ use serde_json::json;
 use crate::indexing::index::{
     load_or_build_index, source_fingerprint, CspIndex, LoadOrBuildOptions, QueryOptions,
 };
-use crate::types::ContentType;
+use crate::stats::save_search_stats;
+use crate::types::{CallType, ContentType};
 use crate::utils::{format_results, is_git_url, resolve_chunk};
 
 /// Server instructions advertised to MCP clients (preserved for the transport).
@@ -239,6 +241,10 @@ pub fn get_index<S: LoadOrBuild>(
 
 /// `search` tool handler. Returns a JSON string (results or `{error}`), or an
 /// error message string on failure (mirroring the TS handler's catch).
+/// `stats_file`, when `Some`, records token-savings telemetry (tests pass `None`).
+// Positional transport params mirror the MCP tool signature; a struct would just
+// move the plumbing without clarifying it (same call as `find_related_tool`).
+#[allow(clippy::too_many_arguments)]
 pub fn search_tool<S: LoadOrBuild>(
     cache: &mut IndexCache<S>,
     default_source: Option<&str>,
@@ -247,6 +253,7 @@ pub fn search_tool<S: LoadOrBuild>(
     repo: Option<&str>,
     top_k: usize,
     max_snippet_lines: Option<usize>,
+    stats_file: Option<&Path>,
 ) -> String {
     let index = match get_index(repo, default_source, default_ref, cache) {
         Ok(idx) => idx,
@@ -259,6 +266,15 @@ pub fn search_tool<S: LoadOrBuild>(
             ..Default::default()
         },
     );
+    if let Some(stats_file) = stats_file {
+        save_search_stats(
+            stats_file,
+            &results,
+            CallType::Search,
+            &index.file_sizes,
+            max_snippet_lines,
+        );
+    }
     if results.is_empty() {
         json!({ "error": "No results found." }).to_string()
     } else {
@@ -279,6 +295,7 @@ pub fn find_related_tool<S: LoadOrBuild>(
     repo: Option<&str>,
     top_k: usize,
     max_snippet_lines: Option<usize>,
+    stats_file: Option<&Path>,
 ) -> String {
     let index = match get_index(repo, default_source, default_ref, cache) {
         Ok(idx) => idx,
@@ -304,6 +321,15 @@ pub fn find_related_tool<S: LoadOrBuild>(
             ..Default::default()
         },
     );
+    if let Some(stats_file) = stats_file {
+        save_search_stats(
+            stats_file,
+            &results,
+            CallType::FindRelated,
+            &index.file_sizes,
+            max_snippet_lines,
+        );
+    }
     if results.is_empty() {
         json!({ "error": format!("No related chunks found for {file_path}:{line}.") }).to_string()
     } else {
@@ -541,6 +567,7 @@ mod tests {
             None,
             5,
             None,
+            None,
         );
         assert_eq!(out, json!({ "error": "No results found." }).to_string());
     }
@@ -564,12 +591,42 @@ mod tests {
     #[test]
     fn search_tool_returns_results_json() {
         let mut cache = IndexCache::with_seam(vec![ContentType::Code], OneChunkSeam);
-        let out = search_tool(&mut cache, Some("/tmp/repo"), None, "main", None, 5, None);
+        let out = search_tool(
+            &mut cache,
+            Some("/tmp/repo"),
+            None,
+            "main",
+            None,
+            5,
+            None,
+            None,
+        );
         let value: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert!(value.get("query").is_some());
         assert!(value["results"].as_array().is_some());
         // Full content by default (max_snippet_lines = None).
         assert!(value["results"][0].get("content").is_some());
+    }
+
+    #[test]
+    fn search_tool_records_savings_when_stats_file_given() {
+        let mut cache = IndexCache::with_seam(vec![ContentType::Code], OneChunkSeam);
+        let dir = tempfile::tempdir().unwrap();
+        let stats_file = dir.path().join("savings.jsonl");
+        let _ = search_tool(
+            &mut cache,
+            Some("/tmp/repo"),
+            None,
+            "main",
+            None,
+            5,
+            None,
+            Some(&stats_file),
+        );
+        let content = std::fs::read_to_string(&stats_file).unwrap();
+        let lines: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("\"call\":\"search\""));
     }
 
     #[test]
@@ -583,6 +640,7 @@ mod tests {
             None,
             5,
             Some(0),
+            None,
         );
         let value: serde_json::Value = serde_json::from_str(&out).unwrap();
         let entry = &value["results"][0];
@@ -603,6 +661,7 @@ mod tests {
             None,
             5,
             None,
+            None,
         );
         assert!(out.contains("No chunk found at nope.ts:1"));
     }
@@ -618,6 +677,7 @@ mod tests {
             5,
             None,
             5,
+            None,
             None,
         );
         // Either related results or the no-related error — both valid JSON.

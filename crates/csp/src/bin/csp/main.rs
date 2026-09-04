@@ -14,8 +14,10 @@ use csp::indexing::cache::{clear_index_cache, CacheLocation};
 use csp::indexing::index::{
     load_or_build_index, CspIndex, LoadOptions, LoadOrBuildOptions, QueryOptions,
 };
-use csp::stats::{clear_savings, default_stats_file, format_savings_report, now_secs};
-use csp::types::ContentType;
+use csp::stats::{
+    clear_savings, default_stats_file, format_savings_report, now_secs, save_search_stats,
+};
+use csp::types::{CallType, ContentType};
 use csp::utils::{format_results, is_git_url, resolve_chunk, resolve_snippet_lines};
 
 #[derive(Parser)]
@@ -218,12 +220,14 @@ fn load_index(
     }
 }
 
-/// JSON output for `search` (pure — testable without stdout capture).
+/// JSON output for `search`. `stats_file` records token-savings telemetry when
+/// `Some`; tests pass `None` to stay off the real `~/.csp` file.
 fn search_output(
     index: &CspIndex,
     query: &str,
     top_k: usize,
     max_snippet_lines: Option<usize>,
+    stats_file: Option<&Path>,
 ) -> String {
     let results = index.search(
         query,
@@ -232,6 +236,15 @@ fn search_output(
             ..Default::default()
         },
     );
+    if let Some(stats_file) = stats_file {
+        save_search_stats(
+            stats_file,
+            &results,
+            CallType::Search,
+            &index.file_sizes,
+            max_snippet_lines,
+        );
+    }
     let out = if results.is_empty() {
         serde_json::json!({ "error": "No results found." })
     } else {
@@ -247,6 +260,7 @@ fn find_related_output(
     line: &str,
     top_k: usize,
     max_snippet_lines: Option<usize>,
+    stats_file: Option<&Path>,
 ) -> Result<String, String> {
     let Ok(line_num) = line.parse::<i64>() else {
         return Err(format!("line must be an integer, got: {line}"));
@@ -268,6 +282,15 @@ fn find_related_output(
             ..Default::default()
         },
     );
+    if let Some(stats_file) = stats_file {
+        save_search_stats(
+            stats_file,
+            &related,
+            CallType::FindRelated,
+            &index.file_sizes,
+            max_snippet_lines,
+        );
+    }
     let out = if related.is_empty() {
         serde_json::json!({ "error": format!("No related chunks found for {file}:{line_num}.") })
     } else {
@@ -350,6 +373,13 @@ fn run() -> ExitCode {
 /// `ExitCode` — so the dispatch logic is unit-testable without going through
 /// `Cli::parse` (which reads argv) or an opaque, non-comparable `ExitCode`.
 fn dispatch(command: Command) -> u8 {
+    dispatch_with_stats(command, &default_stats_file())
+}
+
+/// [`dispatch`] with the token-savings file injected so tests can redirect the
+/// telemetry that `search` / `find-related` append (keeping the real `~/.csp`
+/// untouched).
+fn dispatch_with_stats(command: Command, stats_file: &Path) -> u8 {
     match command {
         Command::Init { agent, force } => {
             let agent = agent.unwrap_or(Agent::Claude);
@@ -420,6 +450,7 @@ fn dispatch(command: Command) -> u8 {
                             &query,
                             top_k.unwrap_or(5),
                             resolve_snippet_lines(max_snippet_lines),
+                            Some(stats_file),
                         )
                     );
                     EXIT_SUCCESS
@@ -459,6 +490,7 @@ fn dispatch(command: Command) -> u8 {
                 &line,
                 top_k.unwrap_or(5),
                 resolve_snippet_lines(max_snippet_lines),
+                Some(stats_file),
             ) {
                 Ok(out) => {
                     println!("{out}");
@@ -553,7 +585,7 @@ mod tests {
     fn search_output_shapes_results() {
         let dir = build_index_dir();
         let idx = CspIndex::from_path(dir.path(), &LoadOptions::default()).unwrap();
-        let out = search_output(&idx, "greet", 5, None);
+        let out = search_output(&idx, "greet", 5, None, None);
         let value: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert!(value.get("results").is_some() || value.get("error").is_some());
         if let Some(results) = value.get("results").and_then(|r| r.as_array()) {
@@ -572,7 +604,7 @@ mod tests {
     fn search_output_caps_snippet_lines() {
         let dir = build_index_dir();
         let idx = CspIndex::from_path(dir.path(), &LoadOptions::default()).unwrap();
-        let out = search_output(&idx, "greet", 5, Some(0));
+        let out = search_output(&idx, "greet", 5, Some(0), None);
         let value: serde_json::Value = serde_json::from_str(&out).unwrap();
         if let Some(first) = value["results"].as_array().and_then(|r| r.first()) {
             assert!(first.get("content").is_none());
@@ -581,10 +613,28 @@ mod tests {
     }
 
     #[test]
+    fn search_output_records_savings_when_stats_file_given() {
+        let dir = build_index_dir();
+        let idx = CspIndex::from_path(dir.path(), &LoadOptions::default()).unwrap();
+        // file_sizes is captured at build time from the source tree.
+        assert!(!idx.file_sizes.is_empty());
+
+        let stats = tempdir().unwrap();
+        let stats_file = stats.path().join("savings.jsonl");
+        let _ = search_output(&idx, "greet", 5, None, Some(&stats_file));
+
+        let content = std::fs::read_to_string(&stats_file).unwrap();
+        let lines: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("\"call\":\"search\""));
+        assert!(lines[0].contains("file_chars"));
+    }
+
+    #[test]
     fn find_related_rejects_non_integer_line() {
         let dir = build_index_dir();
         let idx = CspIndex::from_path(dir.path(), &LoadOptions::default()).unwrap();
-        let err = find_related_output(&idx, "sample.ts", "abc", 5, None).unwrap_err();
+        let err = find_related_output(&idx, "sample.ts", "abc", 5, None, None).unwrap_err();
         assert!(err.contains("line must be an integer"));
     }
 
@@ -592,7 +642,7 @@ mod tests {
     fn find_related_no_chunk_at_location() {
         let dir = build_index_dir();
         let idx = CspIndex::from_path(dir.path(), &LoadOptions::default()).unwrap();
-        let err = find_related_output(&idx, "nope.ts", "1", 5, None).unwrap_err();
+        let err = find_related_output(&idx, "nope.ts", "1", 5, None, None).unwrap_err();
         assert!(err.contains("No chunk found"));
     }
 
@@ -648,49 +698,64 @@ mod tests {
     #[test]
     fn dispatch_index_then_search_and_find_related() {
         // Keep everything on an explicit --index path so the test never writes
-        // to the global ~/.csp auto-cache.
+        // to the global ~/.csp auto-cache, and redirect savings telemetry to a
+        // temp file so it never touches the real ~/.csp/savings.jsonl.
         let src = build_index_dir();
         let out = tempdir().unwrap();
+        let stats_file = out.path().join("savings.jsonl");
 
         assert_eq!(index_to(out.path(), src.path()), EXIT_SUCCESS);
 
         let idx_path = out.path().to_string_lossy().into_owned();
-        let search = dispatch(Command::Search {
-            query: "greet".to_string(),
-            path: None,
-            top_k: Some(5),
-            max_snippet_lines: None,
-            content: vec![],
-            index: Some(idx_path.clone()),
-            git_ref: None,
-        });
+        let search = dispatch_with_stats(
+            Command::Search {
+                query: "greet".to_string(),
+                path: None,
+                top_k: Some(5),
+                max_snippet_lines: None,
+                content: vec![],
+                index: Some(idx_path.clone()),
+                git_ref: None,
+            },
+            &stats_file,
+        );
         assert_eq!(search, EXIT_SUCCESS);
 
         // sample.ts:1 has an indexable chunk → find-related succeeds.
-        let related = dispatch(Command::FindRelated {
-            file: "sample.ts".to_string(),
-            line: "1".to_string(),
-            path: None,
-            top_k: Some(5),
-            max_snippet_lines: None,
-            content: vec![],
-            index: Some(idx_path.clone()),
-            git_ref: None,
-        });
+        let related = dispatch_with_stats(
+            Command::FindRelated {
+                file: "sample.ts".to_string(),
+                line: "1".to_string(),
+                path: None,
+                top_k: Some(5),
+                max_snippet_lines: None,
+                content: vec![],
+                index: Some(idx_path.clone()),
+                git_ref: None,
+            },
+            &stats_file,
+        );
         assert_eq!(related, EXIT_SUCCESS);
 
         // A non-integer line is a caller error → failure exit.
-        let bad = dispatch(Command::FindRelated {
-            file: "sample.ts".to_string(),
-            line: "abc".to_string(),
-            path: None,
-            top_k: Some(5),
-            max_snippet_lines: None,
-            content: vec![],
-            index: Some(idx_path),
-            git_ref: None,
-        });
+        let bad = dispatch_with_stats(
+            Command::FindRelated {
+                file: "sample.ts".to_string(),
+                line: "abc".to_string(),
+                path: None,
+                top_k: Some(5),
+                max_snippet_lines: None,
+                content: vec![],
+                index: Some(idx_path),
+                git_ref: None,
+            },
+            &stats_file,
+        );
         assert_eq!(bad, EXIT_FAILURE);
+
+        // The two successful calls appended one savings record each.
+        let recorded = std::fs::read_to_string(&stats_file).unwrap();
+        assert_eq!(recorded.lines().filter(|l| !l.is_empty()).count(), 2);
     }
 
     #[test]
