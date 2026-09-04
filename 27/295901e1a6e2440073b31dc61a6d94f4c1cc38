@@ -1,0 +1,22 @@
+.please/docs/references/semble.md
+  s_77361e52db353e::t_5ec791fa22a1c4 350-351
+crates/csp/src/utils.rs
+  s_77361e52db353e::t_3a2a190da29fcc 133-135,139-142,154-165,300-304,309-319
+  s_77361e52db353e::t_5ec791fa22a1c4 305-308
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "27295901e1a6e2440073b31dc61a6d94f4c1cc38",
+  "prompts": {},
+  "sessions": {
+    "s_77361e52db353e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "751fe97c-824b-48b8-a30a-9e5ede0ba723",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
