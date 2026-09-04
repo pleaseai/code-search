@@ -1,0 +1,14 @@
+crates/csp/src/indexing/file_sizes.rs
+  h_2d91ed03110ffb 119-126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "48dab116cf34d8dc3ad4bb5e97f9f653fbd4f414",
+  "prompts": {},
+  "humans": {
+    "h_2d91ed03110ffb": {
+      "author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
