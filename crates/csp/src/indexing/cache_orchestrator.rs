@@ -166,15 +166,17 @@ pub(crate) fn load_previous_for_incremental(
     }
 
     let chunks = read_chunks(cache_dir).ok()?;
-    let vectors = SelectableBasicBackend::load(cache_dir).ok()?.vectors;
+    let backend = SelectableBasicBackend::load(cache_dir).ok()?;
     // The persisted rows are concatenated with freshly embedded ones, so a model
     // whose dimension changed under an unchanged id would make the merged matrix
     // ragged — and `from_normalized` would then hard-error out of the rebuild
-    // instead of falling back to it. Fail closed here instead.
+    // instead of falling back to it. Fail closed here instead. `load` builds
+    // every row with exactly `dim` elements, so the backend's dim covers them all.
     let (query_model, _) = crate::indexing::dense::load_model(Some(expected_model));
-    if vectors.iter().any(|row| row.len() != query_model.dim()) {
+    if !backend.vectors.is_empty() && backend.dim != query_model.dim() {
         return None;
     }
+    let vectors = backend.vectors;
     let bm25_index = Bm25Index::load(cache_dir).ok()?;
     PreviousIndex::try_new(chunks, vectors, manifest.files, bm25_index).ok()
 }
