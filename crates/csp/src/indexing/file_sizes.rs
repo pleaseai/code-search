@@ -116,6 +116,14 @@ pub(crate) fn read_file_chars(root: &Path, file_path: &str) -> Option<u64> {
     }
     // fstat the opened handle rather than the path, so the regular-file and
     // size checks apply to what is actually read, and cap the read itself.
+    //
+    // Residual race: `canonicalize` and `File::open` are separate path walks,
+    // so a writer swapping a parent directory for a symlink in between can make
+    // the open follow it to a regular file outside `root`. Closing that needs a
+    // descriptor-relative no-follow walk (`openat` + `O_NOFOLLOW` per component),
+    // which `std` does not expose portably. The exposure is a UTF-16 length of
+    // that file written to the user's own `savings.jsonl`, never its content, by
+    // a local writer who already controls the indexed tree.
     let file = std::fs::File::open(&canonical).ok()?;
     let meta = file.metadata().ok()?;
     if !meta.is_file() || meta.len() > MAX_FILE_BYTES {
