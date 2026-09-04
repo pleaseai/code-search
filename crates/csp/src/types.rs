@@ -18,7 +18,9 @@ pub enum CallType {
 }
 
 /// Content type for indexing and search pipeline selection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// Variant order is canonical (`code < docs < config`): `Ord` drives the
+/// normalized content list used as the MCP session-cache key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ContentType {
     Code,

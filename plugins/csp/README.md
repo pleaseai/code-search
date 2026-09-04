@@ -31,7 +31,7 @@ codex plugin add csp@pleaseai
 
 ## Customization
 
-By default the MCP server indexes only code files. To also index documentation or config, append `--content` to the server args, e.g. `["@pleaseai/csp", "mcp", "--content", "all"]`.
+By default the MCP server indexes only code files. To also index documentation or config, append `--content` to the server args, e.g. `["@pleaseai/csp", "mcp", "--content", "all"]`. A single tool call can also override this with its `content` argument (`code`, `docs`, `config`, or `all`).
 
 ## Layout
 

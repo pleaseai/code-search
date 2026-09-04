@@ -15,7 +15,10 @@ use rmcp::transport::stdio;
 use rmcp::{tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler, ServiceExt};
 use tokio::sync::Mutex;
 
-use csp::mcp::{find_related_tool, search_tool, IndexCache, SERVER_INSTRUCTIONS};
+use csp::mcp::{
+    find_related_tool, resolve_content_selection, search_tool, ContentSelection, IndexCache,
+    SERVER_INSTRUCTIONS,
+};
 use csp::stats::default_stats_file;
 use csp::types::ContentType;
 use csp::utils::resolve_snippet_lines;
@@ -41,6 +44,9 @@ pub struct SearchParams {
     /// `null` for the full chunk when the snippet lacks context.
     #[serde(default = "default_max_snippet_lines")]
     pub max_snippet_lines: Option<i64>,
+    /// Content to search: `code`, `docs`, `config`, or `all`. Defaults to the
+    /// MCP server's configured content (`--content`).
+    pub content: Option<ContentSelection>,
 }
 
 /// Parameters for the `find_related` tool.
@@ -58,14 +64,21 @@ pub struct FindRelatedParams {
     /// 0 = location only. Pass `null` for the full chunk.
     #[serde(default = "default_max_snippet_lines")]
     pub max_snippet_lines: Option<i64>,
+    /// Content containing the related file: `code`, `docs`, `config`, or
+    /// `all`. Defaults to the MCP server's configured content (`--content`).
+    pub content: Option<ContentSelection>,
 }
 
-/// MCP server holding the session index cache and the default source.
+/// MCP server holding the session index cache, the default source, and the
+/// default content selection.
 #[derive(Clone)]
 pub struct CspMcpServer {
     cache: Arc<Mutex<IndexCache>>,
     default_source: Option<String>,
     default_ref: Option<String>,
+    /// Content types indexed when a tool call omits `content` (the `--content`
+    /// flag; code-only by default).
+    default_content: Vec<ContentType>,
     /// Where token-savings telemetry is appended; `None` disables recording
     /// (used by tests so they don't touch the real `~/.csp/savings.jsonl`).
     stats_file: Option<std::path::PathBuf>,
@@ -80,9 +93,10 @@ impl CspMcpServer {
         content: Vec<ContentType>,
     ) -> Self {
         Self {
-            cache: Arc::new(Mutex::new(IndexCache::new(content))),
+            cache: Arc::new(Mutex::new(IndexCache::new())),
             default_source,
             default_ref,
+            default_content: content,
             stats_file: Some(default_stats_file()),
             tool_router: Self::tool_router(),
         }
@@ -95,6 +109,7 @@ impl CspMcpServer {
         &self,
         Parameters(p): Parameters<SearchParams>,
     ) -> Result<CallToolResult, McpError> {
+        let content = resolve_content_selection(p.content, &self.default_content);
         let mut cache = self.cache.lock().await;
         let out = search_tool(
             &mut cache,
@@ -102,6 +117,7 @@ impl CspMcpServer {
             self.default_ref.as_deref(),
             &p.query,
             p.repo.as_deref(),
+            &content,
             p.top_k.unwrap_or(5) as usize,
             resolve_snippet_lines(p.max_snippet_lines),
             self.stats_file.as_deref(),
@@ -116,6 +132,7 @@ impl CspMcpServer {
         &self,
         Parameters(p): Parameters<FindRelatedParams>,
     ) -> Result<CallToolResult, McpError> {
+        let content = resolve_content_selection(p.content, &self.default_content);
         let mut cache = self.cache.lock().await;
         let out = find_related_tool(
             &mut cache,
@@ -124,6 +141,7 @@ impl CspMcpServer {
             &p.file_path,
             p.line,
             p.repo.as_deref(),
+            &content,
             p.top_k.unwrap_or(5) as usize,
             resolve_snippet_lines(p.max_snippet_lines),
             self.stats_file.as_deref(),
@@ -147,7 +165,8 @@ impl ServerHandler for CspMcpServer {
 ///
 /// `default_source` is the source indexed when a tool call omits `repo`;
 /// `default_ref` pins the git revision for that default source (the `--ref`
-/// flag); `content` is the content-type filter applied when building indexes.
+/// flag); `content` is the content-type filter applied when a tool call omits
+/// its own `content` selection.
 pub fn run_mcp(
     default_source: Option<String>,
     default_ref: Option<String>,
@@ -177,6 +196,7 @@ mod tests {
         assert_eq!(minimal.query, "greet");
         assert!(minimal.repo.is_none());
         assert!(minimal.top_k.is_none());
+        assert!(minimal.content.is_none());
         // Absent max_snippet_lines → the MCP default of 10.
         assert_eq!(minimal.max_snippet_lines, Some(10));
 
@@ -214,6 +234,81 @@ mod tests {
         assert_eq!(p.line, 1);
         assert!(p.repo.is_none());
         assert!(p.top_k.is_none());
+        assert!(p.content.is_none());
+    }
+
+    #[test]
+    fn params_accept_content_selection_and_reject_unknown() {
+        let s: SearchParams =
+            serde_json::from_value(serde_json::json!({ "query": "q", "content": "docs" })).unwrap();
+        assert_eq!(s.content, Some(ContentSelection::Docs));
+        let f: FindRelatedParams = serde_json::from_value(serde_json::json!({
+            "file_path": "a.ts",
+            "line": 1,
+            "content": "all"
+        }))
+        .unwrap();
+        assert_eq!(f.content, Some(ContentSelection::All));
+        // Only the four documented values are accepted (no `tests`, no casing).
+        assert!(serde_json::from_value::<SearchParams>(
+            serde_json::json!({ "query": "q", "content": "tests" })
+        )
+        .is_err());
+        assert!(serde_json::from_value::<SearchParams>(
+            serde_json::json!({ "query": "q", "content": "Docs" })
+        )
+        .is_err());
+    }
+
+    /// Resolve a schema node to the one carrying `enum`: either the node
+    /// itself, a `$ref` into the document's `$defs`, or the first `anyOf`
+    /// branch that resolves (schemars wraps `Option<Enum>` as
+    /// `anyOf: [{ $ref }, { type: null }]`).
+    fn enum_values<'a>(
+        doc: &'a serde_json::Value,
+        node: &'a serde_json::Value,
+    ) -> Option<&'a Vec<serde_json::Value>> {
+        if let Some(values) = node.get("enum").and_then(|e| e.as_array()) {
+            return Some(values);
+        }
+        if let Some(reference) = node.get("$ref").and_then(|r| r.as_str()) {
+            let name = reference.strip_prefix("#/$defs/")?;
+            return enum_values(doc, doc.get("$defs")?.get(name)?);
+        }
+        node.get("anyOf")?
+            .as_array()?
+            .iter()
+            .find_map(|branch| enum_values(doc, branch))
+    }
+
+    #[test]
+    fn tool_schemas_advertise_content_enum() {
+        // The wire schema clients see must list the content selection so an
+        // agent can discover the parameter without reading the README. Compare
+        // the enum values structurally (through the `$ref`), not by substring.
+        let expected: std::collections::BTreeSet<&str> =
+            ["code", "docs", "config", "all"].into_iter().collect();
+        let tools = CspMcpServer::tool_router().list_all();
+        for tool in tools {
+            let schema = serde_json::to_value(&tool.input_schema).unwrap();
+            let content = &schema["properties"]["content"];
+            assert!(
+                content.is_object(),
+                "{} schema lacks `content`: {schema}",
+                tool.name
+            );
+            let values = enum_values(&schema, content)
+                .unwrap_or_else(|| panic!("{} `content` has no enum: {content}", tool.name));
+            let actual: std::collections::BTreeSet<&str> = values
+                .iter()
+                .map(|v| {
+                    v.as_str().unwrap_or_else(|| {
+                        panic!("{} `content` enum has non-string value: {v}", tool.name)
+                    })
+                })
+                .collect();
+            assert_eq!(actual, expected, "{} `content` enum", tool.name);
+        }
     }
 
     #[test]
@@ -251,6 +346,7 @@ mod tests {
                 repo: None,
                 top_k: Some(5),
                 max_snippet_lines: None,
+                content: None,
             }))
             .await
             .unwrap();
@@ -262,6 +358,71 @@ mod tests {
         };
         let value: serde_json::Value = serde_json::from_str(&text).unwrap();
         assert!(value.get("results").is_some() || value.get("error").is_some());
+    }
+
+    /// Extract the text payload of a tool result as parsed JSON.
+    fn payload(result: &CallToolResult) -> serde_json::Value {
+        let text = match &result.content[0].raw {
+            rmcp::model::RawContent::Text(t) => t.text.clone(),
+            _ => panic!("expected text content"),
+        };
+        serde_json::from_str(&text).unwrap()
+    }
+
+    /// File paths of every result in a search payload.
+    fn result_paths(value: &serde_json::Value) -> Vec<String> {
+        value["results"]
+            .as_array()
+            .map(|r| {
+                r.iter()
+                    .map(|e| e["file_path"].as_str().unwrap().to_string())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[tokio::test]
+    async fn search_tool_call_honors_per_call_content() {
+        // A code-only server (the default) whose repo also holds a doc file.
+        let dir = sample_source();
+        fs::write(
+            dir.path().join("README.md"),
+            "# Guide\n\nHow to greet a user by name from the command line.\n",
+        )
+        .unwrap();
+        let mut server = CspMcpServer::new(
+            Some(dir.path().to_string_lossy().into_owned()),
+            None,
+            vec![ContentType::Code],
+        );
+        server.stats_file = None;
+        let call = |content: Option<ContentSelection>| {
+            server.search(Parameters(SearchParams {
+                query: "greet".to_string(),
+                repo: None,
+                top_k: Some(5),
+                max_snippet_lines: Some(0),
+                content,
+            }))
+        };
+
+        // Omitted → the server default (code): only sample.ts is indexed.
+        let paths = result_paths(&payload(&call(None).await.unwrap()));
+        assert!(!paths.is_empty());
+        assert!(paths.iter().all(|p| p == "sample.ts"), "{paths:?}");
+
+        // `docs` on the same repo → a separate docs-only index.
+        let paths = result_paths(&payload(&call(Some(ContentSelection::Docs)).await.unwrap()));
+        assert!(!paths.is_empty());
+        assert!(paths.iter().all(|p| p == "README.md"), "{paths:?}");
+
+        // `all` → both files are searchable in one index.
+        let paths = result_paths(&payload(&call(Some(ContentSelection::All)).await.unwrap()));
+        assert!(paths.iter().any(|p| p == "sample.ts"), "{paths:?}");
+        assert!(paths.iter().any(|p| p == "README.md"), "{paths:?}");
+
+        // Three distinct content selections → three cached entries.
+        assert_eq!(server.cache.lock().await.size(), 3);
     }
 
     #[tokio::test]
@@ -279,6 +440,7 @@ mod tests {
                 repo: None,
                 top_k: Some(5),
                 max_snippet_lines: None,
+                content: None,
             }))
             .await
             .unwrap();

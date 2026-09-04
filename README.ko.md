@@ -357,6 +357,8 @@ args = [
 
 두 도구 모두 결과당 반환 코드를 제한하는 `max_snippet_lines`를 받습니다. 기본값은 `10`으로, 시그니처+본문 앞부분 미리보기라 에이전트가 위치를 싸게 확인한 뒤 전체 맥락은 파일로 이동해 봅니다. 위치만 필요하면 `0`, 미리보기로 부족하면 `null`로 전체 청크를 받습니다.
 
+또한 두 도구 모두 호출 단위로 검색 대상을 고르는 `content`(`code`, `docs`, `config`, `all`)를 받습니다. 예를 들어 서버가 코드만 인덱싱하는 저장소에서 가이드 문서를 찾고 싶다면 `content: "docs"`를 넘기면 됩니다. 생략하면 아래의 서버 설정 값을 따르며, 서로 다른 `content` 선택은 세션 안에서 각각 별도로 인덱싱·캐시됩니다.
+
 기본적으로 MCP 서버는 코드 파일만 인덱싱합니다. 문서/설정/전체를 함께 인덱싱하려면 명령에 `--content docs`, `--content config`, `--content all` 또는 조합(예: `--content code docs`)을 추가하세요. 예를 들어 Claude Code에서는 `claude mcp add csp -s user -- bunx @pleaseai/csp mcp --content all`.
 
 ## 서브 에이전트 설정
