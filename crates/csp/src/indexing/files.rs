@@ -2,7 +2,7 @@
 //! `src/indexing/files.ts` (← semble `index/files.py`).
 
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::sync::{LazyLock, Once};
+use std::sync::{LazyLock, OnceLock};
 
 use crate::types::ContentType;
 
@@ -21,12 +21,12 @@ pub(crate) fn parse_max_file_bytes(raw: Option<&str>) -> Result<u64, String> {
     let Some(raw) = raw else {
         return Ok(DEFAULT_MAX_FILE_BYTES);
     };
-    match raw.trim().parse::<i64>() {
-        Ok(value) if value > 0 => Ok(value as u64),
-        Ok(_) => Err(format!(
-            "{MAX_FILE_BYTES_ENV} must be positive, using the default of \
-             {DEFAULT_MAX_FILE_BYTES} bytes"
-        )),
+    let trimmed = raw.trim();
+    match trimmed.parse::<u64>() {
+        Ok(value) if value > 0 => Ok(value),
+        // Zero, or a negative integer (which only parses as signed).
+        Ok(_) => Err(non_positive_warning()),
+        Err(_) if trimmed.parse::<i64>().is_ok() => Err(non_positive_warning()),
         Err(_) => Err(format!(
             "Invalid {MAX_FILE_BYTES_ENV} {raw:?}, using the default of \
              {DEFAULT_MAX_FILE_BYTES} bytes"
@@ -34,21 +34,31 @@ pub(crate) fn parse_max_file_bytes(raw: Option<&str>) -> Result<u64, String> {
     }
 }
 
+fn non_positive_warning() -> String {
+    format!(
+        "{MAX_FILE_BYTES_ENV} must be positive, using the default of \
+         {DEFAULT_MAX_FILE_BYTES} bytes"
+    )
+}
+
 /// The maximum file size to read and index: [`MAX_FILE_BYTES_ENV`] when set,
-/// else [`DEFAULT_MAX_FILE_BYTES`]. A malformed or non-positive override warns
-/// on stderr (once per process — this also runs per result on the search path)
-/// and falls back to the default rather than aborting indexing.
+/// else [`DEFAULT_MAX_FILE_BYTES`]. The variable is read and parsed once per
+/// process (this also runs per result on the search path); a malformed or
+/// non-positive override warns on stderr that one time and falls back to the
+/// default rather than aborting indexing.
 pub fn get_max_file_bytes() -> u64 {
-    static WARNED: Once = Once::new();
-    let raw = std::env::var_os(MAX_FILE_BYTES_ENV);
-    let raw = raw.as_deref().map(|s| s.to_string_lossy());
-    match parse_max_file_bytes(raw.as_deref()) {
-        Ok(value) => value,
-        Err(warning) => {
-            WARNED.call_once(|| eprintln!("csp: {warning}"));
-            DEFAULT_MAX_FILE_BYTES
+    static MAX_FILE_BYTES: OnceLock<u64> = OnceLock::new();
+    *MAX_FILE_BYTES.get_or_init(|| {
+        let raw = std::env::var_os(MAX_FILE_BYTES_ENV);
+        let raw = raw.as_deref().map(|s| s.to_string_lossy());
+        match parse_max_file_bytes(raw.as_deref()) {
+            Ok(value) => value,
+            Err(warning) => {
+                eprintln!("csp: {warning}");
+                DEFAULT_MAX_FILE_BYTES
+            }
         }
-    }
+    })
 }
 
 /// Extension (including the leading dot, lowercase) → tree-sitter language name.
@@ -574,6 +584,11 @@ mod tests {
         assert_eq!(parse_max_file_bytes(None), Ok(DEFAULT_MAX_FILE_BYTES));
         assert_eq!(parse_max_file_bytes(Some("2000000")), Ok(2_000_000));
         assert_eq!(parse_max_file_bytes(Some(" 512 ")), Ok(512));
+        // The full unsigned range is valid, not just what fits in i64.
+        assert_eq!(
+            parse_max_file_bytes(Some("18446744073709551615")),
+            Ok(u64::MAX)
+        );
     }
 
     #[test]

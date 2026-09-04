@@ -142,7 +142,9 @@ pub(crate) fn read_file_chars(root: &Path, file_path: &str) -> Option<u64> {
         return None;
     }
     let mut bytes = Vec::with_capacity(meta.len() as usize);
-    file.take(max_file_bytes + 1).read_to_end(&mut bytes).ok()?;
+    file.take(max_file_bytes.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .ok()?;
     if bytes.len() as u64 > max_file_bytes {
         return None;
     }

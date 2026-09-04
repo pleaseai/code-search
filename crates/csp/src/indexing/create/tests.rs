@@ -5,11 +5,8 @@ use tempfile::tempdir;
 
 fn opts(model: &Model, display_root: Option<PathBuf>) -> CreateIndexOptions<'_> {
     CreateIndexOptions {
-        model,
-        extensions: None,
-        content: None,
         display_root,
-        max_file_bytes: None,
+        ..CreateIndexOptions::new(model)
     }
 }
 
@@ -103,10 +100,10 @@ fn honors_configured_max_file_bytes() {
 
 #[test]
 fn skipped_large_warning_names_first_five_paths_and_count() {
-    assert_eq!(skipped_large_warning(&[], 1_000_000), None);
+    assert_eq!(skipped_large_warning(&[], 1_000_000, true), None);
 
     let two = vec!["a.ts".to_string(), "b.ts".to_string()];
-    let msg = skipped_large_warning(&two, 1_000_000).unwrap();
+    let msg = skipped_large_warning(&two, 1_000_000, true).unwrap();
     assert_eq!(
         msg,
         "Skipped 2 file(s) exceeding the maximum file size of 1000000 bytes \
@@ -114,13 +111,29 @@ fn skipped_large_warning_names_first_five_paths_and_count() {
     );
 
     let seven: Vec<String> = (1..=7).map(|i| format!("f{i}.ts")).collect();
-    let msg = skipped_large_warning(&seven, 500).unwrap();
+    let msg = skipped_large_warning(&seven, 500, true).unwrap();
     assert!(msg.starts_with("Skipped 7 file(s) exceeding the maximum file size of 500 bytes"));
     assert!(
         msg.ends_with("f1.ts, f2.ts, f3.ts, f4.ts, f5.ts ..."),
         "{msg}"
     );
     assert!(!msg.contains("f6.ts"));
+
+    // A caller-pinned limit points at the option, not the env var.
+    let msg = skipped_large_warning(&two, 100, false).unwrap();
+    assert!(
+        msg.contains("(raise max_file_bytes to include them)"),
+        "{msg}"
+    );
+    assert!(!msg.contains("CSP_MAX_FILE_BYTES"));
+}
+
+#[test]
+fn skipped_large_warning_escapes_control_characters_in_paths() {
+    let hostile = vec!["evil\x1b[31m\nfake: ok.ts".to_string()];
+    let msg = skipped_large_warning(&hostile, 10, true).unwrap();
+    assert!(msg.ends_with("evil\\u{1b}[31m\\nfake: ok.ts"), "{msg}");
+    assert!(!msg.contains('\n'));
 }
 
 #[test]

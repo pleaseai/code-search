@@ -46,6 +46,24 @@ pub struct CreateIndexOptions<'a> {
     pub max_file_bytes: Option<u64>,
 }
 
+impl<'a> CreateIndexOptions<'a> {
+    /// Options for `model` with every other field at its default: code-only
+    /// content, no extra extensions, chunk paths as walked, and the size limit
+    /// resolved from `CSP_MAX_FILE_BYTES`. Prefer
+    /// `CreateIndexOptions { extensions: .., ..CreateIndexOptions::new(model) }`
+    /// over a bare struct literal so a future option field does not break
+    /// callers.
+    pub fn new(model: &'a Model) -> Self {
+        Self {
+            model,
+            extensions: None,
+            content: None,
+            display_root: None,
+            max_file_bytes: None,
+        }
+    }
+}
+
 /// Result of [`create_index_from_path`].
 #[derive(Debug)]
 pub struct CreateIndexResult {
@@ -56,21 +74,46 @@ pub struct CreateIndexResult {
     pub files: FileManifest,
 }
 
+/// A repository-controlled path rendered for a stderr diagnostic, with control
+/// characters (ANSI escapes, newlines) escaped so a hostile file name in a
+/// cloned repo cannot rewrite the terminal or forge diagnostic lines.
+fn escape_control(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for c in path.chars() {
+        if c.is_control() {
+            out.extend(c.escape_default());
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// The warning for files skipped for exceeding `max_file_bytes` — the count
 /// plus the first five paths — or `None` when nothing was skipped. Port of
 /// upstream `_warn_skipped_large` (semble #252): a silent skip left unexplained
-/// gaps in results.
-pub(crate) fn skipped_large_warning(skipped: &[String], max_file_bytes: u64) -> Option<String> {
+/// gaps in results. `from_env` selects the hint: the env var when the limit
+/// was resolved from it, else the `max_file_bytes` option the caller pinned.
+pub(crate) fn skipped_large_warning(
+    skipped: &[String],
+    max_file_bytes: u64,
+    from_env: bool,
+) -> Option<String> {
     if skipped.is_empty() {
         return None;
     }
-    let shown = &skipped[..skipped.len().min(5)];
+    let shown: Vec<String> = skipped.iter().take(5).map(|p| escape_control(p)).collect();
+    let knob = if from_env {
+        MAX_FILE_BYTES_ENV
+    } else {
+        "max_file_bytes"
+    };
     Some(format!(
         "Skipped {} file(s) exceeding the maximum file size of {} bytes \
          (raise {} to include them): {}{}",
         skipped.len(),
         max_file_bytes,
-        MAX_FILE_BYTES_ENV,
+        knob,
         shown.join(", "),
         if skipped.len() > 5 { " ..." } else { "" },
     ))
@@ -239,7 +282,7 @@ pub fn create_index_from_path(
             eprintln!(
                 "csp: skipping {}: its display path collides with an already indexed file \
                  (non-UTF-8 file name)",
-                file_path.display()
+                escape_control(&file_path.display().to_string())
             );
             continue;
         }
@@ -284,7 +327,11 @@ pub fn create_index_from_path(
 
     // Warn before the empty check so a tree of only oversized files explains
     // itself rather than just reporting "no supported files".
-    if let Some(warning) = skipped_large_warning(&skipped_large, max_file_bytes) {
+    if let Some(warning) = skipped_large_warning(
+        &skipped_large,
+        max_file_bytes,
+        options.max_file_bytes.is_none(),
+    ) {
         eprintln!("csp: {warning}");
     }
 
