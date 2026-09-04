@@ -265,7 +265,7 @@ pub fn create_index_from_path(
             Err(_) => continue,
         };
         if size > max_file_bytes {
-            skipped_large.push(file_path.display().to_string());
+            skipped_large.push(display_path(&file_path, options.display_root.as_deref()));
             continue;
         }
         let Ok(bytes) = std::fs::read(&file_path) else {

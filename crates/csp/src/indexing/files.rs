@@ -22,11 +22,15 @@ pub(crate) fn parse_max_file_bytes(raw: Option<&str>) -> Result<u64, String> {
         return Ok(DEFAULT_MAX_FILE_BYTES);
     };
     let trimmed = raw.trim();
+    // A negative integer of any magnitude is non-positive, like upstream's
+    // arbitrary-precision `int()`; `-abc` stays malformed.
+    let negative_integer = trimmed
+        .strip_prefix('-')
+        .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()));
     match trimmed.parse::<u64>() {
         Ok(value) if value > 0 => Ok(value),
-        // Zero, or a negative integer (which only parses as signed).
         Ok(_) => Err(non_positive_warning()),
-        Err(_) if trimmed.parse::<i64>().is_ok() => Err(non_positive_warning()),
+        Err(_) if negative_integer => Err(non_positive_warning()),
         Err(_) => Err(format!(
             "Invalid {MAX_FILE_BYTES_ENV} {raw:?}, using the default of \
              {DEFAULT_MAX_FILE_BYTES} bytes"
@@ -601,6 +605,11 @@ mod tests {
         assert!(err.contains("CSP_MAX_FILE_BYTES must be positive"), "{err}");
         let err = parse_max_file_bytes(Some("-5")).unwrap_err();
         assert!(err.contains("must be positive"), "{err}");
+        // Any magnitude of negative integer, but not a malformed negative.
+        let err = parse_max_file_bytes(Some("-99999999999999999999")).unwrap_err();
+        assert!(err.contains("must be positive"), "{err}");
+        let err = parse_max_file_bytes(Some("-abc")).unwrap_err();
+        assert!(err.contains("Invalid CSP_MAX_FILE_BYTES"), "{err}");
     }
 
     #[test]
