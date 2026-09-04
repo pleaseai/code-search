@@ -1,0 +1,19 @@
+crates/csp/src/indexing/cache.rs
+  s_1edcf1979f8d98::t_8b2eb7c73c092d 388-393
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "aeb128ce6180f59a7d40106c1acf3e5c5b7554b8",
+  "prompts": {},
+  "sessions": {
+    "s_1edcf1979f8d98": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "62f3652f-bf84-48b1-8d74-911b1f3853e5",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
