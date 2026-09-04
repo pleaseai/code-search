@@ -136,14 +136,39 @@ fn normalize_posix(path: &str) -> String {
     joined
 }
 
-/// Normalize a source identity: local paths are path-normalized, URLs (scheme://
-/// or scp-style `git@`) kept verbatim.
-fn normalize_source(source: &str) -> String {
-    if is_url_scheme(source) || source.starts_with("git@") {
-        source.to_string()
-    } else {
-        normalize_posix(source)
+/// Normalize a source identity: URLs (any `scheme://`, or anything `is_git_url`
+/// accepts, including scp-style `user@host:path`) are kept
+/// verbatim; local paths are made absolute against the current directory and
+/// then path-normalized, so `.`, `./repo/../repo`, and `/abs/repo` all key the
+/// same entry (mirrors upstream `cache_key`'s `Path.resolve()`). Absolutizing
+/// here — rather than only at the CLI edge — is what keeps every caller of
+/// `resolve_cache_dir` (CLI, MCP, SDK) on one key.
+/// `std::path::absolute` does not touch the filesystem, so a path that does not
+/// exist yet still keys deterministically.
+///
+/// This is *not* byte-identical to the manifest `sourceId`: `from_path` records
+/// bare `std::path::absolute(root)`, which keeps `..` segments this function
+/// collapses. Anything comparing the two (notably [`source_is_gone`]) must
+/// normalize both sides rather than assume they already agree.
+pub(crate) fn normalize_source(source: &str) -> String {
+    // `is_git_url` is the same classifier `load_or_build_index` uses to pick
+    // `from_git`, so every remote spelling it accepts — including non-`git`
+    // scp-style ones like `deploy@host:org/repo.git` — stays verbatim instead
+    // of being absolutized against the caller's cwd.
+    if is_url_scheme(source) || is_git_url(source) {
+        return source.to_string();
     }
+    let absolute = std::path::absolute(source)
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| source.to_string());
+    // Only Windows spells its separator `\`. On Unix a backslash is an ordinary
+    // filename byte, so rewriting it would fold `/home/u/a\b` onto the unrelated
+    // `/home/u/a/b` (and `..\x` into a `..` segment `normalize_posix` then
+    // collapses) — two distinct repos sharing one cache leaf, thrashing each
+    // other's index on every search.
+    #[cfg(windows)]
+    let absolute = absolute.replace('\\', "/");
+    normalize_posix(&absolute)
 }
 
 #[derive(Serialize)]
@@ -362,11 +387,26 @@ fn read_manifest_source_id(dir: &Path) -> Option<String> {
 /// under a directory whose permissions temporarily deny traversal. A source
 /// below an *unmounted* volume is not distinguishable from a deleted one at
 /// this level — its path is simply absent — and is swept, as upstream does.
+///
+/// Both the recorded spelling and its lexically normalized form must be
+/// `NotFound`: `from_path` records `std::path::absolute`, which does **not**
+/// collapse `..`, and the kernel resolves `..` component-by-component. So
+/// `csp search "q" ../b` records `/cwd/../b`, and deleting `/cwd` alone makes
+/// that spelling `NotFound` while `/b` — the actual source — is still there.
+/// Requiring both to be absent keeps the sweep conservative: a lexical
+/// collapse that crosses a symlink can only ever *keep* a cache entry.
 fn source_is_gone(source_id: &str) -> bool {
-    matches!(
-        std::fs::metadata(source_id),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound
-    )
+    fn is_not_found(path: &str) -> bool {
+        matches!(
+            std::fs::metadata(path),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound
+        )
+    }
+    if !is_not_found(source_id) {
+        return false;
+    }
+    let normalized = normalize_source(source_id);
+    normalized == source_id || is_not_found(&normalized)
 }
 
 /// Remove cached indexes whose local source directory no longer exists (port of
@@ -483,6 +523,84 @@ mod tests {
         let a = resolve_cache_dir("/repo", &[ContentType::Code], &loc(base));
         let b = resolve_cache_dir("/repo", &[ContentType::Code, ContentType::Docs], &loc(base));
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn cache_dir_relative_and_absolute_source_share_a_key() {
+        let base = Path::new("/h/.csp");
+        let cwd = std::env::current_dir().unwrap();
+        let dot = resolve_cache_dir(".", &[ContentType::Code], &loc(base));
+        let abs = resolve_cache_dir(&cwd.to_string_lossy(), &[ContentType::Code], &loc(base));
+        assert_eq!(dot, abs);
+
+        // Lexical detours resolve to the same absolute form.
+        let sub = cwd.join("sub");
+        let detour = resolve_cache_dir("./sub/../sub", &[ContentType::Code], &loc(base));
+        let direct = resolve_cache_dir(&sub.to_string_lossy(), &[ContentType::Code], &loc(base));
+        assert_eq!(detour, direct);
+        assert_ne!(dot, detour);
+    }
+
+    #[test]
+    fn cache_dir_relative_sources_key_by_their_absolute_form() {
+        // Two different relative names must not collide, and each must equal
+        // the key its absolute form produces — this is what makes `csp search`
+        // from two repos with the default `.` land in two cache entries.
+        let base = Path::new("/h/.csp");
+        let cwd = std::env::current_dir().unwrap();
+        let a = resolve_cache_dir("repo-a", &[ContentType::Code], &loc(base));
+        let b = resolve_cache_dir("repo-b", &[ContentType::Code], &loc(base));
+        assert_ne!(a, b);
+        let a_abs = cwd.join("repo-a");
+        assert_eq!(
+            a,
+            resolve_cache_dir(&a_abs.to_string_lossy(), &[ContentType::Code], &loc(base))
+        );
+    }
+
+    /// On Unix `\\` is an ordinary filename byte, so two distinct repos must not
+    /// collapse onto one cache leaf.
+    #[cfg(unix)]
+    #[test]
+    fn cache_dir_keeps_unix_backslash_paths_distinct() {
+        let base = Path::new("/h/.csp");
+        let escaped = resolve_cache_dir("/repos/a\\b", &[ContentType::Code], &loc(base));
+        let nested = resolve_cache_dir("/repos/a/b", &[ContentType::Code], &loc(base));
+        assert_ne!(escaped, nested);
+        // A `..` must not be synthesizable out of a backslash either.
+        let literal = resolve_cache_dir("/repos/x/..\\y", &[ContentType::Code], &loc(base));
+        let traversed = resolve_cache_dir("/repos/y", &[ContentType::Code], &loc(base));
+        assert_ne!(literal, traversed);
+    }
+
+    /// Every remote spelling `is_git_url` accepts must stay verbatim — not only
+    /// `git@…` — or the same remote keys differently from each cwd.
+    #[test]
+    fn normalize_source_keeps_scp_remotes_verbatim() {
+        for remote in [
+            "deploy@host:org/repo.git",
+            "user@host:repo",
+            "git@github.com:x/r.git",
+        ] {
+            assert_eq!(normalize_source(remote), remote);
+        }
+        // `user@host:/abs` is not scp syntax; it is a local path and gets keyed as one.
+        let local = normalize_source("user@host:/abs");
+        assert_ne!(local, "user@host:/abs");
+        assert!(Path::new(&local).is_absolute());
+    }
+
+    #[test]
+    fn cache_dir_keeps_git_urls_verbatim() {
+        let base = Path::new("/h/.csp");
+        let a = resolve_cache_dir("https://x/r.git", &[ContentType::Code], &loc(base));
+        let b = resolve_cache_dir("git@github.com:x/r.git", &[ContentType::Code], &loc(base));
+        assert_ne!(a, b);
+        // Re-resolving must not absolutize a URL against the cwd.
+        assert_eq!(
+            a,
+            resolve_cache_dir("https://x/r.git", &[ContentType::Code], &loc(base))
+        );
     }
 
     #[test]
@@ -704,9 +822,9 @@ mod tests {
     }
 
     /// Write a cache entry whose directory is keyed on `key_source` but whose
-    /// manifest records `manifest_source`. Production splits the two:
-    /// `load_or_build_index` keys on the raw CLI argument while `from_path`
-    /// records `std::path::absolute` of it.
+    /// manifest records `manifest_source`. Production can split the two: the key
+    /// also folds in `CacheLocation::git_ref`, which the manifest never records,
+    /// and `from_path` keeps the `..` segments `normalize_source` collapses.
     fn write_entry_keyed(
         key_source: &str,
         manifest_source: &str,
@@ -744,10 +862,9 @@ mod tests {
         assert!(resolve_index_root(&loc(&base)).exists());
     }
 
-    /// The production shape: `csp search "q" .` keys the entry on the raw `"."`
-    /// while the manifest records the absolutized source. Regression test — a
-    /// guard that re-derived the key from the manifest never fired here, which
-    /// made `clear orphans` a no-op for the documented invocation.
+    /// Regression test for a sweep that filters on the entry directory's shape
+    /// rather than on a re-derived key: the manifest's `sourceId` is the only
+    /// thing consulted, so an entry stays sweepable however its key was spelled.
     #[test]
     fn orphans_removes_entry_keyed_by_a_relative_source() {
         let tmp = tempdir().unwrap();
@@ -885,6 +1002,27 @@ mod tests {
             assert!(swept.is_empty());
             assert!(dir.join("manifest.json").exists());
         }
+    }
+
+    /// `from_path` records `std::path::absolute`, which keeps `..` segments, and
+    /// the kernel resolves `..` component-by-component. Deleting only the
+    /// intermediate directory must not make the still-present source look gone.
+    #[test]
+    fn orphans_keeps_entry_whose_source_id_traverses_a_deleted_parent() {
+        let tmp = tempdir().unwrap();
+        let base = tmp.path().join(".csp");
+        let via = tmp.path().join("via");
+        let live = tmp.path().join("live-repo");
+        std::fs::create_dir_all(&via).unwrap();
+        std::fs::create_dir_all(&live).unwrap();
+        // The shape `csp search "q" ../live-repo` records from inside `via`.
+        let recorded = via.join("..").join("live-repo");
+        let dir = write_entry(&recorded.to_string_lossy(), &loc(&base));
+        std::fs::remove_dir_all(&via).unwrap();
+
+        assert!(std::fs::metadata(&recorded).is_err(), "precondition");
+        assert!(clear_orphan_indexes(&loc(&base)).unwrap().is_empty());
+        assert!(dir.join("manifest.json").exists());
     }
 
     #[test]
