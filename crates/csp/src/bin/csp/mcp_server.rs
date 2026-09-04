@@ -17,17 +17,12 @@ use tokio::sync::Mutex;
 
 use csp::mcp::{find_related_tool, search_tool, IndexCache, SERVER_INSTRUCTIONS};
 use csp::types::ContentType;
+use csp::utils::resolve_snippet_lines;
 
 /// MCP default: signature + first body lines, enough to confirm a location
 /// while spending far fewer tokens than the full chunk (semble#198).
 fn default_max_snippet_lines() -> Option<i64> {
     Some(10)
-}
-
-/// Convert the wire value to the `Option<usize>` the handlers take. `None` (the
-/// caller passed JSON `null`) → full content; a negative value clamps to `0`.
-fn resolve_snippet_lines(value: Option<i64>) -> Option<usize> {
-    value.map(|n| n.max(0) as usize)
 }
 
 /// Parameters for the `search` tool (mirrors the TS MCP tool's args).

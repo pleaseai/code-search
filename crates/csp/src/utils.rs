@@ -2,8 +2,17 @@
 
 use serde_json::{json, Value};
 
+use crate::chunking::core::split_lines_keep_ends;
 use crate::search::SearchResult;
 use crate::types::Chunk;
+
+/// Map a CLI/MCP `max_snippet_lines` wire value (`--max-snippet-lines`, or the
+/// tool's `max_snippet_lines` argument) to the `Option<usize>` cap that
+/// [`format_results`] takes. Absent (`None`) → full chunk content; a negative
+/// value clamps to `0` (no code).
+pub fn resolve_snippet_lines(value: Option<i64>) -> Option<usize> {
+    value.map(|n| n.max(0) as usize)
+}
 
 /// Serialize a search result to the flat CLI/MCP wire dict — **snake_case**
 /// fields (`file_path`, `start_line`, `end_line`, `score`, optional `content`),
@@ -28,7 +37,13 @@ pub fn result_to_dict(result: &SearchResult, max_snippet_lines: Option<usize>) -
         }
         Some(0) => {}
         Some(n) => {
-            let snippet: Vec<&str> = c.content.lines().take(n).collect();
+            // Python `splitlines()` also breaks on bare `\r`; `str::lines()`
+            // does not, so reuse the chunker's splitter for line parity.
+            let snippet: Vec<&str> = split_lines_keep_ends(&c.content)
+                .into_iter()
+                .take(n)
+                .map(|l| l.trim_end_matches(['\r', '\n']))
+                .collect();
             entry["content"] = json!(snippet.join("\n"));
         }
     }
@@ -133,6 +148,21 @@ pub fn resolve_chunk<'a>(chunks: &'a [Chunk], file_path: &str, line: u32) -> Opt
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn result_to_dict_cap_splits_crlf_and_bare_cr_like_python_splitlines() {
+        let r = result("a\r\nb\rc\nd");
+        let d = result_to_dict(&r, Some(3));
+        assert_eq!(d["content"], json!("a\nb\nc"));
+    }
+
+    #[test]
+    fn resolve_snippet_lines_maps_wire_value_to_cap() {
+        assert!(resolve_snippet_lines(None).is_none());
+        assert_eq!(resolve_snippet_lines(Some(3)), Some(3));
+        assert_eq!(resolve_snippet_lines(Some(0)), Some(0));
+        assert_eq!(resolve_snippet_lines(Some(-4)), Some(0));
+    }
 
     fn chunk(file_path: &str, start_line: u32, end_line: u32) -> Chunk {
         Chunk {

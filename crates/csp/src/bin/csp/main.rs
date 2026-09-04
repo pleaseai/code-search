@@ -16,7 +16,7 @@ use csp::indexing::index::{
 };
 use csp::stats::{clear_savings, default_stats_file, format_savings_report, now_secs};
 use csp::types::ContentType;
-use csp::utils::{format_results, is_git_url, resolve_chunk};
+use csp::utils::{format_results, is_git_url, resolve_chunk, resolve_snippet_lines};
 
 #[derive(Parser)]
 #[command(name = "csp", version, about = "Instant local code search for agents")]
@@ -216,12 +216,6 @@ fn load_index(
             },
         )
     }
-}
-
-/// Map the CLI `--max-snippet-lines` value to the `Option<usize>` cap. Absent
-/// (`None`) → full chunk content; a negative value clamps to `0` (no code).
-fn resolve_snippet_lines(value: Option<i64>) -> Option<usize> {
-    value.map(|n| n.max(0) as usize)
 }
 
 /// JSON output for `search` (pure — testable without stdout capture).
