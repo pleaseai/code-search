@@ -1,0 +1,37 @@
+crates/csp/src/indexing/types.rs
+  s_13cf2c960d5894::t_3bafdf2e8924bd 31-33,35,71-74,76
+crates/csp/src/indexing/dense.rs
+  s_13cf2c960d5894::t_f6bbb73f00567d 187-192
+crates/csp/src/indexing/sparse.rs
+  s_13cf2c960d5894::t_101477c4c9756f 73-74,140-153,169,172,284,286-287,293,328-331,333-334,336-337,339
+crates/csp/src/indexing/index.rs
+  s_13cf2c960d5894::t_3b934705a87f62 15,501-503,508
+.please/docs/decisions/0005-per-file-hash-manifest-incremental-reindex.md
+  s_13cf2c960d5894::t_a1456b45d2ef71 71-75
+crates/csp/src/indexing/cache_orchestrator.rs
+  s_13cf2c960d5894::t_ea1e77c68ae171 167-174
+.please/docs/references/semble.md
+  s_13cf2c960d5894::t_a1456b45d2ef71 390-399
+crates/csp/src/indexing/create.rs
+  s_13cf2c960d5894::t_6fe0c6bb550d0b 104-108,154-159,166-168,192-195,197,200-207
+  s_13cf2c960d5894::t_c60f7cf808f102 450-451,453-454,464,472
+  s_13cf2c960d5894::t_f6bbb73f00567d 16,196,198-199
+  s_13cf2c960d5894::t_b5fd7408a720c1 452,455-463,465-471
+  s_13cf2c960d5894::t_7cc2d9d4aeec55 208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "b40edf4dcf5f939768be91e846ff22d610e0decd",
+  "prompts": {},
+  "sessions": {
+    "s_13cf2c960d5894": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4cbe7dfc-c928-48d7-aa2a-4e59464bdf95",
+        "model": "unknown"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
