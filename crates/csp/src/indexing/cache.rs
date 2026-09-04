@@ -136,7 +136,8 @@ fn normalize_posix(path: &str) -> String {
     joined
 }
 
-/// Normalize a source identity: URLs (scheme:// or scp-style `git@`) are kept
+/// Normalize a source identity: URLs (any `scheme://`, or anything `is_git_url`
+/// accepts, including scp-style `user@host:path`) are kept
 /// verbatim; local paths are made absolute against the current directory and
 /// then path-normalized, so `.`, `./repo/../repo`, and `/abs/repo` all key the
 /// same entry (mirrors upstream `cache_key`'s `Path.resolve()`). Absolutizing
@@ -150,7 +151,11 @@ fn normalize_posix(path: &str) -> String {
 /// collapses. Anything comparing the two (notably [`source_is_gone`]) must
 /// normalize both sides rather than assume they already agree.
 pub(crate) fn normalize_source(source: &str) -> String {
-    if is_url_scheme(source) || source.starts_with("git@") {
+    // `is_git_url` is the same classifier `load_or_build_index` uses to pick
+    // `from_git`, so every remote spelling it accepts — including non-`git`
+    // scp-style ones like `deploy@host:org/repo.git` — stays verbatim instead
+    // of being absolutized against the caller's cwd.
+    if is_url_scheme(source) || is_git_url(source) {
         return source.to_string();
     }
     let absolute = std::path::absolute(source)
@@ -566,6 +571,23 @@ mod tests {
         let literal = resolve_cache_dir("/repos/x/..\\y", &[ContentType::Code], &loc(base));
         let traversed = resolve_cache_dir("/repos/y", &[ContentType::Code], &loc(base));
         assert_ne!(literal, traversed);
+    }
+
+    /// Every remote spelling `is_git_url` accepts must stay verbatim — not only
+    /// `git@…` — or the same remote keys differently from each cwd.
+    #[test]
+    fn normalize_source_keeps_scp_remotes_verbatim() {
+        for remote in [
+            "deploy@host:org/repo.git",
+            "user@host:repo",
+            "git@github.com:x/r.git",
+        ] {
+            assert_eq!(normalize_source(remote), remote);
+        }
+        // `user@host:/abs` is not scp syntax; it is a local path and gets keyed as one.
+        let local = normalize_source("user@host:/abs");
+        assert_ne!(local, "user@host:/abs");
+        assert!(Path::new(&local).is_absolute());
     }
 
     #[test]

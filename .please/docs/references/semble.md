@@ -297,8 +297,10 @@ Ported faithfully (`LazyLock<Regex>` for the static patterns, `RefCell<HashMap>`
 - **Cache key source identity** (`normalize_source`): local paths are made absolute with
   `std::path::absolute` and then path-normalized before hashing, so `.`, `./r/../r`, and
   `/abs/r` share one leaf and two repos searched with the default `.` no longer collide
-  (#100; upstream `cache_key` uses `Path.resolve()`). The keyed form equals the manifest
-  `sourceId` that `from_path` records. Git URLs stay verbatim.
+  (#100; upstream `cache_key` uses `Path.resolve()`). Anything `is_git_url` accepts (scheme
+  URLs and scp-style remotes) stays verbatim. The keyed form is **not** byte-identical to the
+  manifest `sourceId`: `from_path` records bare `std::path::absolute`, which keeps `..`
+  segments the key collapses, so `source_is_gone` normalizes both sides before comparing.
 - `clear_index_cache` removes only the index dir — never the `~/.csp` home (which also holds
   `savings.jsonl`).
 - `clear_orphan_indexes` (← upstream `cli.py::_clear_orphans`, #243) removes per-source leaves
