@@ -11,6 +11,7 @@ use crate::chunking::source::DESIRED_CHUNK_LENGTH_CHARS;
 use crate::indexing::cache::sha256_hex;
 use crate::indexing::create::{create_index_from_path, CreateIndexOptions};
 use crate::indexing::dense::{load_model, make_stub_model, Model, SelectableBasicBackend};
+use crate::indexing::file_sizes::{read_file_chars, FileSizes};
 use crate::indexing::sparse::Bm25Index;
 use crate::indexing::types::{FileManifest, PreviousIndex};
 use crate::search::{search as run_search, SearchOptions as RunSearchOptions, SearchResult};
@@ -90,11 +91,12 @@ pub struct CspIndex {
     pub content: Vec<ContentType>,
     /// Per-file content hash + chunk range, used for incremental reindexing.
     pub files: FileManifest,
-    /// Per-file character counts (repo-relative path → UTF-16 length) captured
-    /// at build time from the source tree, for token-savings telemetry. Empty
-    /// when the source files aren't available (e.g. a git index loaded from
-    /// cache). Derived metadata, not part of [`CspIndexState`].
-    pub file_sizes: HashMap<String, u64>,
+    /// Per-file character counts (repo-relative path → UTF-16 length) for
+    /// token-savings telemetry: read lazily from a still-present local source
+    /// root, or captured at build time when the source won't outlive the build
+    /// (a git clone's temp checkout). Derived metadata, not part of
+    /// [`CspIndexState`].
+    pub file_sizes: FileSizes,
 }
 
 pub(crate) fn normalize_content(content: Option<Vec<ContentType>>) -> Vec<ContentType> {
@@ -112,7 +114,7 @@ impl CspIndex {
             root: state.root,
             content: state.content,
             files: state.files,
-            file_sizes: HashMap::new(),
+            file_sizes: FileSizes::empty(),
         }
     }
 
@@ -150,25 +152,21 @@ impl CspIndex {
             previous,
         )?;
 
+        // Absolute, like upstream's `path.resolve()`, so an index built from
+        // `.` still finds its source tree when loaded from another cwd.
+        let root = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
         let mut index = Self::new(CspIndexState {
             model,
             bm25_index: result.bm25_index,
             semantic_index: result.semantic_index,
             chunks: result.chunks,
             model_path,
-            // Absolute, like upstream's `path.resolve()`, so an index built from
-            // `.` still finds its source tree when loaded from another cwd.
-            root: Some(
-                std::path::absolute(path)
-                    .unwrap_or_else(|_| path.to_path_buf())
-                    .to_string_lossy()
-                    .into_owned(),
-            ),
+            root: Some(root.to_string_lossy().into_owned()),
             content,
             files: result.files,
         });
-        // Capture file sizes now, while the source tree is on disk.
-        index.file_sizes = compute_file_sizes(path, &index.chunks);
+        // The source tree stays on disk, so sizes are read lazily per result.
+        index.file_sizes = FileSizes::lazy(root);
         Ok(index)
     }
 
@@ -190,9 +188,9 @@ impl CspIndex {
 
         clone_shallow(url, dir.path(), git_ref)?;
         let index = Self::from_path(dir.path(), options)?;
-        // `from_path` already captured file sizes from the checkout; carry them
-        // over since the temp dir is removed when `dir` drops.
-        let file_sizes = index.file_sizes.clone();
+        // Capture file sizes from the checkout now: the temp dir is removed when
+        // `dir` drops, so they can't be read lazily at search time.
+        let file_sizes = FileSizes::captured(compute_file_sizes(dir.path(), &index.chunks));
         // Re-root at the URL so a persisted manifest records a stable sourceId
         // (the temp checkout is removed when `dir` drops).
         let mut rerooted = Self::new(CspIndexState {
@@ -401,13 +399,14 @@ impl CspIndex {
             content: manifest.content,
             files: manifest.files,
         });
-        // Recompute file sizes from the source when it's a still-present local
-        // directory (mirrors semble reading sizes off `root` on load). A git URL
-        // or a moved source leaves this empty → `file_chars` is simply 0.
+        // Read file sizes lazily from the source when it's a still-present local
+        // directory — a deliberate divergence from upstream semble, which
+        // recomputes them eagerly in `SembleIndex.__init__`. A git URL or a moved
+        // source leaves this unavailable → `file_chars` is simply 0.
         if let Some(root) = index.root.as_deref() {
             let root_path = Path::new(root);
             if root_path.is_dir() {
-                index.file_sizes = compute_file_sizes(root_path, &index.chunks);
+                index.file_sizes = FileSizes::lazy(root_path.to_path_buf());
             }
         }
         Ok(index)
@@ -416,50 +415,21 @@ impl CspIndex {
 
 /// Per-file UTF-16 character counts for the unique files referenced by `chunks`,
 /// read from `root`. Mirrors semble `_compute_file_sizes` (unreadable files are
-/// skipped). Feeds the `file_chars` side of token-savings telemetry; UTF-16 keeps
-/// it consistent with `stats::save_search_stats`'s snippet accounting.
-///
-/// Chunk paths are repo-relative by construction; a path that is absolute or
-/// escapes `root` via `..` can only come from a tampered on-disk index, so it is
-/// skipped rather than resolved (path traversal guard — a deliberate addition
-/// over upstream, which joins the path unchecked). Only regular files are read:
-/// the file walker never follows symlinks, and a path that has since become a
-/// symlink, FIFO, or device must not be able to redirect or stall the read.
+/// skipped). Used for sources that won't outlive the build (a git clone's temp
+/// checkout); local paths read lazily via [`FileSizes::lazy`] instead.
 fn compute_file_sizes(root: &Path, chunks: &[Chunk]) -> HashMap<String, u64> {
-    let mut sizes: HashMap<String, u64> = HashMap::new();
-    for chunk in chunks {
-        if sizes.contains_key(&chunk.file_path) {
-            continue;
-        }
-        let rel = Path::new(&chunk.file_path);
-        if !is_safe_relative_path(rel) {
-            continue;
-        }
-        let full = root.join(rel);
-        let is_regular_file = std::fs::symlink_metadata(&full)
-            .map(|m| m.is_file())
-            .unwrap_or(false);
-        if !is_regular_file {
-            continue;
-        }
-        if let Ok(text) = std::fs::read_to_string(&full) {
-            sizes.insert(chunk.file_path.clone(), text.encode_utf16().count() as u64);
-        }
-    }
-    sizes
-}
-
-/// `true` when `path` is relative and contains no `..` or root component, so
-/// joining it onto an index root cannot resolve outside that root.
-fn is_safe_relative_path(path: &Path) -> bool {
-    use std::path::Component;
-    !path.is_absolute()
-        && !path.components().any(|c| {
-            matches!(
-                c,
-                Component::ParentDir | Component::RootDir | Component::Prefix(_)
-            )
-        })
+    // Canonicalize once (`read_file_chars` needs a canonical root) and dedup
+    // paths first so an unreadable file is attempted once, not once per chunk.
+    let Ok(root) = root.canonicalize() else {
+        return HashMap::new();
+    };
+    chunks
+        .iter()
+        .map(|c| &c.file_path)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .filter_map(|path| read_file_chars(&root, path).map(|chars| (path.clone(), chars)))
+        .collect()
 }
 
 /// Read and validate `<dir>/chunks.json`.

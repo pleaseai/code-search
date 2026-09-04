@@ -8,6 +8,7 @@ pub mod cache;
 mod cache_orchestrator;
 pub mod create;
 pub mod dense;
+pub mod file_sizes;
 pub mod file_walker;
 pub mod files;
 pub mod index;
