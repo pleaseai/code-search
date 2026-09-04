@@ -1,0 +1,21 @@
+crates/csp/src/mcp.rs
+  s_23552ffee24b4d::t_4f305b103da88c 12,53-54,56,59-60
+crates/csp/src/types.rs
+  s_23552ffee24b4d::t_4f305b103da88c 21-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "73ef3f176f4b8c08129b801501cdd55aaf5c28f7",
+  "prompts": {},
+  "sessions": {
+    "s_23552ffee24b4d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ec01b239-c933-4644-912a-0eb35743309b",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
