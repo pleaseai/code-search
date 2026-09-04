@@ -409,6 +409,8 @@ csp find-related src/auth.ts 42 ./my-project
 
 When you run `csp search` or `csp find-related` **without** `--index`, `csp` automatically indexes and caches the source in a global cache at `~/.csp/index/`, keyed by the source and content selection. The cache is reused on the next run and invalidated automatically when the source files change (by content hash), so you do not need to reindex manually. A stale cache is rebuilt incrementally: only files whose content changed are re-chunked and re-embedded, and unchanged files keep their existing chunks, vectors, and BM25 postings. Passing `--index <path>` uses that exact path instead and bypasses the auto-cache. `csp index -o <path>` is for explicit persistence only (`-o` is required) and is independent of the auto-cache.
 
+Files larger than 1 MB are skipped during indexing to keep index builds lean. Skipped files are reported as a warning on stderr at index time, naming the first few paths. If you work with large generated or ingested documents, you can raise (or lower) this limit with the `CSP_MAX_FILE_BYTES` environment variable (in bytes); a malformed or non-positive value warns and falls back to the 1 MB default.
+
 <details>
 <summary>Savings</summary>
 

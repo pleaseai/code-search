@@ -15,14 +15,21 @@ use crate::chunking::source::chunk_source;
 use crate::indexing::cache::sha256_hex;
 use crate::indexing::dense::{embed_chunk_refs, Model, SelectableBasicBackend};
 use crate::indexing::file_walker::walk_files;
-use crate::indexing::files::{detect_language, get_extensions};
+use crate::indexing::files::{
+    detect_language, get_extensions, get_max_file_bytes, DEFAULT_MAX_FILE_BYTES, MAX_FILE_BYTES_ENV,
+};
 use crate::indexing::sparse::{enrich_for_bm25, Bm25Index};
 use crate::indexing::types::{make_chunk_id, FileManifest, FileManifestEntry, PreviousIndex};
 use crate::tokens::tokenize;
 use crate::types::{Chunk, ContentType};
 
 /// 1 MB max file size to read and index.
-pub const MAX_FILE_BYTES: u64 = 1_000_000;
+#[deprecated(
+    since = "0.1.10",
+    note = "use `indexing::files::DEFAULT_MAX_FILE_BYTES` or `get_max_file_bytes()` \
+            (the limit is now overridable via `CSP_MAX_FILE_BYTES`)"
+)]
+pub const MAX_FILE_BYTES: u64 = DEFAULT_MAX_FILE_BYTES;
 
 /// Options for [`create_index_from_path`].
 pub struct CreateIndexOptions<'a> {
@@ -33,6 +40,28 @@ pub struct CreateIndexOptions<'a> {
     pub content: Option<Vec<ContentType>>,
     /// When set, chunk file paths are stored relative to this root.
     pub display_root: Option<PathBuf>,
+    /// Max file size (bytes) to read and index; larger files are skipped with a
+    /// warning. `None` resolves `CSP_MAX_FILE_BYTES` (default 1 MB) via
+    /// [`get_max_file_bytes`].
+    pub max_file_bytes: Option<u64>,
+}
+
+impl<'a> CreateIndexOptions<'a> {
+    /// Options for `model` with every other field at its default: code-only
+    /// content, no extra extensions, chunk paths as walked, and the size limit
+    /// resolved from `CSP_MAX_FILE_BYTES`. Prefer
+    /// `CreateIndexOptions { extensions: .., ..CreateIndexOptions::new(model) }`
+    /// over a bare struct literal so a future option field does not break
+    /// callers.
+    pub fn new(model: &'a Model) -> Self {
+        Self {
+            model,
+            extensions: None,
+            content: None,
+            display_root: None,
+            max_file_bytes: None,
+        }
+    }
 }
 
 /// Result of [`create_index_from_path`].
@@ -43,6 +72,51 @@ pub struct CreateIndexResult {
     pub chunks: Vec<Chunk>,
     /// Per-file content hash + chunk range, for the next incremental reindex.
     pub files: FileManifest,
+}
+
+/// A repository-controlled path rendered for a stderr diagnostic, with control
+/// characters (ANSI escapes, newlines) escaped so a hostile file name in a
+/// cloned repo cannot rewrite the terminal or forge diagnostic lines.
+fn escape_control(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for c in path.chars() {
+        if c.is_control() {
+            out.extend(c.escape_default());
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// The warning for files skipped for exceeding `max_file_bytes` — the count
+/// plus the first five paths — or `None` when nothing was skipped. Port of
+/// upstream `_warn_skipped_large` (semble #252): a silent skip left unexplained
+/// gaps in results. `from_env` selects the hint: the env var when the limit
+/// was resolved from it, else the `max_file_bytes` option the caller pinned.
+pub(crate) fn skipped_large_warning(
+    skipped: &[String],
+    max_file_bytes: u64,
+    from_env: bool,
+) -> Option<String> {
+    if skipped.is_empty() {
+        return None;
+    }
+    let shown: Vec<String> = skipped.iter().take(5).map(|p| escape_control(p)).collect();
+    let knob = if from_env {
+        MAX_FILE_BYTES_ENV
+    } else {
+        "max_file_bytes"
+    };
+    Some(format!(
+        "Skipped {} file(s) exceeding the maximum file size of {} bytes \
+         (raise {} to include them): {}{}",
+        skipped.len(),
+        max_file_bytes,
+        knob,
+        shown.join(", "),
+        if skipped.len() > 5 { " ..." } else { "" },
+    ))
 }
 
 /// Replace a file's BM25 postings: remove its old slots (if any), then add its
@@ -169,6 +243,7 @@ pub fn create_index_from_path(
         .unwrap_or_else(|| vec![ContentType::Code]);
     let resolved = get_extensions(&content, options.extensions.as_deref());
     let ext_refs: Vec<&str> = resolved.iter().map(String::as_str).collect();
+    let max_file_bytes = options.max_file_bytes.unwrap_or_else(get_max_file_bytes);
 
     let (mut bm25_index, previous_files, mut previous_chunks, mut previous_vectors) =
         open_previous(previous);
@@ -181,6 +256,7 @@ pub fn create_index_from_path(
     let mut vectors: Vec<Option<Vec<f32>>> = Vec::new();
     let mut fresh_rows: Vec<usize> = Vec::new();
     let mut files = FileManifest::new();
+    let mut skipped_large: Vec<String> = Vec::new();
 
     for file_path in walk_files(path, &ext_refs, &[]) {
         let language = detect_language(&file_path.to_string_lossy());
@@ -188,7 +264,8 @@ pub fn create_index_from_path(
             Ok(meta) => meta.len(),
             Err(_) => continue,
         };
-        if size > MAX_FILE_BYTES {
+        if size > max_file_bytes {
+            skipped_large.push(display_path(&file_path, options.display_root.as_deref()));
             continue;
         }
         let Ok(bytes) = std::fs::read(&file_path) else {
@@ -205,7 +282,7 @@ pub fn create_index_from_path(
             eprintln!(
                 "csp: skipping {}: its display path collides with an already indexed file \
                  (non-UTF-8 file name)",
-                file_path.display()
+                escape_control(&file_path.display().to_string())
             );
             continue;
         }
@@ -246,6 +323,16 @@ pub fn create_index_from_path(
         if !files.contains_key(indexed_path) {
             reindex_file(&mut bm25_index, indexed_path, &[], Some(entry))?;
         }
+    }
+
+    // Warn before the empty check so a tree of only oversized files explains
+    // itself rather than just reporting "no supported files".
+    if let Some(warning) = skipped_large_warning(
+        &skipped_large,
+        max_file_bytes,
+        options.max_file_bytes.is_none(),
+    ) {
+        eprintln!("csp: {warning}");
     }
 
     if chunks.is_empty() {

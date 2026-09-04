@@ -9,11 +9,11 @@ use crate::chunking::source::DESIRED_CHUNK_LENGTH_CHARS;
 use crate::indexing::cache::{
     compute_content_hash_from_paths, ensure_cache_dir, resolve_cache_dir, CacheLocation,
 };
-use crate::indexing::create::MAX_FILE_BYTES;
 use crate::indexing::dense::SelectableBasicBackend;
 use crate::indexing::dense::DEFAULT_MODEL_NAME;
 use crate::indexing::file_walker::walk_files;
 use crate::indexing::files::get_extensions;
+use crate::indexing::files::get_max_file_bytes;
 use crate::indexing::index::{
     normalize_content, parse_manifest, read_chunks, CspIndex, IndexManifest, LoadOptions,
     INDEX_SCHEMA_VERSION,
@@ -42,11 +42,14 @@ fn collect_source_paths(root: &Path, content: &[ContentType]) -> Vec<(String, Pa
     let resolved = get_extensions(content, None);
     let ext_refs: Vec<&str> = resolved.iter().map(String::as_str).collect();
     let mut files = Vec::new();
+    // Same ceiling as `create_index_from_path`, so the fingerprint tracks
+    // exactly the files that get indexed.
+    let max_file_bytes = get_max_file_bytes();
     for file_path in walk_files(root, &ext_refs, &[]) {
         let Ok(meta) = std::fs::metadata(&file_path) else {
             continue;
         };
-        if meta.len() > MAX_FILE_BYTES {
+        if meta.len() > max_file_bytes {
             continue;
         }
         let rel = file_path.strip_prefix(root).unwrap_or(&file_path);

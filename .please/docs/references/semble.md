@@ -165,8 +165,11 @@ Same contract as semble `tokens.py`:
 - Content-type partition: `DOC_LANGUAGES`, `CONFIG_LANGUAGES`, `DATA_LANGUAGES`; code = all minus
   those. `get_extensions(types, extra)` inverts the map; the **`extra`** param (custom extensions)
   is a small Rust-side API addition.
-- File gating: `MAX_FILE_BYTES = 1_000_000` (in `create.rs`); empty/whitespace and too-new
-  (mtime) files are skipped (`FileStatus`).
+- File gating: `DEFAULT_MAX_FILE_BYTES = 1_000_000`, overridable per process via
+  `CSP_MAX_FILE_BYTES` (`get_max_file_bytes()` — upstream `SEMBLE_MAX_FILE_BYTES`, #252; a
+  malformed/non-positive value warns once and falls back). `create_index_from_path` collects the
+  paths skipped for size and prints one stderr warning (count + first 5 paths). Empty/whitespace
+  and too-new (mtime) files are skipped (`FileStatus`).
 
 ### 4.6 `indexing/dense.rs` — Model2Vec embeddings (real + stub)
 
@@ -316,8 +319,8 @@ Ported faithfully (`LazyLock<Regex>` for the static patterns, `RefCell<HashMap>`
   a local source root is read lazily per returned result with a memo (misses memoized too), where
   upstream `_compute_file_sizes` runs eagerly over every indexed file in `SembleIndex.__init__`.
   Git sources still capture eagerly at clone time (the temp checkout is gone by search time).
-  Because the read now happens inside a live search, it is bounded by `MAX_FILE_BYTES` (the same
-  ceiling the indexer applies) — upstream, running at construction time, has no such bound.
+  Because the read now happens inside a live search, it is bounded by `get_max_file_bytes()` (the
+  same ceiling the indexer applies) — upstream, running at construction time, has no such bound.
   Decoding matches upstream `read_file_text` (`errors="replace"`) and the csp indexer
   (`String::from_utf8_lossy`), so a non-UTF-8 file that got indexed still gets sized.
 

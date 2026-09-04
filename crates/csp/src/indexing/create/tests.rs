@@ -5,10 +5,8 @@ use tempfile::tempdir;
 
 fn opts(model: &Model, display_root: Option<PathBuf>) -> CreateIndexOptions<'_> {
     CreateIndexOptions {
-        model,
-        extensions: None,
-        content: None,
         display_root,
+        ..CreateIndexOptions::new(model)
     }
 }
 
@@ -53,6 +51,7 @@ fn respects_extensions_override() {
         extensions: Some(vec![".txt".to_string()]),
         content: Some(vec![ContentType::Docs]),
         display_root: Some(dir.path().to_path_buf()),
+        max_file_bytes: None,
     };
     let result = create_index_from_path(dir.path(), &options, None).unwrap();
     assert_eq!(result.chunks.len(), 1);
@@ -74,6 +73,67 @@ fn skips_files_over_max_bytes() {
     let paths: Vec<&str> = result.chunks.iter().map(|c| c.file_path.as_str()).collect();
     assert!(paths.contains(&"small.ts"));
     assert!(!paths.contains(&"big.ts"));
+}
+
+#[test]
+fn honors_configured_max_file_bytes() {
+    let dir = tempdir().unwrap();
+    std::fs::write(dir.path().join("mid.ts"), "a".repeat(200)).unwrap();
+    std::fs::write(dir.path().join("small.ts"), "export const x = 1\n").unwrap();
+    let model = make_stub_model(4);
+    let indexed = |limit: u64| -> Vec<String> {
+        let options = CreateIndexOptions {
+            max_file_bytes: Some(limit),
+            ..opts(&model, Some(dir.path().to_path_buf()))
+        };
+        let result = create_index_from_path(dir.path(), &options, None).unwrap();
+        result.chunks.iter().map(|c| c.file_path.clone()).collect()
+    };
+
+    // A limit under the default still gates: 200 bytes > 100.
+    let paths = indexed(100);
+    assert!(paths.iter().any(|p| p == "small.ts"));
+    assert!(!paths.iter().any(|p| p == "mid.ts"));
+    // Raising it lets the same file through.
+    assert!(indexed(1_000).iter().any(|p| p == "mid.ts"));
+}
+
+#[test]
+fn skipped_large_warning_names_first_five_paths_and_count() {
+    assert_eq!(skipped_large_warning(&[], 1_000_000, true), None);
+
+    let two = vec!["a.ts".to_string(), "b.ts".to_string()];
+    let msg = skipped_large_warning(&two, 1_000_000, true).unwrap();
+    assert_eq!(
+        msg,
+        "Skipped 2 file(s) exceeding the maximum file size of 1000000 bytes \
+         (raise CSP_MAX_FILE_BYTES to include them): a.ts, b.ts"
+    );
+
+    let seven: Vec<String> = (1..=7).map(|i| format!("f{i}.ts")).collect();
+    let msg = skipped_large_warning(&seven, 500, true).unwrap();
+    assert!(msg.starts_with("Skipped 7 file(s) exceeding the maximum file size of 500 bytes"));
+    assert!(
+        msg.ends_with("f1.ts, f2.ts, f3.ts, f4.ts, f5.ts ..."),
+        "{msg}"
+    );
+    assert!(!msg.contains("f6.ts"));
+
+    // A caller-pinned limit points at the option, not the env var.
+    let msg = skipped_large_warning(&two, 100, false).unwrap();
+    assert!(
+        msg.contains("(raise max_file_bytes to include them)"),
+        "{msg}"
+    );
+    assert!(!msg.contains("CSP_MAX_FILE_BYTES"));
+}
+
+#[test]
+fn skipped_large_warning_escapes_control_characters_in_paths() {
+    let hostile = vec!["evil\x1b[31m\nfake: ok.ts".to_string()];
+    let msg = skipped_large_warning(&hostile, 10, true).unwrap();
+    assert!(msg.ends_with("evil\\u{1b}[31m\\nfake: ok.ts"), "{msg}");
+    assert!(!msg.contains('\n'));
 }
 
 #[test]
