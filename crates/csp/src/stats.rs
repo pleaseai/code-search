@@ -82,14 +82,41 @@ fn utf16_len(s: &str) -> u64 {
     s.encode_utf16().count() as u64
 }
 
+/// Characters actually delivered to the caller for one result, honoring the
+/// `max_snippet_lines` cap (mirrors semble#206): `None` → the whole chunk,
+/// `Some(0)` → nothing, `Some(n)` → the first `n` lines.
+fn delivered_chars(content: &str, max_snippet_lines: Option<usize>) -> u64 {
+    match max_snippet_lines {
+        None => utf16_len(content),
+        Some(0) => 0,
+        Some(n) => {
+            // Sum of the first `n` lines plus one `\n` between each pair, without
+            // materializing the joined snippet.
+            let (len, count) = content
+                .lines()
+                .take(n)
+                .fold((0u64, 0u64), |(len, count), line| {
+                    (len + utf16_len(line), count + 1)
+                });
+            len + count.saturating_sub(1)
+        }
+    }
+}
+
 /// Append one telemetry record. Best-effort: any I/O error is swallowed.
+/// `max_snippet_lines` matches the cap applied to the returned snippet so the
+/// recorded `snippet_chars` reflects what the caller actually received.
 pub fn save_search_stats(
     stats_file: &Path,
     results: &[SearchResult],
     call_type: CallType,
     file_sizes: &HashMap<String, u64>,
+    max_snippet_lines: Option<usize>,
 ) {
-    let snippet_chars: u64 = results.iter().map(|r| utf16_len(&r.chunk.content)).sum();
+    let snippet_chars: u64 = results
+        .iter()
+        .map(|r| delivered_chars(&r.chunk.content, max_snippet_lines))
+        .sum();
     let mut unique_paths: Vec<&str> = Vec::new();
     for r in results {
         if !unique_paths.contains(&r.chunk.file_path.as_str()) {
@@ -476,6 +503,7 @@ mod tests {
             &results,
             CallType::Search,
             &sizes(&[("a.ts", 100), ("b.ts", 200)]),
+            None,
         );
 
         let content = std::fs::read_to_string(&file).unwrap();
@@ -489,11 +517,54 @@ mod tests {
     }
 
     #[test]
+    fn save_caps_snippet_chars_by_max_snippet_lines() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("savings.jsonl");
+        let results = vec![result("line1\nline2\nline3", "a.ts")];
+        // The first 2 lines "line1\nline2" are 11 UTF-16 units (semble#206).
+        save_search_stats(
+            &file,
+            &results,
+            CallType::Search,
+            &sizes(&[("a.ts", 100)]),
+            Some(2),
+        );
+        let content = std::fs::read_to_string(&file).unwrap();
+        let record: StatsRecord = serde_json::from_str(content.lines().next().unwrap()).unwrap();
+        assert_eq!(record.snippet_chars, 11);
+        assert_eq!(record.file_chars, 100);
+    }
+
+    #[test]
+    fn save_zero_snippet_lines_records_no_snippet_chars() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("savings.jsonl");
+        let results = vec![result("anything at all", "a.ts")];
+        save_search_stats(
+            &file,
+            &results,
+            CallType::Search,
+            &sizes(&[("a.ts", 100)]),
+            Some(0),
+        );
+        let content = std::fs::read_to_string(&file).unwrap();
+        let record: StatsRecord = serde_json::from_str(content.lines().next().unwrap()).unwrap();
+        assert_eq!(record.snippet_chars, 0);
+        assert_eq!(record.file_chars, 100);
+    }
+
+    #[test]
     fn save_dedups_file_chars_per_path() {
         let dir = tempdir().unwrap();
         let file = dir.path().join("savings.jsonl");
         let results = vec![result("abc", "a.ts"), result("def", "a.ts")];
-        save_search_stats(&file, &results, CallType::Search, &sizes(&[("a.ts", 100)]));
+        save_search_stats(
+            &file,
+            &results,
+            CallType::Search,
+            &sizes(&[("a.ts", 100)]),
+            None,
+        );
         let content = std::fs::read_to_string(&file).unwrap();
         let record: StatsRecord = serde_json::from_str(content.lines().next().unwrap()).unwrap();
         assert_eq!(record.file_chars, 100);
@@ -505,7 +576,13 @@ mod tests {
         let dir = tempdir().unwrap();
         let file = dir.path().join("savings.jsonl");
         let results = vec![result("x", "a.ts"), result("y", "missing.ts")];
-        save_search_stats(&file, &results, CallType::Search, &sizes(&[("a.ts", 100)]));
+        save_search_stats(
+            &file,
+            &results,
+            CallType::Search,
+            &sizes(&[("a.ts", 100)]),
+            None,
+        );
         let content = std::fs::read_to_string(&file).unwrap();
         let record: StatsRecord = serde_json::from_str(content.lines().next().unwrap()).unwrap();
         assert_eq!(record.file_chars, 100);
@@ -520,12 +597,14 @@ mod tests {
             &[result("a", "a.ts")],
             CallType::Search,
             &sizes(&[("a.ts", 10)]),
+            None,
         );
         save_search_stats(
             &file,
             &[result("b", "b.ts")],
             CallType::FindRelated,
             &sizes(&[("b.ts", 10)]),
+            None,
         );
         let content = std::fs::read_to_string(&file).unwrap();
         let lines: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();

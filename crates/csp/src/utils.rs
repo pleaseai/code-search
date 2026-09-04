@@ -2,33 +2,69 @@
 
 use serde_json::{json, Value};
 
+use crate::chunking::core::split_lines_keep_ends;
 use crate::search::SearchResult;
-use crate::types::{chunk_location, Chunk};
+use crate::types::Chunk;
 
-/// Serialize a search result to the CLI/MCP wire dict — **snake_case** chunk
-/// fields plus a derived `location` (matching the TS `SearchResult.toDict`, which
-/// differs from the camelCase `ChunkDict` used for on-disk persistence).
-pub fn result_to_dict(result: &SearchResult) -> Value {
+/// Map a CLI/MCP `max_snippet_lines` wire value (`--max-snippet-lines`, or the
+/// tool's `max_snippet_lines` argument) to the `Option<usize>` cap that
+/// [`format_results`] takes. Absent (`None`) → full chunk content; a negative
+/// value clamps to `0` (no code); a value above `usize::MAX` (32-bit targets)
+/// saturates instead of wrapping.
+pub fn resolve_snippet_lines(value: Option<i64>) -> Option<usize> {
+    value.map(|n| usize::try_from(n.max(0)).unwrap_or(usize::MAX))
+}
+
+/// Serialize a search result to the flat CLI/MCP wire dict — **snake_case**
+/// fields (`file_path`, `start_line`, `end_line`, `score`, optional `content`),
+/// matching semble `utils.format_results` after semble#198.
+///
+/// `max_snippet_lines` caps the `content` field so agents can spend fewer tokens
+/// confirming a location before navigating to the file:
+/// - `None` → full chunk content
+/// - `Some(0)` → omit `content` entirely (path + line range only)
+/// - `Some(n)` → the first `n` lines of content
+pub fn result_to_dict(result: &SearchResult, max_snippet_lines: Option<usize>) -> Value {
     let c = &result.chunk;
-    json!({
-        "chunk": {
-            "content": c.content,
-            "file_path": c.file_path,
-            "start_line": c.start_line,
-            "end_line": c.end_line,
-            "language": c.language,
-            "location": chunk_location(c),
-        },
+    let mut entry = json!({
+        "file_path": c.file_path,
+        "start_line": c.start_line,
+        "end_line": c.end_line,
         "score": result.score,
-    })
+    });
+    match max_snippet_lines {
+        None => {
+            entry["content"] = json!(c.content);
+        }
+        Some(0) => {}
+        Some(n) => {
+            // Python `splitlines()` also breaks on bare `\r`; `str::lines()`
+            // does not, so reuse the chunker's splitter for line parity.
+            let snippet: Vec<&str> = split_lines_keep_ends(&c.content)
+                .into_iter()
+                .take(n)
+                .map(|l| l.trim_end_matches(['\r', '\n']))
+                .collect();
+            entry["content"] = json!(snippet.join("\n"));
+        }
+    }
+    entry
 }
 
 /// Build the `{ query, results }` payload the CLI prints and the MCP server
-/// returns. Port of `utils.formatResults`.
-pub fn format_results(query: &str, results: &[SearchResult]) -> Value {
+/// returns. Port of `utils.format_results`. `max_snippet_lines` is forwarded to
+/// [`result_to_dict`] to cap each result's `content`.
+pub fn format_results(
+    query: &str,
+    results: &[SearchResult],
+    max_snippet_lines: Option<usize>,
+) -> Value {
     json!({
         "query": query,
-        "results": results.iter().map(result_to_dict).collect::<Vec<_>>(),
+        "results": results
+            .iter()
+            .map(|r| result_to_dict(r, max_snippet_lines))
+            .collect::<Vec<_>>(),
     })
 }
 
@@ -114,6 +150,21 @@ pub fn resolve_chunk<'a>(chunks: &'a [Chunk], file_path: &str, line: u32) -> Opt
 mod tests {
     use super::*;
 
+    #[test]
+    fn result_to_dict_cap_splits_crlf_and_bare_cr_like_python_splitlines() {
+        let r = result("a\r\nb\rc\nd");
+        let d = result_to_dict(&r, Some(3));
+        assert_eq!(d["content"], json!("a\nb\nc"));
+    }
+
+    #[test]
+    fn resolve_snippet_lines_maps_wire_value_to_cap() {
+        assert!(resolve_snippet_lines(None).is_none());
+        assert_eq!(resolve_snippet_lines(Some(3)), Some(3));
+        assert_eq!(resolve_snippet_lines(Some(0)), Some(0));
+        assert_eq!(resolve_snippet_lines(Some(-4)), Some(0));
+    }
+
     fn chunk(file_path: &str, start_line: u32, end_line: u32) -> Chunk {
         Chunk {
             content: String::new(),
@@ -122,6 +173,55 @@ mod tests {
             end_line,
             language: None,
         }
+    }
+
+    fn result(content: &str) -> SearchResult {
+        SearchResult {
+            chunk: Chunk {
+                content: content.to_string(),
+                file_path: "a.ts".to_string(),
+                start_line: 1,
+                end_line: 3,
+                language: Some("ts".to_string()),
+            },
+            score: 0.5,
+        }
+    }
+
+    #[test]
+    fn format_results_flat_shape_with_full_content() {
+        let out = format_results("q", &[result("line1\nline2\nline3")], None);
+        let entry = &out["results"][0];
+        // Flat shape: fields live at the top level, no nested `chunk`.
+        assert!(entry.get("chunk").is_none());
+        assert_eq!(entry["file_path"], "a.ts");
+        assert_eq!(entry["start_line"], 1);
+        assert_eq!(entry["end_line"], 3);
+        assert_eq!(entry["score"], 0.5);
+        assert_eq!(entry["content"], "line1\nline2\nline3");
+        assert_eq!(out["query"], "q");
+    }
+
+    #[test]
+    fn result_to_dict_truncates_to_n_lines() {
+        let entry = result_to_dict(&result("line1\nline2\nline3\nline4"), Some(2));
+        assert_eq!(entry["content"], "line1\nline2");
+    }
+
+    #[test]
+    fn result_to_dict_omits_content_when_zero() {
+        let entry = result_to_dict(&result("line1\nline2"), Some(0));
+        assert!(entry.get("content").is_none());
+        // Location metadata is still present so the agent can navigate.
+        assert_eq!(entry["file_path"], "a.ts");
+        assert_eq!(entry["start_line"], 1);
+        assert_eq!(entry["end_line"], 3);
+    }
+
+    #[test]
+    fn result_to_dict_more_lines_than_content_returns_all() {
+        let entry = result_to_dict(&result("only\ntwo"), Some(10));
+        assert_eq!(entry["content"], "only\ntwo");
     }
 
     #[test]

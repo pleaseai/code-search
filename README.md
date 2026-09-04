@@ -130,6 +130,12 @@ csp search "database host port" ./my-project --content config
 csp search "authentication" ./my-project --content all
 ```
 
+Use `--max-snippet-lines N` to cap the code returned per result: `10` gives a signature-plus-first-lines preview, `0` returns only the file path and line range. The default returns the full chunk. A short preview is often enough to confirm a location before you open the file, so it trades a little context for fewer tokens.
+
+```bash
+csp search "authentication" ./my-project --max-snippet-lines 10
+```
+
 Use `csp find-related` to discover code similar to a known location (pass `file_path` and `line` from a prior search result):
 
 ```bash
@@ -348,6 +354,8 @@ Add to `~/.config/zed/settings.json` (or `.zed/settings.json` in your project):
 |------|-------------|
 | `search` | Search a codebase with a natural-language or code query. Pass `repo` as a local directory path or an https:// git URL. |
 | `find_related` | Given a file path and line number, return chunks semantically similar to the code at that location. |
+
+Both tools accept `max_snippet_lines` to cap the code returned per result. It defaults to `10` — a signature-plus-first-lines preview that lets an agent confirm a location cheaply, then navigate to the file for full context. Pass `0` for the location only, or `null` for the full chunk when the preview lacks context.
 
 By default the MCP server indexes only code files. To also index documentation, config, or everything, append `--content docs`, `--content config`, or `--content all` to the server command, or a combination, e.g. `--content code docs`. For example, in Claude Code: `claude mcp add csp -s user -- bunx @pleaseai/csp mcp --content all`.
 

@@ -16,7 +16,15 @@ use rmcp::{tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler
 use tokio::sync::Mutex;
 
 use csp::mcp::{find_related_tool, search_tool, IndexCache, SERVER_INSTRUCTIONS};
+use csp::stats::default_stats_file;
 use csp::types::ContentType;
+use csp::utils::resolve_snippet_lines;
+
+/// MCP default: signature + first body lines, enough to confirm a location
+/// while spending far fewer tokens than the full chunk (semble#198).
+fn default_max_snippet_lines() -> Option<i64> {
+    Some(10)
+}
 
 /// Parameters for the `search` tool (mirrors the TS MCP tool's args).
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -28,6 +36,11 @@ pub struct SearchParams {
     pub repo: Option<String>,
     /// Maximum number of results (default 5).
     pub top_k: Option<u32>,
+    /// Lines of source per result. Default 10 = signature + first body lines,
+    /// enough to confirm the location. 0 = file path and line range only. Pass
+    /// `null` for the full chunk when the snippet lacks context.
+    #[serde(default = "default_max_snippet_lines")]
+    pub max_snippet_lines: Option<i64>,
 }
 
 /// Parameters for the `find_related` tool.
@@ -41,6 +54,10 @@ pub struct FindRelatedParams {
     pub repo: Option<String>,
     /// Maximum number of results (default 5).
     pub top_k: Option<u32>,
+    /// Lines of source per result. Default 10 = signature + first body lines.
+    /// 0 = location only. Pass `null` for the full chunk.
+    #[serde(default = "default_max_snippet_lines")]
+    pub max_snippet_lines: Option<i64>,
 }
 
 /// MCP server holding the session index cache and the default source.
@@ -49,6 +66,9 @@ pub struct CspMcpServer {
     cache: Arc<Mutex<IndexCache>>,
     default_source: Option<String>,
     default_ref: Option<String>,
+    /// Where token-savings telemetry is appended; `None` disables recording
+    /// (used by tests so they don't touch the real `~/.csp/savings.jsonl`).
+    stats_file: Option<std::path::PathBuf>,
     tool_router: ToolRouter<CspMcpServer>,
 }
 
@@ -63,6 +83,7 @@ impl CspMcpServer {
             cache: Arc::new(Mutex::new(IndexCache::new(content))),
             default_source,
             default_ref,
+            stats_file: Some(default_stats_file()),
             tool_router: Self::tool_router(),
         }
     }
@@ -82,6 +103,8 @@ impl CspMcpServer {
             &p.query,
             p.repo.as_deref(),
             p.top_k.unwrap_or(5) as usize,
+            resolve_snippet_lines(p.max_snippet_lines),
+            self.stats_file.as_deref(),
         );
         Ok(CallToolResult::success(vec![Content::text(out)]))
     }
@@ -102,6 +125,8 @@ impl CspMcpServer {
             p.line,
             p.repo.as_deref(),
             p.top_k.unwrap_or(5) as usize,
+            resolve_snippet_lines(p.max_snippet_lines),
+            self.stats_file.as_deref(),
         );
         Ok(CallToolResult::success(vec![Content::text(out)]))
     }
@@ -152,15 +177,30 @@ mod tests {
         assert_eq!(minimal.query, "greet");
         assert!(minimal.repo.is_none());
         assert!(minimal.top_k.is_none());
+        // Absent max_snippet_lines → the MCP default of 10.
+        assert_eq!(minimal.max_snippet_lines, Some(10));
 
         let full: SearchParams = serde_json::from_value(serde_json::json!({
             "query": "greet",
             "repo": "./x",
-            "top_k": 3
+            "top_k": 3,
+            "max_snippet_lines": 0
         }))
         .unwrap();
         assert_eq!(full.repo.as_deref(), Some("./x"));
         assert_eq!(full.top_k, Some(3));
+        assert_eq!(full.max_snippet_lines, Some(0));
+
+        // Explicit null → None (full chunk), distinct from the absent default.
+        let nulled: SearchParams = serde_json::from_value(serde_json::json!({
+            "query": "greet",
+            "max_snippet_lines": null
+        }))
+        .unwrap();
+        assert!(nulled.max_snippet_lines.is_none());
+        assert!(resolve_snippet_lines(nulled.max_snippet_lines).is_none());
+        assert_eq!(resolve_snippet_lines(Some(3)), Some(3));
+        assert_eq!(resolve_snippet_lines(Some(-4)), Some(0));
     }
 
     #[test]
@@ -198,16 +238,19 @@ mod tests {
     #[tokio::test]
     async fn search_tool_call_returns_json_payload() {
         let dir = sample_source();
-        let server = CspMcpServer::new(
+        let mut server = CspMcpServer::new(
             Some(dir.path().to_string_lossy().into_owned()),
             None,
             vec![ContentType::Code],
         );
+        // Don't append telemetry to the developer's real ~/.csp during tests.
+        server.stats_file = None;
         let result = server
             .search(Parameters(SearchParams {
                 query: "greet".to_string(),
                 repo: None,
                 top_k: Some(5),
+                max_snippet_lines: None,
             }))
             .await
             .unwrap();
@@ -235,6 +278,7 @@ mod tests {
                 line: 1,
                 repo: None,
                 top_k: Some(5),
+                max_snippet_lines: None,
             }))
             .await
             .unwrap();
