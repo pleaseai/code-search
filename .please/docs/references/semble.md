@@ -294,10 +294,19 @@ Ported faithfully (`LazyLock<Regex>` for the static patterns, `RefCell<HashMap>`
 - `clear_index_cache` removes only the index dir — never the `~/.csp` home (which also holds
   `savings.jsonl`).
 - `clear_orphan_indexes` (← upstream `cli.py::_clear_orphans`, #243) removes per-source leaves
-  whose manifest `sourceId` is a local path that no longer exists. Same root guard as
-  `clear_index_cache`; an entry is trusted only when `resolve_cache_dir(sourceId, content)`
-  reproduces its directory name, so git-URL leaves (URL + ref keyed) and malformed manifests
-  are skipped. Exposed as `csp clear orphans`; not part of `clear all` (matches upstream).
+  whose manifest `sourceId` is a local path that is now `NotFound`. Same root guard as
+  `clear_index_cache`; a leaf is considered only when its directory name has the cache-key
+  shape (32 lowercase hex, mirroring upstream's `_SHA_256_REGEX`), so stray directories are
+  never swept. **Drift note:** upstream can guard with `cache_key(root_path) == dir name`
+  because its `cache_key` resolves the path (`Path(p).expanduser().resolve()`); csp's
+  `resolve_cache_dir` normalizes only lexically while the manifest records
+  `std::path::absolute`, so the two never agree for a relative source (`csp search "q" .`) —
+  the key must not be re-derived here. Git leaves are excluded by `is_git_url(sourceId)`
+  (`from_git` re-roots the manifest to the URL, unlike upstream, which stores the temp clone
+  dir). Relative `sourceId`s are skipped (they would resolve against the caller's cwd), and
+  only a `NotFound` counts as gone — an unreachable source (unmounted volume, unreadable
+  parent) keeps its cache. Exposed as `csp clear orphans`; not part of `clear all` (matches
+  upstream).
 - **Cache validity** (`try_reuse`): a cached index is reused only when the manifest's
   `chunk_size` equals the current `DESIRED_CHUNK_LENGTH_CHARS` (a manifest predating the field
   → `None` → rebuild) **and**, for local sources, the live source-file content hash matches.

@@ -695,7 +695,7 @@ mod tests {
 
     #[test]
     fn run_clear_at_orphans_removes_only_dead_sources() {
-        use csp::indexing::cache::resolve_cache_dir;
+        use csp::indexing::cache::{resolve_cache_dir, resolve_index_root};
         use csp::indexing::index::{IndexManifest, INDEX_SCHEMA_VERSION};
 
         let home = tempdir().unwrap();
@@ -732,8 +732,11 @@ mod tests {
         assert_eq!(run_clear_at("orphans", &loc, &stats), EXIT_SUCCESS);
         assert!(live_dir.exists());
         assert!(!dead_dir.exists());
-        // `all` never sweeps orphans on its own; it removes the whole root.
+        // `all` never sweeps orphans on its own; it removes the whole root,
+        // live entries included.
         assert_eq!(run_clear_at("all", &loc, &stats), EXIT_SUCCESS);
+        assert!(!live_dir.exists());
+        assert!(!resolve_index_root(&loc).exists());
     }
 
     #[test]
