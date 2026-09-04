@@ -9,9 +9,10 @@ use crate::types::Chunk;
 /// Map a CLI/MCP `max_snippet_lines` wire value (`--max-snippet-lines`, or the
 /// tool's `max_snippet_lines` argument) to the `Option<usize>` cap that
 /// [`format_results`] takes. Absent (`None`) → full chunk content; a negative
-/// value clamps to `0` (no code).
+/// value clamps to `0` (no code); a value above `usize::MAX` (32-bit targets)
+/// saturates instead of wrapping.
 pub fn resolve_snippet_lines(value: Option<i64>) -> Option<usize> {
-    value.map(|n| n.max(0) as usize)
+    value.map(|n| usize::try_from(n.max(0)).unwrap_or(usize::MAX))
 }
 
 /// Serialize a search result to the flat CLI/MCP wire dict — **snake_case**
