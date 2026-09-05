@@ -1,12 +1,14 @@
 name: Docs
 
 # Builds the Nimbus docs site (docs/) on every PR that touches it, and
-# deploys it to Cloudflare (Workers static assets, docs/wrangler.jsonc) on main.
+# deploys it to the Cloudflare Pages project `csp-docs` (docs/wrangler.jsonc)
+# on main. The project must already exist in the account; the custom domain
+# is attached to it in the dashboard, not from this workflow.
 #
 # Deploy needs two repository secrets:
-#   CLOUDFLARE_API_TOKEN  — "Edit Cloudflare Workers" template. The custom
-#                            domain route in wrangler.jsonc also needs
-#                            Zone:DNS:Edit on the pleaseai.dev zone.
+#   CLOUDFLARE_API_TOKEN  — Account → Cloudflare Pages: Edit (plus the
+#                            User → User Details: Read and Account → Account
+#                            Settings: Read scopes wrangler uses for `whoami`).
 #   CLOUDFLARE_ACCOUNT_ID
 
 on:
@@ -102,4 +104,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: docs
-          command: deploy
+          # Explicit branch + commit so the upload is recorded as a production
+          # deployment of this exact SHA rather than whatever git reports.
+          command: pages deploy --branch main --commit-hash ${{ github.sha }}

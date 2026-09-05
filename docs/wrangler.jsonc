@@ -2,16 +2,13 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "csp-docs",
   "compatibility_date": "2026-09-05",
-  // Static-assets Worker: `astro build` writes the site to ./dist and
-  // `wrangler deploy` uploads it. No Worker script runs on the hot path.
-  "assets": {
-    "directory": "./dist",
-    "not_found_handling": "404-page"
-  },
-  // Custom domain declared as the repository homepage. Requires the
-  // `pleaseai.dev` zone in the deploying Cloudflare account; Wrangler
-  // creates the DNS record and certificate on first deploy.
-  "routes": [
-    { "pattern": "code-search.pleaseai.dev", "custom_domain": true }
-  ]
+  // Cloudflare Pages project: `astro build` writes the site to ./dist and
+  // `wrangler pages deploy` uploads it. Pages serves dist/404.html for
+  // unknown paths on its own, so no Worker script or asset config is needed.
+  "pages_build_output_dir": "./dist"
+  // The custom domain (code-search.pleaseai.dev, the repository homepage) is
+  // attached to the Pages project in the Cloudflare dashboard
+  // (Workers & Pages → csp-docs → Custom domains); Pages config has no
+  // `routes` equivalent. The project itself must exist before the first
+  // deploy: `wrangler pages project create csp-docs --production-branch main`.
 }
