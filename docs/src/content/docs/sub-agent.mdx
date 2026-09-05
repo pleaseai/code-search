@@ -1,0 +1,27 @@
+---
+title: Sub-agent
+description: Install a dedicated csp-search sub-agent with csp init for Claude Code, Gemini CLI, Cursor, OpenCode, and more.
+---
+
+For harnesses that support sub-agents, install a dedicated `csp-search` sub-agent so search runs in its own context. This requires the [CLI](/installation).
+
+Claude Code, Gemini CLI, Cursor, OpenCode, GitHub Copilot CLI, Kiro, Antigravity, Command Code, Pi, and Reasonix all support a dedicated `csp` search sub-agent. Run `csp init` once in your project root:
+
+```bash
+csp init                      # Claude Code  → .claude/agents/csp-search.md
+csp init --agent gemini       # Gemini CLI   → .gemini/agents/csp-search.md
+csp init --agent cursor       # Cursor       → .cursor/agents/csp-search.md
+csp init --agent opencode     # OpenCode     → .opencode/agents/csp-search.md
+csp init --agent copilot      # Copilot CLI  → .github/agents/csp-search.md
+csp init --agent kiro         # Kiro         → .kiro/agents/csp-search.md
+csp init --agent antigravity  # Antigravity  → .antigravity/agents/csp-search.md
+csp init --agent commandcode  # Command Code → .commandcode/agents/csp-search.md
+csp init --agent pi           # Pi           → .pi/agents/csp-search.md
+csp init --agent reasonix     # Reasonix     → .reasonix/agents/csp-search.md
+```
+
+<Render file="not-on-path" />
+
+<Aside type="note" title="Codex">
+  Codex is not a `csp init` target. It gets the equivalent `csp-search` skill through the [plugin](/plugin), and the MCP server through `~/.codex/config.toml` (see [MCP server](/mcp-server)).
+</Aside>

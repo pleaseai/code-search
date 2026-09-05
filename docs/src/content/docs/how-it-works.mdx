@@ -1,0 +1,34 @@
+---
+title: How it works
+description: Tree-sitter chunking, Model2Vec embeddings plus BM25 fused with RRF, and the code-aware ranking signals.
+---
+
+`csp` splits each file into code-aware chunks using [tree-sitter](https://tree-sitter.github.io/), then scores every query against the chunks with two complementary retrievers: static [Model2Vec](https://github.com/MinishLab/model2vec) embeddings using the code-specialized `potion-code-16M-v2` model for semantic similarity, and BM25 for lexical matches on identifiers and API names. The two score lists are fused with Reciprocal Rank Fusion (RRF).
+
+Because the embedding model is static with no transformer forward pass at query time, all of this runs in milliseconds on CPU.
+
+## Chunking
+
+Files are parsed with tree-sitter and split along AST boundaries, targeting about 750 characters per chunk. Languages without a grammar fall back to line-based chunking. Tiny nodes are not split further, and a recursion depth guard protects against pathological syntax trees.
+
+## Retrieval
+
+- **Dense**: Model2Vec `potion-code-16M-v2` embeddings, compared by cosine similarity.
+- **Sparse**: BM25 over identifier-aware tokens. `camelCase`, `PascalCase`, and `snake_case` identifiers are split into sub-tokens plus the original lowercased compound, so `parseConfig` matches both `parse` and `parseconfig`.
+- **Path enrichment**: before tokenization each chunk is augmented with its file stem (twice) and the last three directory names, so queries that name a file or module rank its chunks higher.
+- **Fusion**: the two ranked lists are merged with Reciprocal Rank Fusion (`k = 60`) rather than raw-score blending.
+
+## Ranking signals
+
+After fusing, results are reranked with a set of code-aware signals:
+
+- **Adaptive weighting.** Symbol-like queries (`Foo::bar`, `_private`, `getUserById`) get more lexical weight, while natural-language queries stay balanced between semantic and lexical retrievers.
+- **Definition boosts.** A chunk that defines the queried symbol (a `class`, `function`, `interface`, and so on) is ranked above chunks that merely reference it.
+- **Identifier stems.** Query tokens are stemmed and matched against identifier stems in a chunk, giving an additional weight to chunks that contain them. For example, querying `parse config` boosts chunks containing `parseConfig`, `ConfigParser`, or `config_parser`.
+- **File coherence.** When multiple chunks from the same file match the query, the file is boosted so the top result reflects broad file-level relevance rather than a single out-of-context chunk.
+- **Noise penalties.** Test files, `compat/`/`legacy/` shims, example code, and `.d.ts` declaration stubs are down-ranked so canonical implementations surface first.
+- **File saturation.** Beyond the first chunk per file, each additional chunk from the same file decays so the top-k spans several files instead of one.
+
+## Parity with semble
+
+The Rust port targets behavioral equivalence with the upstream Python implementation. The constants above (chunk length, RRF `k`, alpha weights, penalties) are ported from [MinishLab/semble](https://github.com/MinishLab/semble), which remains the source of truth for the algorithm.

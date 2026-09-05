@@ -1,0 +1,153 @@
+---
+title: MCP server
+description: Run csp as an MCP server so agents can search any local or remote codebase directly.
+---
+
+`csp` can run as an MCP server so agents can search any codebase directly. Repos are cloned and indexed on demand. The server keeps a hot in-memory cache for the session and shares the same on-disk cache at `~/.csp/index/` as the CLI, so an index built once is reused across both. Local paths are watched for file changes and re-indexed automatically; on-disk reuse is invalidated by source content hash.
+
+The server is launched with `bunx @pleaseai/csp mcp`. Note the `mcp` subcommand: semble uses the bare binary, `csp` does not.
+
+## Setup
+
+<Tabs>
+  <TabItem label="Claude Code">
+    ```bash
+    claude mcp add csp -s user -- bunx @pleaseai/csp mcp
+    ```
+
+    Or install the [plugin](/plugin), which also adds the `csp-search` sub-agent.
+  </TabItem>
+  <TabItem label="Cursor">
+    Add to `~/.cursor/mcp.json` (or `.cursor/mcp.json` in your project):
+
+    ```json title="~/.cursor/mcp.json"
+    {
+      "mcpServers": {
+        "csp": {
+          "command": "bunx",
+          "args": ["@pleaseai/csp", "mcp"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Codex">
+    Add to `~/.codex/config.toml`:
+
+    ```toml title="~/.codex/config.toml"
+    [mcp_servers.csp]
+    command = "bunx"
+    args = [
+      "@pleaseai/csp",
+      "mcp"
+    ]
+    ```
+  </TabItem>
+  <TabItem label="OpenCode">
+    Add to `~/.opencode/config.json`:
+
+    ```json title="~/.opencode/config.json"
+    {
+      "mcp": {
+        "csp": {
+          "type": "local",
+          "command": ["bunx", "@pleaseai/csp", "mcp"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="VS Code">
+    Add to `.vscode/mcp.json` in your project (or your user profile's `mcp.json`):
+
+    ```json title=".vscode/mcp.json"
+    {
+      "servers": {
+        "csp": {
+          "command": "bunx",
+          "args": ["@pleaseai/csp", "mcp"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Copilot CLI">
+    Add to `~/.copilot/mcp-config.json`:
+
+    ```json title="~/.copilot/mcp-config.json"
+    {
+      "mcpServers": {
+        "csp": {
+          "command": "bunx",
+          "args": ["@pleaseai/csp", "mcp"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Windsurf">
+    Add to `~/.codeium/windsurf/mcp_config.json`:
+
+    ```json title="~/.codeium/windsurf/mcp_config.json"
+    {
+      "mcpServers": {
+        "csp": {
+          "command": "bunx",
+          "args": ["@pleaseai/csp", "mcp"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Gemini CLI">
+    Add to `~/.gemini/settings.json`:
+
+    ```json title="~/.gemini/settings.json"
+    {
+      "mcpServers": {
+        "csp": {
+          "command": "bunx",
+          "args": ["@pleaseai/csp", "mcp"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Zed">
+    Add to `~/.config/zed/settings.json` (or `.zed/settings.json` in your project):
+
+    ```json title="~/.config/zed/settings.json"
+    {
+      "context_servers": {
+        "csp": {
+          "command": "bunx",
+          "args": ["@pleaseai/csp", "mcp"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="note">
+  `bunx` needs [Bun](https://bun.sh) on your `PATH`. With Node 22+ instead, replace `bunx` with `npx` in the command above.
+</Aside>
+
+## Tools
+
+| Tool | Description |
+|------|-------------|
+| `search` | Search a codebase with a natural-language or code query. Pass `repo` as a local directory path or an https:// git URL. |
+| `find_related` | Given a file path and line number, return chunks semantically similar to the code at that location. |
+
+Both tools accept `max_snippet_lines` to cap the code returned per result. It defaults to `10`, a signature-plus-first-lines preview that lets an agent confirm a location cheaply, then navigate to the file for full context. Pass `0` for the location only, or `null` for the full chunk when the preview lacks context.
+
+Both tools also accept `content` (`code`, `docs`, `config`, or `all`) to choose what a single call searches, for example `content: "docs"` to look up a guide in a repo the server otherwise indexes as code. It defaults to the server's configured content (below). Each distinct content selection is indexed and cached separately for the session.
+
+## Content selection
+
+By default the MCP server indexes only code files. To also index documentation, config, or everything, append `--content docs`, `--content config`, or `--content all` to the server command, or a combination such as `--content code docs`. For example, in Claude Code:
+
+```bash
+claude mcp add csp -s user -- bunx @pleaseai/csp mcp --content all
+```

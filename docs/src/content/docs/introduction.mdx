@@ -1,0 +1,63 @@
+---
+title: Introduction
+description: What csp is, what it returns to an agent, and where the algorithm comes from.
+---
+
+`csp` (Code Search Please) is a code search library built for agents. It returns the exact code snippets they need instantly, using about 98% fewer tokens than grep+read. Indexing and searching a full codebase end-to-end takes under a second. Everything runs locally on CPU with no API keys, GPU, or external services.
+
+Run it as an [MCP server](/mcp-server) or call it from the shell via [AGENTS.md](/agents-md), and any agent (Claude Code, Cursor, Codex, OpenCode, and others) gets instant access to any repo.
+
+<Aside type="note" title="Rust port">
+  `csp` is a Rust port of [MinishLab/semble](https://github.com/MinishLab/semble), an excellent code search library originally written in Python. All credit for the algorithm and design goes to the Semble authors. The Rust binary is distributed as a self-contained executable via Homebrew and npm (no runtime required for the Homebrew build).
+</Aside>
+
+## Main features
+
+- **Fast**: indexes an average repo in well under a second and answers queries in milliseconds, all on CPU.
+- **Accurate**: hybrid retrieval (dense embeddings + BM25) with code-aware reranking.
+- **Token-efficient**: returns only the relevant chunks, using about 98% fewer tokens than grep+read.
+- **Zero setup**: runs on CPU with no API keys, GPU, or external services required.
+- **MCP server**: works with Claude Code, Cursor, Codex, OpenCode, VS Code, and any other MCP-compatible agent.
+- **Local and remote**: pass a local path or a git URL.
+- **Single binary**: a self-contained [Rust](https://www.rust-lang.org/) executable. Install via Homebrew with no runtime, or via npm/bun/pnpm (Node 22+ or Bun on `PATH`).
+
+## Where to go next
+
+<CardGrid>
+  <Card title="Installation" icon="ph:download-simple">
+    Homebrew, the install script, npm/bun/pnpm, or Cargo. [Install the CLI](/installation).
+  </Card>
+  <Card title="Quickstart" icon="ph:rocket-launch">
+    The three complementary setup paths: MCP server, AGENTS.md, sub-agent. [Get started](/quickstart).
+  </Card>
+  <Card title="CLI reference" icon="ph:terminal">
+    `search`, `index`, `find-related`, `init`, `savings`, `clear`. [Read the reference](/cli).
+  </Card>
+  <Card title="How it works" icon="ph:brain">
+    Tree-sitter chunking, Model2Vec + BM25, RRF, and the ranking signals. [Under the hood](/how-it-works).
+  </Card>
+</CardGrid>
+
+## Credits
+
+`csp` is a Rust port of [Semble](https://github.com/MinishLab/semble) by [Thomas van Dongen](https://github.com/Pringled) and [Stéphan Tulkens](https://github.com/stephantul) at [MinishLab](https://github.com/MinishLab). The algorithm, ranking signals, and overall architecture are theirs; this project simply brings them to Rust.
+
+If you use the underlying ideas in your research, please cite the original Semble paper:
+
+```bibtex
+@software{minishlab2026semble,
+  author       = {{van Dongen}, Thomas and Stephan Tulkens},
+  title        = {Semble: Fast and Accurate Code Search for Agents},
+  year         = {2026},
+  publisher    = {Zenodo},
+  doi          = {10.5281/zenodo.19785932},
+  url          = {https://github.com/MinishLab/semble},
+  license      = {MIT}
+}
+```
+
+## License
+
+[MIT](https://github.com/pleaseai/code-search/blob/main/LICENSE) © [Minsu Lee](https://github.com/amondnet)
+
+`csp` is a derivative work of [MinishLab/semble](https://github.com/MinishLab/semble), which is also MIT-licensed.

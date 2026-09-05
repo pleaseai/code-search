@@ -1,0 +1,44 @@
+---
+title: Quickstart
+description: Give your agent csp through an MCP server, an AGENTS.md snippet, and a dedicated sub-agent.
+---
+
+Your agent queries `csp` in natural language (for example `"How is authentication handled?"`) and gets back only the relevant code snippets, without grepping or reading full files.
+
+`csp` has three complementary setup paths. The recommended setup is using all three, but you can pick and choose based on your needs:
+
+- **[MCP server](/mcp-server)**: an MCP server for your agent.
+- **[AGENTS.md](/agents-md)**: an AGENTS.md snippet with instructions for calling `csp` via the CLI.
+- **[Sub-agent](/sub-agent)**: a dedicated `csp-search` sub-agent for harnesses that support it.
+
+<Steps>
+  <Step title="Add the MCP server">
+    Expose `csp` as a native tool via MCP so your agent can call it directly. For Claude Code:
+
+    ```bash
+    claude mcp add csp -s user -- bunx @pleaseai/csp mcp
+    ```
+
+    See [MCP server](/mcp-server) for other harnesses (Cursor, Codex, OpenCode, VS Code, and more).
+  </Step>
+  <Step title="Install the CLI and add the AGENTS.md snippet">
+    [Install](/installation) the `csp` CLI, then add the [AGENTS.md snippet](/agents-md) to your `AGENTS.md` or `CLAUDE.md` so the agent knows when and how to call it.
+
+    ```bash
+    brew install pleaseai/tap/csp
+    ```
+  </Step>
+  <Step title="Install the sub-agent">
+    For harnesses that support sub-agents, install a dedicated `csp-search` sub-agent so search runs in its own context (requires the CLI):
+
+    ```bash
+    csp init   # Claude Code → .claude/agents/csp-search.md
+    ```
+
+    See [Sub-agent](/sub-agent) for the other harnesses.
+  </Step>
+</Steps>
+
+<Aside type="tip" title="One-step plugin for Claude Code and Codex">
+  The [plugin](/plugin) registers the MCP server **and** the `csp-search` helper in one step.
+</Aside>

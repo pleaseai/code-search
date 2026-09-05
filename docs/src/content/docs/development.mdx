@@ -1,0 +1,45 @@
+---
+title: Development
+description: Build, test, and lint the csp Cargo workspace, and where the pieces live in the repository.
+---
+
+The library and `csp` binary are a Cargo workspace. `crates/csp` holds both the library and the `csp` binary, which sits behind the default-on `cli` feature; `crates/csp-node` holds the napi-rs bindings published as `@pleaseai/csp-sdk`.
+
+```bash
+cargo build --release          # build the csp binary → target/release/csp
+cargo test --workspace         # run tests
+cargo fmt --all                # format
+cargo clippy --all-targets --all-features -- -D warnings   # lint
+```
+
+Run the CLI from source:
+
+```bash
+cargo run -p code-search-please -- search "query" .
+```
+
+## Repository layout
+
+| Path | Contents |
+|------|----------|
+| `crates/csp` | The Rust library and the `csp` binary (CLI + MCP server). |
+| `crates/csp-node` | napi-rs bindings, shipped as `@pleaseai/csp-sdk`. |
+| `npm/` | The `@pleaseai/csp` npm launcher that execs the platform binary. |
+| `plugins/csp` | The Claude Code / Codex plugin. |
+| `docs/` | This documentation site (Cloudflare Nimbus). |
+
+## Contributing
+
+See [CONTRIBUTING.md](https://github.com/pleaseai/code-search/blob/main/CONTRIBUTING.md) for the workflow, and the [architecture overview](https://github.com/pleaseai/code-search/blob/main/ARCHITECTURE.md) for a bird's-eye view of the crates. Issues and pull requests are welcome at [pleaseai/code-search](https://github.com/pleaseai/code-search).
+
+## Documentation site
+
+The docs live in `docs/` and are built with [Nimbus](https://nimbus-docs.com):
+
+```bash
+cd docs
+bun install
+bun run dev      # local preview
+bun run build    # static build → docs/dist
+bun run check    # build-free preflight (config, frontmatter, links, types)
+```

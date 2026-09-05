@@ -1,0 +1,57 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Header from "../components/Header.astro";
+import { config } from "virtual:nimbus/config";
+
+// Prerender explicitly so the homepage stays a static route under
+// `output: "server"` — an adapter alone must add zero on-demand routes.
+export const prerender = true;
+
+const links = [
+  { href: "/introduction", title: "Introduction", blurb: "What csp is and why agents use it" },
+  { href: "/quickstart", title: "Quickstart", blurb: "MCP server, AGENTS.md, and sub-agent in minutes" },
+  { href: "/mcp-server", title: "MCP server", blurb: "Claude Code, Cursor, Codex, OpenCode, and more" },
+  { href: "/cli", title: "CLI", blurb: "search, index, find-related, savings, clear" },
+  { href: "/library", title: "Library", blurb: "Rust crate and the in-process JS/TS SDK" },
+  { href: "/how-it-works", title: "How it works", blurb: "Hybrid retrieval and code-aware reranking" },
+];
+---
+
+<BaseLayout title={config.title} description={config.description}>
+  <div class="flex flex-col min-h-screen">
+    <Header />
+    <main id="main-content" tabindex="-1" class="flex-1 mx-auto max-w-2xl w-full px-6 py-24">
+      <h1
+        class="text-foreground leading-tight"
+        style="font-size: var(--nb-h1-size); font-weight: var(--nb-h1-weight); letter-spacing: var(--nb-h1-tracking);"
+      >
+        csp — Code Search Please
+      </h1>
+      <p class="mt-2 text-[1.0625rem] text-muted-foreground leading-relaxed">
+        Fast and accurate code search for agents. Returns the exact snippets an
+        agent needs, using about 98% fewer tokens than grep+read. Runs locally on
+        CPU with no API keys, GPU, or external services.
+      </p>
+
+      <pre class="mt-6 rounded-lg border border-border bg-card p-4 text-sm overflow-x-auto"><code>claude mcp add csp -s user -- bunx @pleaseai/csp mcp</code></pre>
+
+      <div class="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {links.map((link) => (
+          <a
+            href={link.href}
+            class="block rounded-lg border border-border p-4 transition-colors hover:border-border-strong no-underline"
+          >
+            <div class="font-medium text-foreground">{link.title}</div>
+            <div class="mt-0.5 text-sm text-muted-foreground">{link.blurb}</div>
+          </a>
+        ))}
+      </div>
+
+      <p class="mt-10 text-sm text-muted-foreground">
+        csp is a Rust port of
+        <a href="https://github.com/MinishLab/semble">MinishLab/semble</a>. The
+        algorithm, ranking signals, and overall architecture are theirs.
+      </p>
+    </main>
+  </div>
+</BaseLayout>
