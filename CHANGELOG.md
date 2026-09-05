@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.11](https://github.com/pleaseai/code-search/compare/v0.1.10...v0.1.11) (2026-09-05)
+
+
+### Documentation
+
+* add Cloudflare Nimbus documentation site ([#106](https://github.com/pleaseai/code-search/issues/106)) ([e3f5d8c](https://github.com/pleaseai/code-search/commit/e3f5d8c55e63b65f3f723210482a19c50790f74b))
+
 ## [0.1.10](https://github.com/pleaseai/code-search/compare/v0.1.9...v0.1.10) (2026-09-04)
 
 
