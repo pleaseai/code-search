@@ -1,0 +1,19 @@
+.codacy.yaml
+  s_9add8fc31889ec::t_c411a641772252 13-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "74ae30537714837f669c4573c75eb179ac0fa50b",
+  "prompts": {},
+  "sessions": {
+    "s_9add8fc31889ec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "218a931b-d148-4e17-8d5b-b44c77d9f8fd",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
