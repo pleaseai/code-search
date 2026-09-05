@@ -1,0 +1,266 @@
+docs/package.json
+  s_819360ac34611d::t_a174113642ec97 1-39
+docs/src/content/docs/quickstart.mdx
+  s_819360ac34611d::t_93d75e100b2db8 1-44
+.gitignore
+  s_819360ac34611d::t_70cbc9b5357dce 61-65
+docs/src/content/docs/library.mdx
+  s_819360ac34611d::t_8430402599cbb0 1-55
+docs/nimbus.json
+  s_819360ac34611d::t_a174113642ec97 1-14
+docs/src/content/docs/sub-agent.mdx
+  s_819360ac34611d::t_489cc026d3f14b 1-27
+docs/src/content/docs/cli.mdx
+  s_819360ac34611d::t_8430402599cbb0 1-110
+docs/src/content/docs/agents-md.mdx
+  s_819360ac34611d::t_489cc026d3f14b 1-75
+docs/src/content/docs/mcp-server.mdx
+  s_819360ac34611d::t_489cc026d3f14b 1-153
+docs/src/content/docs/how-it-works.mdx
+  s_819360ac34611d::t_8430402599cbb0 1-34
+docs/src/content/partials/not-on-path.mdx
+  s_819360ac34611d::t_a174113642ec97 1
+docs/src/content/docs/introduction.mdx
+  s_819360ac34611d::t_93d75e100b2db8 1-26,29,32,35,38-63
+  s_819360ac34611d::t_00d0b98778bee7 27-28,30-31,33-34,36-37
+docs/wrangler.jsonc
+  s_819360ac34611d::t_a174113642ec97 1-17
+docs/src/content/docs/plugin.mdx
+  s_819360ac34611d::t_93d75e100b2db8 1-48
+docs/astro.config.ts
+  s_819360ac34611d::t_a174113642ec97 1-73
+mise.toml
+  s_819360ac34611d::t_70cbc9b5357dce 54-62,64-68,70
+  s_819360ac34611d::t_8c97011c13b0b4 63,69
+eslint.config.ts
+  s_819360ac34611d::t_70cbc9b5357dce 23-26
+.github/workflows/docs.yml
+  s_819360ac34611d::t_8c97011c13b0b4 18,22
+  s_819360ac34611d::t_dcd9a3e04d04a3 1-17,19-21,23-93
+docs/src/pages/index.astro
+  s_819360ac34611d::t_a174113642ec97 1-57
+docs/src/content/docs/installation.mdx
+  s_819360ac34611d::t_93d75e100b2db8 1-70
+CLAUDE.md
+  s_819360ac34611d::t_dcd9a3e04d04a3 41-44
+docs/src/content/docs/development.mdx
+  s_819360ac34611d::t_8430402599cbb0 1-45
+docs/.gitignore
+  s_819360ac34611d::t_cf28b342acdae3 1-21
+docs/AGENT.md
+  s_819360ac34611d::t_598b11761fe0a8 1-109
+docs/bun.lock
+  s_819360ac34611d::t_51ff47ddc81a93 1-1351
+docs/src/components.ts
+  s_819360ac34611d::t_e22ed8e01dbb08 1-25
+docs/src/components/AgentDirective.astro
+  s_819360ac34611d::t_0f74ba632075d5 1-16
+docs/src/components/Header.astro
+  s_819360ac34611d::t_ea6e350fe3652c 1-99
+docs/src/components/Render.astro
+  s_819360ac34611d::t_34d6627ad179a4 1-107
+docs/src/components/ui/aside/Aside.astro
+  s_819360ac34611d::t_002214a25d3c25 1-76
+docs/src/components/ui/aside/index.ts
+  s_819360ac34611d::t_efed0971b3cf86 1
+docs/src/components/ui/badge/Badge.astro
+  s_819360ac34611d::t_41ba3bb2ca194f 1-43
+docs/src/components/ui/badge/index.ts
+  s_819360ac34611d::t_64869b9ae5ffec 1
+docs/src/components/ui/banner/Banner.astro
+  s_819360ac34611d::t_34009ae3ddc349 1-83
+docs/src/components/ui/banner/banner.client.ts
+  s_819360ac34611d::t_3e69c449fe1ab5 1-49
+docs/src/components/ui/banner/index.ts
+  s_819360ac34611d::t_096992526f3f84 1
+docs/src/components/ui/breadcrumbs/Breadcrumbs.astro
+  s_819360ac34611d::t_20df014b4c8f33 1-91
+docs/src/components/ui/breadcrumbs/index.ts
+  s_819360ac34611d::t_66f71b40b5e023 1
+docs/src/components/ui/button/Button.astro
+  s_819360ac34611d::t_8babad79e9d1dd 1-69
+docs/src/components/ui/button/index.ts
+  s_819360ac34611d::t_dff6cbd8a54230 1-13
+docs/src/components/ui/button/variants.ts
+  s_819360ac34611d::t_de8fd2c972cbcb 1-82
+docs/src/components/ui/card-grid/CardGrid.astro
+  s_819360ac34611d::t_12c0c1039bc9b5 1-15
+docs/src/components/ui/card-grid/index.ts
+  s_819360ac34611d::t_edf8fef66f4a93 1
+docs/src/components/ui/card/Card.astro
+  s_819360ac34611d::t_df3f2a7072ac1b 1-21
+docs/src/components/ui/card/index.ts
+  s_819360ac34611d::t_0da30a2664c474 1
+docs/src/components/ui/code/Code.astro
+  s_819360ac34611d::t_9766e241f9e5a4 1-36
+docs/src/components/ui/code/index.ts
+  s_819360ac34611d::t_9d3d73a0923f2d 1
+docs/src/components/ui/collapsible/Collapsible.astro
+  s_819360ac34611d::t_c83693b95054f7 1-25
+docs/src/components/ui/collapsible/CollapsibleContent.astro
+  s_819360ac34611d::t_8521c1a874bf61 1-29
+docs/src/components/ui/collapsible/CollapsibleTrigger.astro
+  s_819360ac34611d::t_92c5027f180680 1-21
+docs/src/components/ui/collapsible/collapsible.client.ts
+  s_819360ac34611d::t_3952c7666348fd 1-22
+docs/src/components/ui/collapsible/index.ts
+  s_819360ac34611d::t_cb34d5e239ddfa 1-3
+docs/src/components/ui/dialog/Dialog.astro
+  s_819360ac34611d::t_e261d0dfd33b3e 1-33
+docs/src/components/ui/dialog/DialogClose.astro
+  s_819360ac34611d::t_c12e87c80658d8 1-25
+docs/src/components/ui/dialog/DialogContent.astro
+  s_819360ac34611d::t_dc5fa51856d48d 1-21
+docs/src/components/ui/dialog/dialog-close.client.ts
+  s_819360ac34611d::t_b7cce6e85fd23a 1-7
+docs/src/components/ui/dialog/dialog.client.ts
+  s_819360ac34611d::t_2cb36d3706a784 1-25
+docs/src/components/ui/dialog/index.ts
+  s_819360ac34611d::t_4f620c8511bd69 1-3
+docs/src/components/ui/layer-card/LayerCard.astro
+  s_819360ac34611d::t_71aa0b6bf5f7ca 1-23
+docs/src/components/ui/layer-card/LayerCardContent.astro
+  s_819360ac34611d::t_109f0b356dc212 1-16
+docs/src/components/ui/layer-card/LayerCardHeader.astro
+  s_819360ac34611d::t_cccf093127d199 1-16
+docs/src/components/ui/layer-card/index.ts
+  s_819360ac34611d::t_10ec48bc92f4a1 1-3
+docs/src/components/ui/link-button/LinkButton.astro
+  s_819360ac34611d::t_03595590092c02 1-76
+docs/src/components/ui/link-button/index.ts
+  s_819360ac34611d::t_d8dbc01d538960 1
+docs/src/components/ui/package-managers/PackageManagers.astro
+  s_819360ac34611d::t_3210e750738955 1-130
+docs/src/components/ui/package-managers/index.ts
+  s_819360ac34611d::t_5831078d290207 1
+docs/src/components/ui/package-managers/package-managers.client.ts
+  s_819360ac34611d::t_dc4ab57b9262da 1-55
+docs/src/components/ui/page-actions/PageActions.astro
+  s_819360ac34611d::t_26222693dd8f14 1-65
+docs/src/components/ui/page-actions/index.ts
+  s_819360ac34611d::t_448ea0471c8ece 1
+docs/src/components/ui/page-actions/page-actions.client.ts
+  s_819360ac34611d::t_1dc0060c16311a 1-54
+docs/src/components/ui/pagination/Pagination.astro
+  s_819360ac34611d::t_44bc62ef2a4060 1-36
+docs/src/components/ui/pagination/index.ts
+  s_819360ac34611d::t_f0a5aab0a6ff5f 1
+docs/src/components/ui/search/SearchDialog.astro
+  s_819360ac34611d::t_7bd37d01e5be0f 1-54
+docs/src/components/ui/search/SearchTrigger.astro
+  s_819360ac34611d::t_255911ac610b77 1-22
+docs/src/components/ui/search/index.ts
+  s_819360ac34611d::t_de1503718b452e 1-2
+docs/src/components/ui/search/providers/pagefind.ts
+  s_819360ac34611d::t_fe3840775dbf76 1-87
+docs/src/components/ui/search/search-trigger.client.ts
+  s_819360ac34611d::t_ddda5f2ba1233f 1-17
+docs/src/components/ui/search/search.client.ts
+  s_819360ac34611d::t_5e98be8559b93c 1-275
+docs/src/components/ui/sidebar/Sidebar.astro
+  s_819360ac34611d::t_a3f8443dc3ba7e 1-65
+docs/src/components/ui/sidebar/SidebarFilter.astro
+  s_819360ac34611d::t_b205889bcd14a7 1-28
+docs/src/components/ui/sidebar/SidebarGroup.astro
+  s_819360ac34611d::t_767572b95a9807 1-93
+docs/src/components/ui/sidebar/SidebarGroupHeader.astro
+  s_819360ac34611d::t_3b75e5b7add255 1-110
+docs/src/components/ui/sidebar/SidebarLink.astro
+  s_819360ac34611d::t_4d566c5738e745 1-42
+docs/src/components/ui/sidebar/index.ts
+  s_819360ac34611d::t_dedd26787f435b 1-5
+docs/src/components/ui/sidebar/sidebar.client.ts
+  s_819360ac34611d::t_ce4b89dc0f63df 1-209
+docs/src/components/ui/steps/Step.astro
+  s_819360ac34611d::t_2dfd3dcf061325 1-26
+docs/src/components/ui/steps/Steps.astro
+  s_819360ac34611d::t_0a64d63b9b166a 1-115
+docs/src/components/ui/steps/index.ts
+  s_819360ac34611d::t_7c22366b46917f 1-2
+docs/src/components/ui/steps/steps.client.ts
+  s_819360ac34611d::t_066b877976da14 1-32
+docs/src/components/ui/tabs/TabItem.astro
+  s_819360ac34611d::t_4a37075ba5bf6b 1-30
+docs/src/components/ui/tabs/Tabs.astro
+  s_819360ac34611d::t_85409070789b84 1-36
+docs/src/components/ui/tabs/TabsContent.astro
+  s_819360ac34611d::t_096c63c8b6b819 1-24
+docs/src/components/ui/tabs/TabsList.astro
+  s_819360ac34611d::t_7a71f0d9133a69 1-34
+docs/src/components/ui/tabs/TabsTrigger.astro
+  s_819360ac34611d::t_32e4d913a510f8 1-31
+docs/src/components/ui/tabs/index.ts
+  s_819360ac34611d::t_49d8ed777fa77a 1-5
+docs/src/components/ui/tabs/tabs.client.ts
+  s_819360ac34611d::t_e0132325222a87 1-109
+docs/src/components/ui/theme-toggle/ThemeToggle.astro
+  s_819360ac34611d::t_208ad057b77966 1-32
+docs/src/components/ui/theme-toggle/index.ts
+  s_819360ac34611d::t_70d09d4ba739d5 1
+docs/src/components/ui/theme-toggle/theme-toggle.client.ts
+  s_819360ac34611d::t_bd310ade6da9a4 1-31
+docs/src/components/ui/toc/MobileTOC.astro
+  s_819360ac34611d::t_8ecdd61dd86082 1-60
+docs/src/components/ui/toc/TOC.astro
+  s_819360ac34611d::t_1faafe29c0d7ed 1-96
+docs/src/components/ui/toc/index.ts
+  s_819360ac34611d::t_f326406daed2ee 1-2
+docs/src/components/ui/toc/mobile-toc.client.ts
+  s_819360ac34611d::t_170a5bec334937 1-136
+docs/src/components/ui/toc/toc.client.ts
+  s_819360ac34611d::t_c15e92dfa236d6 1-334
+docs/src/content.config.ts
+  s_819360ac34611d::t_5485d96986b783 1-18
+docs/src/layouts/BaseLayout.astro
+  s_819360ac34611d::t_fbf867afdd4e25 1-140
+docs/src/layouts/DocsLayout.astro
+  s_819360ac34611d::t_422528adce91cd 1-400
+docs/src/lib/cn.ts
+  s_819360ac34611d::t_aa7e5a34dbcebd 1-7
+docs/src/pages/404.astro
+  s_819360ac34611d::t_dc36e61350776a 1-34
+docs/src/pages/[...slug].astro
+  s_819360ac34611d::t_ba27e0ca5c197e 1-75
+docs/src/pages/[...slug]/index.md.ts
+  s_819360ac34611d::t_c7b38b6789dd1b 1-85
+docs/src/pages/[...slug]/index.mdx.ts
+  s_819360ac34611d::t_95142a9dd326dc 1-75
+docs/src/pages/[section]/llms.txt.ts
+  s_819360ac34611d::t_dcff0a47a9b17b 1-71
+docs/src/pages/llms-full.txt.ts
+  s_819360ac34611d::t_30abf231fec5b4 1-15
+docs/src/pages/llms.txt.ts
+  s_819360ac34611d::t_20ee1197e28528 1-53
+docs/src/pages/nimbus-api/coordinates.json.ts
+  s_819360ac34611d::t_e9119680d5a88b 1-19
+docs/src/pages/og.png.ts
+  s_819360ac34611d::t_e69733d47a458f 1-17
+docs/src/pages/og/[...slug].ts
+  s_819360ac34611d::t_71eeea6e6af45a 1-44
+docs/src/pages/og/_og-card-config.ts
+  s_819360ac34611d::t_39c23ee8474adf 1-39
+docs/src/pages/robots.txt.ts
+  s_819360ac34611d::t_c9c69b6824087f 1-18
+docs/src/styles/globals.css
+  s_819360ac34611d::t_ad0ae2612324ef 1-557
+docs/src/styles/prose.css
+  s_819360ac34611d::t_116eb50411fc82 1-331
+docs/tsconfig.json
+  s_819360ac34611d::t_c024be37b324d7 1-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "dc7b6e4491b38a111a6870d3195312ce31c457ac",
+  "prompts": {},
+  "sessions": {
+    "s_819360ac34611d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ffadf88-e7b5-4061-b0d7-bb07b4f6429a",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
