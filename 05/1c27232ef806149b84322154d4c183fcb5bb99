@@ -1,0 +1,25 @@
+docs/package.json
+  s_819360ac34611d::t_21c5160909eb6c 16,18
+.github/workflows/docs.yml
+  s_819360ac34611d::t_21c5160909eb6c 4-6,9-11,107-109
+CLAUDE.md
+  s_819360ac34611d::t_21c5160909eb6c 43
+docs/wrangler.jsonc
+  s_819360ac34611d::t_21c5160909eb6c 5-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "051c27232ef806149b84322154d4c183fcb5bb99",
+  "prompts": {},
+  "sessions": {
+    "s_819360ac34611d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ffadf88-e7b5-4061-b0d7-bb07b4f6429a",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
