@@ -1,0 +1,55 @@
+---
+title: Library
+description: Use csp from Rust via the code-search-please crate, or from JavaScript/TypeScript via the in-process @pleaseai/csp-sdk addon.
+---
+
+`csp` is usable as a library two ways: the **Rust crate**, or a **JavaScript/TypeScript SDK** (`@pleaseai/csp-sdk`) that binds the same core natively via napi-rs.
+
+## Rust
+
+Published on crates.io as [`code-search-please`](https://crates.io/crates/code-search-please) (the short name `csp` was already taken). The library name stays `csp`, so you depend on `code-search-please` but still write `use csp::...`. It exposes `CspIndex` with `from_path` / `from_git` / `search` / `find_related`, plus the `ContentType` enum and the ranking pipeline.
+
+The crate ships the `csp` CLI too (behind the default-on `cli` feature). As a **library** dependency, disable default features to skip the CLI stack (`clap` / `tokio` / `rmcp`):
+
+```toml title="Cargo.toml"
+[dependencies]
+code-search-please = { version = "0.1", default-features = false }
+```
+
+```rust
+use std::path::Path;
+use csp::indexing::index::{CspIndex, LoadOptions, QueryOptions};
+
+// Index a local directory and search it
+let index = CspIndex::from_path(Path::new("./my-project"), &LoadOptions::default())?;
+let results = index.search("save model to disk", &QueryOptions { top_k: Some(3), ..Default::default() });
+
+for r in &results {
+    println!("{}:{}-{}", r.chunk.file_path, r.chunk.start_line, r.chunk.end_line);
+}
+```
+
+## JavaScript / TypeScript
+
+[`@pleaseai/csp-sdk`](https://www.npmjs.com/package/@pleaseai/csp-sdk) is a native (napi-rs) addon that runs the same Rust search engine **in-process**: no subprocess, no JSON round-trip. The build entrypoints are async; the per-query calls are sync.
+
+```bash
+bun add @pleaseai/csp-sdk
+```
+
+```ts
+import { ContentType, CspIndex } from '@pleaseai/csp-sdk'
+
+const index = await CspIndex.fromPath('./my-project', { content: [ContentType.Code] })
+const results = index.search('save model to disk', { topK: 3 })
+
+for (const { chunk, score } of results) {
+  console.log(score.toFixed(3), chunk.location) // e.g. 0.871 src/index.ts:42-58
+}
+```
+
+`CspIndex` exposes `fromPath`, `fromGit`, and `loadFromDisk` (async), plus `search`, `findRelated`, `save`, and `stats` (sync). Chunk fields are camel-cased at the JS boundary: `chunk.filePath`, `chunk.startLine`, `chunk.endLine`.
+
+<Aside type="note" title="Two npm packages">
+  **`@pleaseai/csp`** ships the `csp` **CLI + MCP server** behind a launcher (it does not expose a JS API), while **`@pleaseai/csp-sdk`** is the in-process **library** SDK. Both are built from the one Rust core; the crate is on crates.io as [`code-search-please`](https://crates.io/crates/code-search-please) with library name `csp`.
+</Aside>

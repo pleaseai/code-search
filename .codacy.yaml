@@ -10,3 +10,11 @@
 # matching eslint ignore.
 exclude_paths:
   - 'npm/**'
+  # Exclude the whole Nimbus docs site. Its TS/Astro source is scaffold-owned
+  # code written by `@cloudflare/create-nimbus-docs` and kept aligned with the
+  # upstream template (so `nimbus-docs diff` stays clean), and its MDX content
+  # is linted by `nimbus-docs lint`, which Codacy has no MDX-aware tool for. The
+  # site has its own gate (`astro check` + `nimbus-docs check/lint`) and, like
+  # npm/, is excluded from the JS app's static analysis. See the matching
+  # `docs/**` ignore in eslint.config.ts.
+  - 'docs/**'

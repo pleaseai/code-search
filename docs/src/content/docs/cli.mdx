@@ -1,0 +1,110 @@
+---
+title: CLI
+description: The csp command line — search, index, find-related, init, savings, clear — and how the index cache works.
+---
+
+`csp` also ships as a standalone CLI. This is useful in scripts or anywhere you want search results without an MCP session.
+
+```bash
+# Search a local repo
+csp search "authentication flow" ./my-project
+
+# Index first for faster repeated searches (--index works with any command below)
+csp index ./my-project -o my-index
+csp search "authentication flow" --index my-index
+
+# Search a remote repo (cloned on demand)
+csp search "save model to disk" https://github.com/MinishLab/model2vec
+
+# Limit results
+csp search "save model to disk" ./my-project --top-k 10
+
+# Search docs/config/everything instead of just code
+csp search "deployment guide" ./my-project --content docs   # or: config, all
+
+# Find code similar to a known location
+csp find-related src/auth.ts 42 ./my-project
+```
+
+`--content` accepts `code` (default), `docs`, `config`, or `all`. `path` defaults to the current directory when omitted; git URLs are accepted.
+
+<Render file="not-on-path" />
+
+## Commands
+
+| Command | Purpose |
+|---------|---------|
+| `csp search <query> [path]` | Search a local path or git URL. Flags: `--top-k`, `--content`, `--index`, `--max-snippet-lines`. |
+| `csp index <path> -o <dir>` | Build an index and persist it to an explicit directory. |
+| `csp find-related <file> <line> [path]` | Return chunks semantically similar to the code at that location. |
+| `csp mcp` | Run the [MCP server](/mcp-server) over stdio. |
+| `csp init [--agent <name>]` | Install the [`csp-search` sub-agent](/sub-agent). |
+| `csp savings` | Show tokens saved across all searches. |
+| `csp clear <target>` | Remove cached data. |
+
+## Index cache
+
+When you run `csp search` or `csp find-related` **without** `--index`, `csp` automatically indexes and caches the source in a global cache at `~/.csp/index/`, keyed by the source and content selection. The cache is reused on the next run and invalidated automatically when the source files change (by content hash), so you do not need to reindex manually.
+
+A stale cache is rebuilt incrementally: only files whose content changed are re-chunked and re-embedded, and unchanged files keep their existing chunks, vectors, and BM25 postings.
+
+Passing `--index <path>` uses that exact path instead and bypasses the auto-cache. `csp index -o <path>` is for explicit persistence only (`-o` is required) and is independent of the auto-cache.
+
+### Large files
+
+Files larger than 1 MB are skipped during indexing to keep index builds lean. Skipped files are reported as a warning on stderr at index time, naming the first few paths. If you work with large generated or ingested documents, you can raise (or lower) this limit with the `CSP_MAX_FILE_BYTES` environment variable (in bytes); a malformed or non-positive value warns and falls back to the 1 MB default.
+
+### Ignore rules
+
+The file walker respects `.gitignore` and a repo-local `.cspignore`. Directories such as `.git`, `node_modules`, `dist`, `build`, `.next`, and `.csp` are ignored by default.
+
+## Savings
+
+`csp savings` shows how many tokens `csp` has saved across all your searches:
+
+```bash
+csp savings           # summary by period
+csp savings --verbose # also show breakdown by call type
+```
+
+```text
+  Csp Token Savings
+  ════════════════════════════════════════════════════════════════════════
+
+  Total saved:  ~1.2M tokens  (89%)
+  Total calls:  1.4k
+  Efficiency:  █████████████████████░░░  89%
+
+  By Period
+  ────────────────────────────────────────────────────────────────────────
+  Period             Calls           Saved  Ratio
+  ────────────────────────────────────────────────────────────────────────
+  Today                 42    ~58.4k tokens  ███████████████████████░  95%
+  Last 7 days          287   ~312.4k tokens  █████████████████████░░░  90%
+  All time             1.4k     ~1.2M tokens  █████████████████████░░░  89%
+```
+
+Savings are calculated as follows: for each call, `csp` records the total character count of the unique files containing returned chunks and the character count of the snippets returned. Estimated tokens saved is `(file chars − snippet chars) / 4` (4 chars per token). This is a conservative estimate: the baseline is reading matched files in full, which is how coding agents often explore unfamiliar code.
+
+Output is colorized when stdout is a color-capable TTY (suppressed under `NO_COLOR`, a `dumb` terminal, or when piped). `--verbose` adds a "By Call Type" breakdown.
+
+Stats are stored in `~/.csp/savings.jsonl`.
+
+## Clear
+
+`csp clear` removes cached data:
+
+```bash
+csp clear savings  # delete ~/.csp/savings.jsonl
+csp clear index    # delete the global index cache at ~/.csp/index/
+csp clear all      # delete both the index cache and savings
+csp clear orphans  # delete cached indexes whose source directory no longer exists
+```
+
+`clear index` removes the global index cache at `~/.csp/index/` (where `csp search`/`find-related` auto-cache indexes) and reports how many cached entries were removed; your `~/.csp/savings.jsonl` is preserved. `clear all` removes both `~/.csp/index/` and `~/.csp/savings.jsonl` as two independent actions.
+
+`clear orphans` walks `~/.csp/index/` and removes only the entries whose recorded local source path no longer exists (for example, a repo you deleted or moved). Indexes built from git URLs are never treated as orphans, and a source that merely cannot be read right now (for example, a permission error) is left alone. A source on an unmounted or unplugged volume is indistinguishable from a deleted one and is swept, so remount it before running `clear orphans`. `clear orphans` is a separate choice: `clear all` does not run it.
+
+<Aside type="caution">
+  Explicit index paths written with `csp index -o <path>` are not part of the auto-cache, so `clear` never touches them. Delete those directories yourself.
+</Aside>

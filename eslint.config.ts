@@ -20,6 +20,10 @@ export default pleaseai({
     // Only the generated npm platform-package output is excluded; the
     // hand-written launcher + generator under npm/ stay linted.
     'npm/dist',
+    // The Nimbus docs site is its own Astro package with its own gate
+    // (`astro check` + `nimbus-docs lint`). Its files are scaffold-owned and
+    // kept in the upstream template's style so `nimbus-docs diff` stays clean.
+    'docs/**',
   ],
 }, {
   // Relax a handful of type-aware rules for test files, where common testing

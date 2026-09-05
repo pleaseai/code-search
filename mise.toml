@@ -51,3 +51,20 @@ depends = [
   "typecheck"
 ]
 run = "cargo fmt --all --check && cargo clippy --all-targets --all-features -- -D warnings && cargo test --workspace"
+
+[tasks."docs:install"]
+description = "Install docs site dependencies (docs/)"
+dir = "docs"
+run = "bun install --frozen-lockfile"
+
+[tasks."docs:dev"]
+description = "Run the docs site locally (astro dev)"
+dir = "docs"
+depends = [ "docs:install" ]
+run = "bun run dev"
+
+[tasks."docs:build"]
+description = "Build the docs site (astro check + astro build + nimbus-docs check)"
+dir = "docs"
+depends = [ "docs:install" ]
+run = "bun run typecheck && bun run build && bun run check"

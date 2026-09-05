@@ -38,6 +38,10 @@ The implementation is **Rust** (a Cargo workspace). A thin Node/Bun toolchain re
 - **JS tooling** (no TS implementation): Bun ≥1.3.10 / Node ≥22 (the `engines` floor; `mise.toml` pins 1.3.14 / 24 for dev + CI). `@pleaseai/eslint-config` (wraps `@antfu/eslint-config`) lints `npm/` JS + `eslint.config.ts`; `tsc --noEmit` typechecks. No semicolons, single quotes, 2-space indent.
 - **Toolchain manager**: `mise.toml` pins `node`/`bun` + `hk` (the git hook manager); the Rust channel stays owned by `rust-toolchain.toml`. `mise install` provisions tools and runs `hk install --mise`, wiring git hooks from `hk.pkl` (pre-commit: eslint on `npm/` JS + `rustfmt` on staged `.rs`; commit-msg: conventional-commit check). `mise run check` is the full local gate. On Intel macOS hk is pinned via the `cargo:` backend (aqua has no darwin-amd64).
 
+### Docs site (`docs/`)
+
+`docs/` is a standalone [Cloudflare Nimbus](https://nimbus-docs.com) site (Astro 7 + Tailwind v4, `@cloudflare/nimbus-docs` pinned at `0.12.0`) published at `https://code-search.pleaseai.dev`. Content lives in `docs/src/content/docs/*.mdx` (flat slugs; the sidebar groups are declared in `docs/astro.config.ts`), shared snippets in `docs/src/content/partials/`. It has its own `bun.lock` and gate (`bun run typecheck && bun run build && bun run check` inside `docs/`, or `mise run docs:build`); root eslint ignores `docs/**` so scaffold-owned files stay diffable via `nimbus-docs diff`. Deploys as Workers static assets through `.github/workflows/docs.yml` (`wrangler deploy` on `main`). Pages mirror the README, so a README change that touches user-facing behavior should update the matching page too.
+
 ## Commands
 
 ```bash

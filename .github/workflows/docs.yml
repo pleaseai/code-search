@@ -1,0 +1,93 @@
+name: Docs
+
+# Builds the Nimbus docs site (docs/) on every PR that touches it, and
+# deploys it to Cloudflare (Workers static assets, docs/wrangler.jsonc) on main.
+#
+# Deploy needs two repository secrets:
+#   CLOUDFLARE_API_TOKEN  — "Edit Cloudflare Workers" template. The custom
+#                            domain route in wrangler.jsonc also needs
+#                            Zone:DNS:Edit on the pleaseai.dev zone.
+#   CLOUDFLARE_ACCOUNT_ID
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - .github/workflows/docs.yml
+  pull_request:
+    paths:
+      - 'docs/**'
+      - .github/workflows/docs.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # CI runs no git hooks, so skip the cargo:hk source build (matches ci.yml).
+      MISE_DISABLE_TOOLS: cargo:hk
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Setup mise (node, bun)
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build
+        run: bun run build
+
+      - name: Nimbus preflight
+        run: bun run check
+
+      - name: Upload site
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: docs-dist
+          path: docs/dist
+          retention-days: 7
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: docs
+      url: https://code-search.pleaseai.dev
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Download site
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: docs-dist
+          path: docs/dist
+
+      - name: Deploy to Cloudflare
+        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: docs
+          command: deploy

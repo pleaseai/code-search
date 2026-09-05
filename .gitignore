@@ -58,3 +58,8 @@ bun.lockb
 
 # Generated npm platform packages (release artifact)
 npm/dist/
+
+# Docs site (Cloudflare Nimbus / Astro / Wrangler) build state
+docs/.astro/
+docs/.nimbus/
+docs/.wrangler/

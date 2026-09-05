@@ -1,0 +1,70 @@
+---
+title: Installation
+description: Install the csp CLI with Homebrew, the install script, a JavaScript package manager, or Cargo.
+---
+
+The MCP server needs no install step: `bunx @pleaseai/csp mcp` fetches the package on first use. Install the CLI when you want `csp` on your `PATH` for [AGENTS.md](/agents-md) instructions, the [sub-agent](/sub-agent), or scripting.
+
+## Install the CLI
+
+<Tabs>
+  <TabItem label="Homebrew">
+    macOS and Linux. Ships a standalone binary, so no Node or Bun is required at runtime.
+
+    ```bash
+    brew install pleaseai/tap/csp
+    ```
+  </TabItem>
+  <TabItem label="Install script">
+    Downloads the standalone binary from the GitHub release for your platform, verifies its checksum, and drops it in `~/.local/bin`.
+
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/pleaseai/code-search/main/scripts/install.sh | bash
+    ```
+
+    Override the destination with `CSP_INSTALL_DIR`, or pin a release:
+
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/pleaseai/code-search/main/scripts/install.sh | bash -s -- --version v0.1.7
+    ```
+  </TabItem>
+  <TabItem label="npm / bun / pnpm">
+    The npm package ships the same binary behind a small Node launcher, so this path needs Bun or Node 22+ on your `PATH`.
+
+    ```bash
+    bun add -g @pleaseai/csp     # with bun (recommended)
+    npm install -g @pleaseai/csp # or with npm
+    pnpm add -g @pleaseai/csp    # or with pnpm
+    ```
+  </TabItem>
+  <TabItem label="Cargo">
+    Compiles the standalone binary locally. The crate is published as `code-search-please` (the short name `csp` was already taken); the installed binary is still `csp`.
+
+    ```bash
+    cargo install code-search-please
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="note">
+  The Homebrew formula ships a self-contained Rust binary (`cargo build --release`; tree-sitter grammars and the embedding runtime are built in), so it needs no Node/Bun at runtime. Indexes are cached under `~/.csp/` (see [ADR 0002](https://github.com/pleaseai/code-search/blob/main/.please/docs/decisions/0002-index-storage-cache-model.md)).
+</Aside>
+
+## Verify
+
+```bash
+csp --version
+csp search "authentication flow" .
+```
+
+<Render file="not-on-path" />
+
+## Update
+
+```bash
+brew upgrade csp                     # Homebrew
+bun update -g @pleaseai/csp          # with bun
+npm update -g @pleaseai/csp          # with npm
+pnpm update -g @pleaseai/csp         # with pnpm
+cargo install code-search-please     # Cargo (rebuilds the latest release)
+```
