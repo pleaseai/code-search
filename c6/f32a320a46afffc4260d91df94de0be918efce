@@ -1,0 +1,21 @@
+.codacy.yaml
+  s_819360ac34611d::t_54e4625b723019 13-18
+docs/AGENT.md
+  s_819360ac34611d::t_54e4625b723019 60-62,65-67,69,73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "c6f32a320a46afffc4260d91df94de0be918efce",
+  "prompts": {},
+  "sessions": {
+    "s_819360ac34611d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ffadf88-e7b5-4061-b0d7-bb07b4f6429a",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
