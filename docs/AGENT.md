@@ -94,7 +94,7 @@ End with `Summary: N errors, N warnings.`
 - **Registry hygiene** — every `src/components/ui/<slug>/` is either MDX-registered or imported in `src/`; transitive deps (`lib/cn.ts`, etc.) exist.
 - **AI surface** — `<AgentDirective />` renders in `BaseLayout.astro`; doc `<head>` has `<link rel="alternate" type="text/markdown" ...>`.
 - **Search** — `data-pagefind-body` is on the docs main wrapper; after `bun run build`, `dist/pagefind/` exists with ≥1 indexed page.
-- **Cloudflare** (if applicable) — `wrangler.jsonc` has `name`, `compatibility_date`, `assets.directory = "./dist"`, `not_found_handling`.
+- **Cloudflare** (if applicable) — `wrangler.jsonc` has `name`, `compatibility_date`, and `pages_build_output_dir = "./dist"` (a Cloudflare Pages project; `dist/404.html` is served for unknown paths, so no `assets` block).
 
 ## Don't
 
