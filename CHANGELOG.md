@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.1.10](https://github.com/pleaseai/code-search/compare/v0.1.9...v0.1.10) (2026-09-04)
+
+
+### Features
+
+* **cli:** add `csp clear orphans` to remove cached indexes whose source is gone ([#102](https://github.com/pleaseai/code-search/issues/102)) ([f9b5440](https://github.com/pleaseai/code-search/commit/f9b5440939b35b624253b7ea244b41bdddeda48c))
+* **index:** incremental reindexing — reuse unchanged files' chunks, vectors, and BM25 postings ([#91](https://github.com/pleaseai/code-search/issues/91)) ([b2de30d](https://github.com/pleaseai/code-search/commit/b2de30df5875eff9476ac2eccbae1dd4103f0982)), closes [#84](https://github.com/pleaseai/code-search/issues/84)
+* **index:** make the 1 MB max file size configurable via CSP_MAX_FILE_BYTES ([#101](https://github.com/pleaseai/code-search/issues/101)) ([72b05ed](https://github.com/pleaseai/code-search/commit/72b05ed4cb6c161cc564943559f72726be6ff7cf))
+* **mcp:** add per-call `content` parameter to search/find_related (semble[#247](https://github.com/pleaseai/code-search/issues/247)) ([#99](https://github.com/pleaseai/code-search/issues/99)) ([ee45529](https://github.com/pleaseai/code-search/commit/ee45529cceec995c5f81fd365f8f368074d118af))
+* **mcp:** revalidate cached local-path indexes on query ([#78](https://github.com/pleaseai/code-search/issues/78)) ([74911c9](https://github.com/pleaseai/code-search/commit/74911c93f5a3520cbaad73ae17c84e9c7718b966))
+* **search:** add max_snippet_lines to cap returned snippets (semble[#198](https://github.com/pleaseai/code-search/issues/198)) ([#80](https://github.com/pleaseai/code-search/issues/80)) ([b4d7bc3](https://github.com/pleaseai/code-search/commit/b4d7bc3309beb830773030c42c54593c8dbc8e53))
+* **search:** default to potion-code-16M-v2, invalidate stale-model caches ([#77](https://github.com/pleaseai/code-search/issues/77)) ([1d2ea9e](https://github.com/pleaseai/code-search/commit/1d2ea9eaefe59741d9b5021b80ce241cf0f5c07a))
+* ship csp CLI in the code-search-please crate for `cargo install` ([#71](https://github.com/pleaseai/code-search/issues/71)) ([9c27272](https://github.com/pleaseai/code-search/commit/9c2727283f3e2263980d4f2873dfc6f26fb4f0c0))
+* **stats:** wire token-savings telemetry into search and find_related ([#82](https://github.com/pleaseai/code-search/issues/82)) ([8b7dd44](https://github.com/pleaseai/code-search/commit/8b7dd44cd1623ad60787e4dd12be130c861bfaa9))
+
+
+### Bug Fixes
+
+* **cache:** absolutize local sources before computing the index cache key ([#105](https://github.com/pleaseai/code-search/issues/105)) ([7cb0b01](https://github.com/pleaseai/code-search/commit/7cb0b0137a1251ec51eb4ea24c9095b2267b15f1))
+* **utils:** normalize path separators in resolve_chunk (semble [#244](https://github.com/pleaseai/code-search/issues/244)) ([#98](https://github.com/pleaseai/code-search/issues/98)) ([fe75d1b](https://github.com/pleaseai/code-search/commit/fe75d1ba639dc71e3bb39cae9db2d60de26397c0)), closes [#88](https://github.com/pleaseai/code-search/issues/88)
+
+
+### Performance Improvements
+
+* **stats:** read local-path file sizes lazily per result ([#92](https://github.com/pleaseai/code-search/issues/92)) ([1acd823](https://github.com/pleaseai/code-search/commit/1acd823a78bb9f9eefde5becf789d2a0676c47f5))
+
+
+### Documentation
+
+* correct the `csp --agent` list in CLAUDE.md ([#79](https://github.com/pleaseai/code-search/issues/79)) ([39cebd4](https://github.com/pleaseai/code-search/commit/39cebd484bf4b5fbe20ab19479440c71797d30f4))
+
 ## [0.1.9](https://github.com/pleaseai/code-search/compare/v0.1.8...v0.1.9) (2026-07-01)
 
 
