@@ -1,0 +1,19 @@
+docs/AGENT.md
+  s_819360ac34611d::t_dee4f5d92fc34d 97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "3d762ea165bddfbaac8131bf51a78eddc2081e6d",
+  "prompts": {},
+  "sessions": {
+    "s_819360ac34611d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ffadf88-e7b5-4061-b0d7-bb07b4f6429a",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Minsu Lee <minsu.lee@dietfriends.kr>"
+    }
+  }
+}
