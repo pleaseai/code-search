@@ -33,7 +33,7 @@ csp find-related src/auth.ts 42 ./my-project
 
 If `csp` is not on `$PATH`, use `bunx @pleaseai/csp` in its place.
 
-### Workflow
+## Workflow
 
 1. Start with `csp search` to find relevant chunks. The index is built and cached automatically.
 2. Use `--content docs` for documentation, `--content config` for config files, or `--content all` for everything.
