@@ -587,6 +587,20 @@ mod tests {
         assert!(run_init(Agent::Claude, true, dir.path()).is_ok());
     }
 
+    #[test]
+    fn agent_templates_match_cli_output_and_auto_cache() {
+        for agent in Agent::value_variants() {
+            let t = agent.template();
+            assert!(t.contains("file_path"), "{} lacks file_path", agent.slug());
+            assert!(!t.contains("filePath"), "{} has filePath", agent.slug());
+            assert!(
+                !t.contains("not automatically updated"),
+                "{} has stale index guidance",
+                agent.slug()
+            );
+        }
+    }
+
     fn build_index_dir() -> tempfile::TempDir {
         let dir = tempdir().unwrap();
         std::fs::write(
