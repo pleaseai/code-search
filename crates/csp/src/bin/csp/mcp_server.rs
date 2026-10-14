@@ -211,6 +211,12 @@ mod tests {
     use std::time::{Duration, Instant};
     use tempfile::tempdir;
 
+    /// Stand-in for a tool handler's synchronous index/model work, which runs
+    /// inline on a runtime worker exactly like this.
+    fn synchronous_index_build() {
+        std::thread::sleep(Duration::from_secs(30));
+    }
+
     #[test]
     fn block_then_abandon_does_not_join_a_blocked_worker() {
         let rt = tokio::runtime::Builder::new_multi_thread()
@@ -223,7 +229,7 @@ mod tests {
             let (started_tx, started_rx) = tokio::sync::oneshot::channel();
             tokio::spawn(async move {
                 let _ = started_tx.send(());
-                std::thread::sleep(Duration::from_secs(30));
+                synchronous_index_build();
             });
             // Wait until the worker is actually inside the blocking section.
             started_rx.await.unwrap();
@@ -247,7 +253,7 @@ mod tests {
                 let (started_tx, started_rx) = tokio::sync::oneshot::channel();
                 tokio::spawn(async move {
                     let _ = started_tx.send(());
-                    std::thread::sleep(Duration::from_secs(30));
+                    synchronous_index_build();
                 });
                 started_rx.await.unwrap();
                 panic!("serve loop failed");
