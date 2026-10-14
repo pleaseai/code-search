@@ -15,6 +15,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 use csp::indexing::create::{create_index_from_path, CreateIndexOptions};
 use csp::indexing::dense::make_stub_model;
+use csp::indexing::files::DEFAULT_MAX_FILE_BYTES;
 use csp::ranking::penalties::{file_path_penalty, rerank_top_k};
 use csp::ranking::Scores;
 use csp::tokens::{split_identifier, tokenize};
@@ -169,12 +170,14 @@ fn bench_index_build(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("index_build");
     group.sample_size(10);
-    // `0` is rayon's default (one worker per CPU), pinned rather than left to
-    // `CSP_INDEX_WORKERS` so the comparison is stable.
+    // `0` is rayon's default (one worker per CPU). Workers and the size limit
+    // are pinned rather than left to `CSP_INDEX_WORKERS` / `CSP_MAX_FILE_BYTES`
+    // so the comparison is stable.
     for (name, workers) in [("300_files_serial", 1), ("300_files_parallel", 0)] {
         let options = CreateIndexOptions {
             display_root: Some(dir.path().to_path_buf()),
             index_workers: Some(workers),
+            max_file_bytes: Some(DEFAULT_MAX_FILE_BYTES),
             ..CreateIndexOptions::new(&model)
         };
         group.bench_function(name, |b| {

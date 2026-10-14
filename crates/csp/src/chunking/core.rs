@@ -604,6 +604,34 @@ mod tests {
 
     #[test]
     #[ignore = "downloads a tree-sitter grammar from GitHub releases"]
+    fn concurrent_first_use_parses_with_the_grammar() {
+        // Many threads hit an uncached grammar at the same moment. Go is resolved
+        // by no other test here, so the process-wide cache starts cold for it.
+        // Every thread must get the same AST split, which line chunking would
+        // not produce for this source.
+        let src = "func alpha() {\n\tx := 1\n\tprintln(x)\n}\n\nfunc beta() {\n\ty := 2\n\tprintln(y)\n}\n";
+        let start = std::sync::Barrier::new(8);
+        let results: Vec<_> = std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..8)
+                .map(|_| {
+                    scope.spawn(|| {
+                        start.wait();
+                        chunk(src, "go", 40)
+                    })
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+        let first = results[0].clone().expect("go is supported → Some");
+        assert!(first.len() >= 2, "expected an AST split: {first:?}");
+        assert_ne!(first, chunk_lines(src, 40), "fell back to line chunking");
+        for r in &results {
+            assert_eq!(r.as_ref(), Some(&first));
+        }
+    }
+
+    #[test]
+    #[ignore = "downloads a tree-sitter grammar from GitHub releases"]
     fn chunk_byte_to_char_handles_multibyte() {
         // A multibyte comment ensures byte→char conversion doesn't over-count.
         let src = "// café ☕ a comment\nfn z() {}\n";
