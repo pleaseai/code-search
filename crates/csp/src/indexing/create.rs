@@ -8,8 +8,16 @@
 //! reuse their previous chunks, vector rows, and BM25 postings; only changed
 //! files are re-chunked and re-embedded, and deleted files' postings are
 //! dropped.
+//!
+//! Per-file work that touches no shared state — read, hash, and (for changed
+//! files) chunk + BM25 tokenize — runs on a rayon pool in bounded batches
+//! (upstream #295). The results are applied serially in walk order, so chunks,
+//! the manifest, and BM25 document order are identical to a serial build.
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
+use rayon::prelude::*;
 
 use crate::chunking::source::chunk_source;
 use crate::indexing::cache::sha256_hex;
@@ -31,6 +39,15 @@ use crate::types::{Chunk, ContentType};
 )]
 pub const MAX_FILE_BYTES: u64 = DEFAULT_MAX_FILE_BYTES;
 
+/// Environment variable setting the number of indexing worker threads
+/// (upstream `SEMBLE_INDEX_WORKERS`). `1` indexes serially on the calling
+/// thread; unset or invalid uses rayon's default (one per CPU).
+pub const INDEX_WORKERS_ENV: &str = "CSP_INDEX_WORKERS";
+
+/// Files prepared in parallel per batch, bounding how many files' bytes and
+/// chunks are held in memory at once (upstream's 256 in flight).
+const INDEX_BATCH_SIZE: usize = 256;
+
 /// Options for [`create_index_from_path`].
 pub struct CreateIndexOptions<'a> {
     pub model: &'a Model,
@@ -44,6 +61,11 @@ pub struct CreateIndexOptions<'a> {
     /// warning. `None` resolves `CSP_MAX_FILE_BYTES` (default 1 MB) via
     /// [`get_max_file_bytes`].
     pub max_file_bytes: Option<u64>,
+    /// Worker threads for the per-file read / hash / chunk / tokenize phase.
+    /// `Some(1)` runs serially on the calling thread; `Some(0)` uses rayon's
+    /// default. `None` resolves `CSP_INDEX_WORKERS` via [`get_index_workers`].
+    /// The output is identical for every worker count.
+    pub index_workers: Option<usize>,
 }
 
 impl<'a> CreateIndexOptions<'a> {
@@ -60,8 +82,38 @@ impl<'a> CreateIndexOptions<'a> {
             content: None,
             display_root: None,
             max_file_bytes: None,
+            index_workers: None,
         }
     }
+}
+
+/// Parse a raw [`INDEX_WORKERS_ENV`] value: a positive integer, else `None`
+/// (unset, malformed, and zero all fall back to rayon's default).
+fn parse_index_workers(raw: Option<&str>) -> Option<usize> {
+    raw?.trim().parse::<usize>().ok().filter(|&n| n > 0)
+}
+
+/// The indexing worker count from [`INDEX_WORKERS_ENV`], read once per process,
+/// or `None` for rayon's default.
+pub fn get_index_workers() -> Option<usize> {
+    static INDEX_WORKERS: OnceLock<Option<usize>> = OnceLock::new();
+    *INDEX_WORKERS.get_or_init(|| {
+        let raw = std::env::var_os(INDEX_WORKERS_ENV);
+        parse_index_workers(raw.as_deref().map(|s| s.to_string_lossy()).as_deref())
+    })
+}
+
+/// The pool for the parallel phase, or `None` to run it serially on the
+/// calling thread (one worker, or a pool that failed to start). A local pool
+/// leaves the global rayon configuration to the embedding application.
+fn index_pool(workers: Option<usize>) -> Option<rayon::ThreadPool> {
+    if workers == Some(1) {
+        return None;
+    }
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(workers.unwrap_or(0))
+        .build()
+        .ok()
 }
 
 /// Result of [`create_index_from_path`].
@@ -120,11 +172,11 @@ pub(crate) fn skipped_large_warning(
 }
 
 /// Replace a file's BM25 postings: remove its old slots (if any), then add its
-/// new ones.
+/// new ones from each chunk's precomputed BM25 tokens.
 fn reindex_file(
     bm25_index: &mut Bm25Index,
     indexed_path: &str,
-    file_chunks: &[Chunk],
+    chunk_tokens: &[Vec<String>],
     previous_entry: Option<&FileManifestEntry>,
 ) -> Result<(), String> {
     if let Some(entry) = previous_entry {
@@ -132,13 +184,98 @@ fn reindex_file(
             bm25_index.remove_document(&make_chunk_id(indexed_path, slot));
         }
     }
-    for (slot, chunk) in file_chunks.iter().enumerate() {
-        bm25_index.add_document(
-            &make_chunk_id(indexed_path, slot),
-            &tokenize(&enrich_for_bm25(chunk)),
-        )?;
+    for (slot, tokens) in chunk_tokens.iter().enumerate() {
+        bm25_index.add_document(&make_chunk_id(indexed_path, slot), tokens)?;
     }
     Ok(())
+}
+
+/// A file's chunks plus each chunk's BM25 tokens.
+struct FreshChunks {
+    chunks: Vec<Chunk>,
+    tokens: Vec<Vec<String>>,
+}
+
+/// Chunk a file and tokenize every chunk for BM25. Lossy UTF-8 decode (invalid
+/// bytes → U+FFFD): only an IO error skips a file, never an encoding error.
+fn chunk_and_tokenize(bytes: &[u8], indexed_path: &str, language: Option<&str>) -> FreshChunks {
+    let source = String::from_utf8_lossy(bytes);
+    let chunks = chunk_source(&source, indexed_path, language);
+    let tokens = chunks
+        .iter()
+        .map(|chunk| tokenize(&enrich_for_bm25(chunk)))
+        .collect();
+    FreshChunks { chunks, tokens }
+}
+
+/// The outcome of the parallel per-file phase.
+enum Prepared {
+    /// Metadata or read failed: skipped silently.
+    Unreadable,
+    /// Over `max_file_bytes`; carries the display path for the warning.
+    TooLarge(String),
+    Ready(PreparedFile),
+}
+
+struct PreparedFile {
+    indexed_path: String,
+    language: Option<&'static str>,
+    hash: String,
+    payload: Payload,
+}
+
+enum Payload {
+    /// The hash matches the previous index and its manifest range is in
+    /// bounds, so its rows will be reused. The bytes are dropped; the serial
+    /// phase re-reads the file in the unexpected case that reuse still fails.
+    Unchanged,
+    /// New or changed: already chunked and tokenized.
+    Fresh(FreshChunks),
+}
+
+/// What [`prepare_file`] needs to predict reuse: the previous manifest and how
+/// many chunk + vector rows it can still hand out.
+struct PreviousLayout<'a> {
+    files: &'a FileManifest,
+    rows: usize,
+}
+
+/// Read, hash, and — unless the previous index has the same content — chunk
+/// and tokenize one file. Touches no shared state, so it runs on any thread.
+fn prepare_file(
+    file_path: &Path,
+    display_root: Option<&Path>,
+    max_file_bytes: u64,
+    previous: &PreviousLayout,
+) -> Prepared {
+    let size = match std::fs::metadata(file_path) {
+        Ok(meta) => meta.len(),
+        Err(_) => return Prepared::Unreadable,
+    };
+    if size > max_file_bytes {
+        return Prepared::TooLarge(display_path(file_path, display_root));
+    }
+    let Ok(bytes) = std::fs::read(file_path) else {
+        return Prepared::Unreadable;
+    };
+    let hash = sha256_hex(&bytes);
+    let indexed_path = display_path(file_path, display_root);
+    let language = detect_language(&file_path.to_string_lossy());
+    let unchanged = previous
+        .files
+        .get(&indexed_path)
+        .is_some_and(|entry| entry.hash == hash && entry.end() <= previous.rows);
+    let payload = if unchanged {
+        Payload::Unchanged
+    } else {
+        Payload::Fresh(chunk_and_tokenize(&bytes, &indexed_path, language))
+    };
+    Prepared::Ready(PreparedFile {
+        indexed_path,
+        language,
+        hash,
+        payload,
+    })
 }
 
 /// Split a previous index into the parts the rebuild consumes: its BM25 index
@@ -258,64 +395,94 @@ pub fn create_index_from_path(
     let mut files = FileManifest::new();
     let mut skipped_large: Vec<String> = Vec::new();
 
-    for file_path in walk_files(path, &ext_refs, &[]) {
-        let language = detect_language(&file_path.to_string_lossy());
-        let size = match std::fs::metadata(&file_path) {
-            Ok(meta) => meta.len(),
-            Err(_) => continue,
+    let workers = options.index_workers.or_else(get_index_workers);
+    let pool = index_pool(workers);
+    let display_root = options.display_root.as_deref();
+    let previous_layout = PreviousLayout {
+        files: &previous_files,
+        rows: previous_chunks.len().min(previous_vectors.len()),
+    };
+    let prepare = |file_path: &PathBuf| {
+        prepare_file(file_path, display_root, max_file_bytes, &previous_layout)
+    };
+
+    for batch in walk_files(path, &ext_refs, &[]).chunks(INDEX_BATCH_SIZE) {
+        // Phase 1 (parallel, order-preserving): read, hash, chunk, tokenize.
+        let prepared: Vec<Prepared> = match &pool {
+            Some(pool) => pool.install(|| batch.par_iter().map(prepare).collect()),
+            None => batch.iter().map(prepare).collect(),
         };
-        if size > max_file_bytes {
-            skipped_large.push(display_path(&file_path, options.display_root.as_deref()));
-            continue;
-        }
-        let Ok(bytes) = std::fs::read(&file_path) else {
-            continue;
-        };
-        let hash = sha256_hex(&bytes);
-        let indexed_path = display_path(&file_path, options.display_root.as_deref());
-        // `to_string_lossy` is not injective: on Unix, file names that differ
-        // only in invalid UTF-8 bytes collapse to the same display path, and the
-        // BM25 chunk ids derived from it would then collide and abort the whole
-        // build. Keep the first such file and skip the rest, as a valid UTF-8
-        // tree can never hit this.
-        if files.contains_key(&indexed_path) {
-            eprintln!(
-                "csp: skipping {}: its display path collides with an already indexed file \
-                 (non-UTF-8 file name)",
-                escape_control(&file_path.display().to_string())
+
+        // Phase 2 (serial, walk order): everything that mutates the indexes.
+        for (file_path, item) in batch.iter().zip(prepared) {
+            let file = match item {
+                Prepared::Unreadable => continue,
+                Prepared::TooLarge(display) => {
+                    skipped_large.push(display);
+                    continue;
+                }
+                Prepared::Ready(file) => file,
+            };
+            let PreparedFile {
+                indexed_path,
+                language,
+                hash,
+                payload,
+            } = file;
+            // `to_string_lossy` is not injective: on Unix, file names that
+            // differ only in invalid UTF-8 bytes collapse to the same display
+            // path, and the BM25 chunk ids derived from it would then collide
+            // and abort the whole build. Keep the first such file and skip the
+            // rest, as a valid UTF-8 tree can never hit this.
+            if files.contains_key(&indexed_path) {
+                eprintln!(
+                    "csp: skipping {}: its display path collides with an already indexed file \
+                     (non-UTF-8 file name)",
+                    escape_control(&file_path.display().to_string())
+                );
+                continue;
+            }
+            let previous_entry = previous_files.get(&indexed_path);
+
+            let reused = take_previous_rows(
+                previous_entry,
+                &hash,
+                &mut previous_chunks,
+                &mut previous_vectors,
             );
-            continue;
+            let start = chunks.len();
+            let file_chunks = match reused {
+                Some((file_chunks, file_vectors)) => {
+                    vectors.extend(file_vectors.into_iter().map(Some));
+                    file_chunks
+                }
+                None => {
+                    let fresh = match payload {
+                        Payload::Fresh(fresh) => fresh,
+                        // Reuse was predicted but the rows were gone: chunk
+                        // the file here after all, skipping it if it vanished.
+                        Payload::Unchanged => match std::fs::read(file_path) {
+                            Ok(bytes) => chunk_and_tokenize(&bytes, &indexed_path, language),
+                            Err(_) => continue,
+                        },
+                    };
+                    reindex_file(
+                        &mut bm25_index,
+                        &indexed_path,
+                        &fresh.tokens,
+                        previous_entry,
+                    )?;
+                    fresh_rows.extend(start..start + fresh.chunks.len());
+                    vectors.extend(std::iter::repeat_n(None, fresh.chunks.len()));
+                    fresh.chunks
+                }
+            };
+
+            let count = file_chunks.len();
+            chunk_ids.extend((0..count).map(|slot| make_chunk_id(&indexed_path, slot)));
+            chunks.extend(file_chunks);
+            files.insert(indexed_path, FileManifestEntry { hash, start, count });
         }
-        let previous_entry = previous_files.get(&indexed_path);
-
-        let reused = take_previous_rows(
-            previous_entry,
-            &hash,
-            &mut previous_chunks,
-            &mut previous_vectors,
-        );
-        let start = chunks.len();
-        let file_chunks = match reused {
-            Some((file_chunks, file_vectors)) => {
-                vectors.extend(file_vectors.into_iter().map(Some));
-                file_chunks
-            }
-            None => {
-                // Lossy UTF-8 decode (invalid bytes → U+FFFD): only an IO error
-                // skips a file, never an encoding error.
-                let source = String::from_utf8_lossy(&bytes).into_owned();
-                let file_chunks = chunk_source(&source, &indexed_path, language);
-                reindex_file(&mut bm25_index, &indexed_path, &file_chunks, previous_entry)?;
-                fresh_rows.extend(start..start + file_chunks.len());
-                vectors.extend(std::iter::repeat_n(None, file_chunks.len()));
-                file_chunks
-            }
-        };
-
-        let count = file_chunks.len();
-        chunk_ids.extend((0..count).map(|slot| make_chunk_id(&indexed_path, slot)));
-        chunks.extend(file_chunks);
-        files.insert(indexed_path, FileManifestEntry { hash, start, count });
     }
 
     // Files that vanished since the previous index: drop their postings.

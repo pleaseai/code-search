@@ -11,8 +11,8 @@
 //! back to [`chunk_lines`], exactly the upstream behavior when the language pack
 //! has no parser for the language.
 
-use std::collections::HashSet;
-use std::sync::{LazyLock, Mutex};
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
 
 use tree_sitter::{Language, Parser};
 
@@ -24,6 +24,62 @@ pub const MIN_CHUNK_SIZE: usize = 50;
 static WARNED_LANGUAGES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 
+/// A resolved grammar plus the lock that serializes parsing with it.
+#[derive(Clone)]
+struct Grammar {
+    language: Language,
+    /// Some grammars' external scanners keep process-global mutable state (the
+    /// language pack serializes all parsing for that reason; upstream sidesteps
+    /// it with worker processes). One lock per grammar keeps a scanner from
+    /// ever running concurrently with itself while different languages still
+    /// parse in parallel. Shared by every alias that resolves to the grammar.
+    parse_lock: Arc<Mutex<()>>,
+}
+
+/// Grammars resolved so far, keyed by the requested language name.
+/// [`tree_sitter_language_pack::get_language`] takes a global lock on every
+/// call, so caching keeps parallel indexing from contending on it per file.
+/// Failures are not cached, so a transient download error is retried on the
+/// next call, as before.
+static GRAMMARS: LazyLock<Mutex<HashMap<String, Grammar>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Parse locks keyed by the grammar's own name, so aliases of one grammar
+/// (e.g. `shell` and `bash`) share a lock.
+static PARSE_LOCKS: LazyLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Lock `mutex`, recovering the data from a poisoned lock: every value guarded
+/// here stays consistent even if a holder panicked.
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// The cached [`Grammar`] for `language`, resolving it on first use. The cache
+/// lock is not held across the resolve (which may download a parser), so a slow
+/// fetch for one language does not stall the others; two threads racing on the
+/// same language both resolve it and the first insert wins.
+fn grammar_for(language: &str) -> Option<Grammar> {
+    if let Some(cached) = lock(&GRAMMARS).get(language) {
+        return Some(cached.clone());
+    }
+    let resolved = resolve_language(language)?;
+    let lock_key = resolved.name().unwrap_or(language).to_string();
+    let parse_lock = lock(&PARSE_LOCKS).entry(lock_key).or_default().clone();
+    let grammar = Grammar {
+        language: resolved,
+        parse_lock,
+    };
+    Some(
+        lock(&GRAMMARS)
+            .entry(language.to_string())
+            .or_insert(grammar)
+            .clone(),
+    )
+}
+
 /// Resolve a semble language name (the values in
 /// [`crate::indexing::files`]'s `EXTENSION_TO_LANGUAGE`) to a tree-sitter grammar
 /// from the language pack, or `None` when the pack has no grammar for it.
@@ -34,8 +90,15 @@ static WARNED_LANGUAGES: LazyLock<Mutex<HashSet<String>>> =
 /// language degrades to `None` → line chunking, with a one-time stderr warning
 /// per language so the cause is visible without spamming a polyglot index. Use
 /// [`is_supported_language`] (a metadata-only check) when you only need to know
-/// whether a grammar *exists* without triggering a download.
+/// whether a grammar *exists* without triggering a download. A resolved
+/// grammar is cached per language for the rest of the process.
 pub fn language_for(language: &str) -> Option<Language> {
+    grammar_for(language).map(|grammar| grammar.language)
+}
+
+/// Uncached [`language_for`]: one language-pack lookup, warning once per
+/// language on failure.
+fn resolve_language(language: &str) -> Option<Language> {
     match tree_sitter_language_pack::get_language(language) {
         Ok(lang) => Some(lang),
         Err(err) => {
@@ -275,12 +338,17 @@ pub fn chunk(text: &str, language: &str, desired_length: usize) -> Option<Vec<Ch
     if text.trim().is_empty() {
         return Some(Vec::new());
     }
-    let lang = language_for(language)?;
-    let mut parser = Parser::new();
-    if parser.set_language(&lang).is_err() {
-        return None;
-    }
-    let tree = parser.parse(text.as_bytes(), None)?;
+    let grammar = grammar_for(language)?;
+    let tree = {
+        // The scanner is created in `set_language`, used by `parse`, and
+        // destroyed when the parser drops, so all three stay under the lock.
+        let _guard = lock(&grammar.parse_lock);
+        let mut parser = Parser::new();
+        if parser.set_language(&grammar.language).is_err() {
+            return None;
+        }
+        parser.parse(text.as_bytes(), None)?
+    };
     let byte_boundaries = merge_node(&TsNode(tree.root_node()), desired_length);
     Some(
         byte_boundaries

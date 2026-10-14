@@ -343,6 +343,7 @@ dependencies = [
  "ignore",
  "indexmap",
  "model2vec-rs",
+ "rayon",
  "regex",
  "rmcp",
  "schemars",

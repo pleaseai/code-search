@@ -39,6 +39,7 @@ fancy-regex = "0.16"   # Phase 1 — boosting definition patterns (lookbehind/lo
 indexmap = "2"         # Phase 1 — insertion-ordered score maps (Map<Chunk,number> parity)
 sha2 = "0.10"          # Phase 3 — content-hash cache keys (sha256, parity with node:crypto)
 tempfile = "3"         # Phase 3/4 — temp dirs (git clone checkout) + tests
+rayon = "1.12"         # parallel per-file read/hash/chunk/tokenize during indexing (#115)
 # napi-rs native SDK (separate distribution channel — the @pleaseai/csp-sdk npm
 # package; the CLI/MCP launcher under npm/ stays a standalone-binary shim). Only
 # crates/csp-node opts in; the core/CLI crates do not depend on napi.

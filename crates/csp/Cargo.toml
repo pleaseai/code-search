@@ -30,6 +30,8 @@ indexmap = { workspace = true }
 ignore = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
+# Parallel per-file indexing work (read, hash, chunk, tokenize) — semble #295.
+rayon = { workspace = true }
 # Phase 3 — real Model2Vec dense embeddings (official MinishLab Rust port).
 model2vec-rs = { workspace = true }
 # Phase 3 — tree-sitter AST chunking. Full upstream-parity grammar coverage via

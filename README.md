@@ -396,6 +396,8 @@ When you run `csp search` or `csp find-related` **without** `--index`, `csp` aut
 
 Files larger than 1 MB are skipped during indexing to keep index builds lean. Skipped files are reported as a warning on stderr at index time, naming the first few paths. If you work with large generated or ingested documents, you can raise (or lower) this limit with the `CSP_MAX_FILE_BYTES` environment variable (in bytes); a malformed or non-positive value warns and falls back to the 1 MB default.
 
+Indexing reads, hashes, chunks, and tokenizes files in parallel, one worker per CPU by default. Set `CSP_INDEX_WORKERS` to a positive integer to change the worker count; `CSP_INDEX_WORKERS=1` indexes serially. The resulting index is identical for any worker count.
+
 <details>
 <summary>Savings</summary>
 
