@@ -255,17 +255,34 @@ impl CspIndex {
         )
     }
 
-    /// Find chunks similar to a seed, excluding the seed itself.
+    /// Find chunks similar to a seed, excluding the seed itself. Candidates are
+    /// limited to the seed's language when it has one.
     pub fn find_related(&self, seed: &Chunk, options: &QueryOptions) -> Vec<SearchResult> {
         let top_k = options.top_k.unwrap_or(DEFAULT_TOP_K);
         if top_k == 0 || self.chunks.is_empty() {
             return Vec::new();
         }
 
+        // Mirror upstream (`if target.language`): an absent or empty language is
+        // falsy there, so the search stays unrestricted.
+        let selector = seed
+            .language
+            .as_ref()
+            .filter(|lang| !lang.is_empty())
+            .and_then(|lang| {
+                self.build_selector(&QueryOptions {
+                    filter_languages: Some(vec![lang.clone()]),
+                    ..Default::default()
+                })
+            });
+        if selector.as_ref().is_some_and(Vec::is_empty) {
+            return Vec::new();
+        }
+
         let query_embedding = self.model.encode(std::slice::from_ref(&seed.content));
         let batch = self
             .semantic_index
-            .query(&query_embedding, top_k + 1, None)
+            .query(&query_embedding, top_k + 1, selector.as_deref())
             .unwrap_or_default();
         let Some(first) = batch.into_iter().next() else {
             return Vec::new();
