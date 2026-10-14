@@ -592,6 +592,11 @@ mod tests {
         for agent in Agent::value_variants() {
             let t = agent.template();
             assert!(t.contains("file_path"), "{} lacks file_path", agent.slug());
+            assert!(
+                t.contains("start_line"),
+                "{} lacks start_line",
+                agent.slug()
+            );
             assert!(!t.contains("filePath"), "{} has filePath", agent.slug());
             assert!(
                 !t.contains("not automatically updated"),
