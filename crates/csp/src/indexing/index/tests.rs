@@ -122,6 +122,66 @@ fn find_related_excludes_seed() {
 }
 
 #[test]
+fn find_related_restricts_to_seed_language() {
+    let chunks = vec![
+        make_chunk(
+            "a.rs",
+            1,
+            3,
+            Some("rust"),
+            "fn add_numbers(a: i32, b: i32) -> i32 { a + b }",
+        ),
+        make_chunk(
+            "b.rs",
+            1,
+            3,
+            Some("rust"),
+            "fn add_values(a: i32, b: i32) -> i32 { a + b }",
+        ),
+        make_chunk(
+            "c.py",
+            1,
+            3,
+            Some("python"),
+            "def add_numbers(a, b): return a + b",
+        ),
+        make_chunk(
+            "d.py",
+            1,
+            3,
+            Some("python"),
+            "def add_values(a, b): return a + b",
+        ),
+    ];
+    let idx = build_index(chunks.clone());
+    let opts = QueryOptions {
+        top_k: Some(5),
+        ..Default::default()
+    };
+    let results = idx.find_related(&chunks[0], &opts);
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].chunk.file_path, "b.rs");
+}
+
+#[test]
+fn find_related_without_seed_language_searches_whole_index() {
+    let chunks = vec![
+        make_chunk("a.txt", 1, 3, None, "seed"),
+        make_chunk("b.rs", 1, 3, Some("rust"), "fn b() {}"),
+        make_chunk("c.py", 1, 3, Some("python"), "def c(): pass"),
+    ];
+    let idx = build_index(chunks.clone());
+    let opts = QueryOptions {
+        top_k: Some(5),
+        ..Default::default()
+    };
+    let results = idx.find_related(&chunks[0], &opts);
+    let mut paths: Vec<_> = results.iter().map(|r| r.chunk.file_path.as_str()).collect();
+    paths.sort_unstable();
+    assert_eq!(paths, vec!["b.rs", "c.py"]);
+}
+
+#[test]
 fn save_load_roundtrip() {
     let chunks = vec![
         make_chunk("a.ts", 1, 10, Some("typescript"), "A"),
