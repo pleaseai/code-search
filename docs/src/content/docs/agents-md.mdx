@@ -20,7 +20,7 @@ csp search "saveCheckpoint" ./my-project                              # full chu
 csp search "save model to disk" ./my-project --top-k 10               # more results
 ```
 
-Results are cached automatically on first run and invalidated when files change.
+Results are cached automatically on first run. Local paths are re-indexed when files change; git URL indexes are keyed by URL and `--ref` and are not refreshed, so run `csp clear index` to pick up new remote commits.
 
 Use `--content docs` to search documentation and prose, `--content config` for config files (yaml, toml, etc.), or `--content all` to search code, docs, and config:
 
@@ -36,7 +36,7 @@ Use `--max-snippet-lines N` to cap the code returned per result: `10` gives a si
 csp search "authentication" ./my-project --max-snippet-lines 10
 ```
 
-Use `csp find-related` to discover code similar to a known location (pass `file_path` and `line` from a prior search result):
+Use `csp find-related` to discover code similar to a known location (pass `file_path` and `start_line` from a prior search result):
 
 ```bash
 csp find-related src/auth.ts 42 ./my-project
@@ -50,8 +50,8 @@ If `csp` is not on `$PATH`, use `bunx @pleaseai/csp` in its place.
 
 1. Start with `csp search` to find relevant chunks. The index is built and cached automatically.
 2. Use `--content docs` for documentation, `--content config` for config files, or `--content all` for everything.
-3. Navigate directly to the returned file and line. Do not re-search or grep for the same content.
-4. Optionally use `csp find-related` with a promising result's `file_path` and `line` to discover related implementations.
+3. Navigate directly to the returned `file_path` at `start_line`. `file_path` is relative to the searched path (e.g. `./my-project/<file_path>`); git URL results have no local checkout, so open them in your own clone or on the remote. Do not re-search or grep for the same content.
+4. Optionally use `csp find-related` with a promising result's `file_path` and `start_line` to discover related implementations.
 5. Use grep only when you need every occurrence of a literal string across the whole repo (e.g., all callers of a renamed function).
 ````
 
