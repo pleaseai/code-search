@@ -173,7 +173,7 @@ pub fn run_mcp(
     content: Vec<ContentType>,
 ) -> Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(async move {
+    block_then_abandon(rt, async move {
         let service = CspMcpServer::new(default_source, default_ref, content)
             .serve(stdio())
             .await?;
@@ -182,11 +182,49 @@ pub fn run_mcp(
     })
 }
 
+/// Drive `fut` to completion on `rt`, then abandon the runtime without joining
+/// its workers.
+///
+/// Tool handlers run synchronous index/model work inline on a runtime worker.
+/// Dropping the runtime would join that worker, so `csp mcp` would stay alive
+/// after stdin EOF until an in-flight index build finished.
+/// `shutdown_background` returns immediately and lets process exit reap them.
+fn block_then_abandon<F: std::future::Future>(rt: tokio::runtime::Runtime, fut: F) -> F::Output {
+    let out = rt.block_on(fut);
+    rt.shutdown_background();
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
+    use std::time::{Duration, Instant};
     use tempfile::tempdir;
+
+    #[test]
+    fn block_then_abandon_does_not_join_a_blocked_worker() {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .build()
+            .unwrap();
+        let start = Instant::now();
+        block_then_abandon(rt, async {
+            // Park a worker in synchronous work, like a handler mid index build.
+            let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+            tokio::spawn(async move {
+                let _ = started_tx.send(());
+                std::thread::sleep(Duration::from_secs(30));
+            });
+            // Wait until the worker is actually inside the blocking section.
+            started_rx.await.unwrap();
+        });
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "runtime teardown joined the blocked worker ({:?})",
+            start.elapsed()
+        );
+    }
 
     #[test]
     fn search_params_deserialize_with_and_without_optionals() {
