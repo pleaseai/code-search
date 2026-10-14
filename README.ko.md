@@ -103,9 +103,9 @@ cargo install code-search-please
 코드를 grep 으로 찾기 전에 `csp search`를 사용하세요. 동작을 자연어로 설명하거나 심볼/식별자명을 입력하면 됩니다.
 
 ```bash
-csp search "authentication flow" ./my-project --max-snippet-lines 10  # first 10 lines only, concise
-csp search "saveCheckpoint" ./my-project                              # full chunk content
-csp search "save model to disk" ./my-project --top-k 10               # more results
+csp search "authentication flow" ./my-project --max-snippet-lines 10  # 처음 10줄만, 간결하게
+csp search "saveCheckpoint" ./my-project                              # 전체 청크 콘텐츠
+csp search "save model to disk" ./my-project --top-k 10               # 더 많은 결과
 ```
 
 결과는 첫 실행 때 자동으로 캐시되며, 파일이 바뀌면 무효화됩니다.
