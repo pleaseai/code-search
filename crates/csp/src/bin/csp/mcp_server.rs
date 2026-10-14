@@ -188,11 +188,20 @@ pub fn run_mcp(
 /// Tool handlers run synchronous index/model work inline on a runtime worker.
 /// Dropping the runtime would join that worker, so `csp mcp` would stay alive
 /// after stdin EOF until an in-flight index build finished.
-/// `shutdown_background` returns immediately and lets process exit reap them.
+/// `shutdown_background` returns immediately, so the process exits without
+/// waiting for them. It runs from a drop guard so a panic in `fut` abandons the
+/// runtime too, instead of joining it during unwinding.
 fn block_then_abandon<F: std::future::Future>(rt: tokio::runtime::Runtime, fut: F) -> F::Output {
-    let out = rt.block_on(fut);
-    rt.shutdown_background();
-    out
+    struct Abandon(Option<tokio::runtime::Runtime>);
+    impl Drop for Abandon {
+        fn drop(&mut self) {
+            if let Some(rt) = self.0.take() {
+                rt.shutdown_background();
+            }
+        }
+    }
+    let guard = Abandon(Some(rt));
+    guard.0.as_ref().expect("runtime is set").block_on(fut)
 }
 
 #[cfg(test)]
@@ -222,6 +231,32 @@ mod tests {
         assert!(
             start.elapsed() < Duration::from_secs(5),
             "runtime teardown joined the blocked worker ({:?})",
+            start.elapsed()
+        );
+    }
+
+    #[test]
+    fn block_then_abandon_does_not_join_a_blocked_worker_on_panic() {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .build()
+            .unwrap();
+        let start = Instant::now();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            block_then_abandon(rt, async {
+                let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+                tokio::spawn(async move {
+                    let _ = started_tx.send(());
+                    std::thread::sleep(Duration::from_secs(30));
+                });
+                started_rx.await.unwrap();
+                panic!("serve loop failed");
+            })
+        }));
+        assert!(result.is_err());
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "unwinding joined the blocked worker ({:?})",
             start.elapsed()
         );
     }
