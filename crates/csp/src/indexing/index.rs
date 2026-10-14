@@ -263,13 +263,18 @@ impl CspIndex {
             return Vec::new();
         }
 
-        // Mirror upstream: restrict candidates to the seed's language when it has one.
-        let selector = seed.language.as_ref().and_then(|lang| {
-            self.build_selector(&QueryOptions {
-                filter_languages: Some(vec![lang.clone()]),
-                ..Default::default()
-            })
-        });
+        // Mirror upstream (`if target.language`): an absent or empty language is
+        // falsy there, so the search stays unrestricted.
+        let selector = seed
+            .language
+            .as_ref()
+            .filter(|lang| !lang.is_empty())
+            .and_then(|lang| {
+                self.build_selector(&QueryOptions {
+                    filter_languages: Some(vec![lang.clone()]),
+                    ..Default::default()
+                })
+            });
 
         let query_embedding = self.model.encode(std::slice::from_ref(&seed.content));
         let batch = self
