@@ -275,6 +275,9 @@ impl CspIndex {
                     ..Default::default()
                 })
             });
+        if selector.as_ref().is_some_and(Vec::is_empty) {
+            return Vec::new();
+        }
 
         let query_embedding = self.model.encode(std::slice::from_ref(&seed.content));
         let batch = self

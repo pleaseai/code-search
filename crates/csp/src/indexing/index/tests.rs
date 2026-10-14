@@ -200,6 +200,18 @@ fn find_related_with_empty_seed_language_searches_whole_index() {
 }
 
 #[test]
+fn find_related_returns_empty_when_seed_language_is_absent_from_index() {
+    let chunks = vec![make_chunk("a.rs", 1, 3, Some("rust"), "fn a() {}")];
+    let idx = build_index(chunks);
+    let seed = make_chunk("b.py", 1, 3, Some("python"), "def b(): pass");
+    let opts = QueryOptions {
+        top_k: Some(5),
+        ..Default::default()
+    };
+    assert!(idx.find_related(&seed, &opts).is_empty());
+}
+
+#[test]
 fn save_load_roundtrip() {
     let chunks = vec![
         make_chunk("a.ts", 1, 10, Some("typescript"), "A"),
