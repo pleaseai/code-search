@@ -52,6 +52,7 @@ fn respects_extensions_override() {
         content: Some(vec![ContentType::Docs]),
         display_root: Some(dir.path().to_path_buf()),
         max_file_bytes: None,
+        index_workers: None,
     };
     let result = create_index_from_path(dir.path(), &options, None).unwrap();
     assert_eq!(result.chunks.len(), 1);
@@ -334,4 +335,141 @@ fn colliding_lossy_paths_skip_the_duplicate_instead_of_aborting() {
     assert_eq!(result.files.len(), 1);
     assert_eq!(result.bm25_index.corpus_size(), result.chunks.len());
     into_previous(result);
+}
+
+// --- parallel indexing (upstream #295): output is independent of workers ---
+
+/// A polyglot tree with more files than one parallel batch, so batch
+/// boundaries are exercised too.
+fn write_polyglot_tree(root: &Path) {
+    for i in 0..(INDEX_BATCH_SIZE + 44) {
+        let (rel, content) = match i % 4 {
+            0 => (
+                format!("ts/mod_{i}.ts"),
+                format!(
+                    "export function handler{i}(input: string) {{\n  return input + '{i}'\n}}\n"
+                ),
+            ),
+            1 => (
+                format!("py/mod_{i}.py"),
+                format!("def compute_value_{i}(x):\n    return x * {i}\n"),
+            ),
+            2 => (
+                format!("rs/mod_{i}.rs"),
+                format!("pub fn parse_item_{i}(v: u32) -> u32 {{\n    v + {i}\n}}\n"),
+            ),
+            _ => (
+                format!("go/mod_{i}.go"),
+                format!("package main\n\nfunc RenderView{i}() int {{\n\treturn {i}\n}}\n"),
+            ),
+        };
+        write_files(root, &[(rel.as_str(), content.as_str())]);
+    }
+}
+
+fn build_with_workers(
+    root: &Path,
+    model: &Model,
+    workers: usize,
+    previous: Option<PreviousIndex>,
+) -> CreateIndexResult {
+    let options = CreateIndexOptions {
+        index_workers: Some(workers),
+        ..opts(model, Some(root.to_path_buf()))
+    };
+    create_index_from_path(root, &options, previous).unwrap()
+}
+
+/// Assert two builds are identical: chunks (order + content), vectors,
+/// manifest, BM25 doc order, the persisted `bm25.json`, and query scores.
+fn assert_same_index(serial: &CreateIndexResult, parallel: &CreateIndexResult) {
+    assert_eq!(serial.chunks, parallel.chunks);
+    assert_eq!(
+        serial.semantic_index.vectors,
+        parallel.semantic_index.vectors
+    );
+    assert_eq!(serial.files, parallel.files);
+    assert_eq!(
+        serial.bm25_index.doc_order(),
+        parallel.bm25_index.doc_order()
+    );
+    let (a, b) = (tempdir().unwrap(), tempdir().unwrap());
+    serial.bm25_index.save(a.path()).unwrap();
+    parallel.bm25_index.save(b.path()).unwrap();
+    assert_eq!(
+        std::fs::read(a.path().join("bm25.json")).unwrap(),
+        std::fs::read(b.path().join("bm25.json")).unwrap()
+    );
+    for query in [
+        "handler7 input",
+        "compute_value",
+        "parse_item u32",
+        "RenderView",
+    ] {
+        assert_eq!(
+            serial.bm25_index.get_scores(&tokenize(query), None),
+            parallel.bm25_index.get_scores(&tokenize(query), None),
+            "{query}"
+        );
+    }
+}
+
+#[test]
+fn parallel_cold_build_matches_serial() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().to_path_buf();
+    write_polyglot_tree(&root);
+    let model = make_stub_model(4);
+
+    let serial = build_with_workers(&root, &model, 1, None);
+    let parallel = build_with_workers(&root, &model, 4, None);
+    assert_eq!(serial.files.len(), INDEX_BATCH_SIZE + 44);
+    assert_same_index(&serial, &parallel);
+}
+
+#[test]
+fn parallel_incremental_rebuild_matches_serial() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().to_path_buf();
+    write_polyglot_tree(&root);
+    let model = make_stub_model(4);
+    let seed = build_with_workers(&root, &model, 1, None);
+    let seed_previous = || {
+        PreviousIndex::try_new(
+            seed.chunks.clone(),
+            seed.semantic_index.vectors.clone(),
+            seed.files.clone(),
+            seed.bm25_index.clone(),
+        )
+        .unwrap()
+    };
+
+    write_files(
+        &root,
+        &[
+            ("py/mod_5.py", "def compute_value_5(x):\n    return x - 5\n"),
+            ("rs/added.rs", "pub fn freshly_added() -> u8 {\n    1\n}\n"),
+        ],
+    );
+    std::fs::remove_file(root.join("go/mod_7.go")).unwrap();
+
+    let serial = build_with_workers(&root, &model, 1, Some(seed_previous()));
+    let parallel = build_with_workers(&root, &model, 4, Some(seed_previous()));
+    assert!(serial
+        .files
+        .contains_key(Path::new("rs").join("added.rs").to_str().unwrap()));
+    assert!(!serial
+        .files
+        .contains_key(Path::new("go").join("mod_7.go").to_str().unwrap()));
+    assert_same_index(&serial, &parallel);
+}
+
+#[test]
+fn parse_index_workers_accepts_only_positive_integers() {
+    assert_eq!(parse_index_workers(None), None);
+    assert_eq!(parse_index_workers(Some(" 3 ")), Some(3));
+    assert_eq!(parse_index_workers(Some("1")), Some(1));
+    assert_eq!(parse_index_workers(Some("0")), None);
+    assert_eq!(parse_index_workers(Some("-2")), None);
+    assert_eq!(parse_index_workers(Some("many")), None);
 }
