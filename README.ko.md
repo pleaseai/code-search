@@ -103,24 +103,12 @@ cargo install code-search-please
 코드를 grep 으로 찾기 전에 `csp search`를 사용하세요. 동작을 자연어로 설명하거나 심볼/식별자명을 입력하면 됩니다.
 
 ```bash
-csp search "authentication flow" ./my-project
-csp search "saveCheckpoint" ./my-project
-csp search "save model to disk" ./my-project --top-k 10
+csp search "authentication flow" ./my-project --max-snippet-lines 10  # 처음 10줄만, 간결하게
+csp search "saveCheckpoint" ./my-project                              # 전체 청크 콘텐츠
+csp search "save model to disk" ./my-project --top-k 10               # 더 많은 결과
 ```
 
-여러 번 검색할 예정이라면 `csp index`로 인덱스를 만들어 두세요.
-
-```bash
-csp index ./my-project -o my_index
-```
-
-이후 인덱스를 재사용할 수 있습니다.
-
-```bash
-csp search "saveCheckpoint" --index my_index
-```
-
-인덱스는 자동으로 갱신되지 않습니다. 코드가 크게 바뀌었거나 검색 결과가 오래된 것 같다면 다시 인덱싱하세요.
+결과는 첫 실행 때 자동으로 캐시됩니다. 로컬 경로는 파일이 바뀌면 다시 인덱싱되지만, git URL 인덱스는 URL과 `--ref`를 키로 캐시되어 갱신되지 않으므로 원격의 새 커밋을 반영하려면 `csp clear index`를 실행하세요.
 
 `--content docs`로 문서와 산문을, `--content config`로 yaml/toml 등 설정 파일을, `--content all`로 모두 검색할 수 있습니다.
 
@@ -136,13 +124,11 @@ csp search "authentication" ./my-project --content all
 csp search "authentication" ./my-project --max-snippet-lines 10
 ```
 
-`csp find-related`로 기존 위치와 비슷한 코드를 찾을 수 있습니다 (이전 검색 결과의 `file_path`와 `line`을 사용).
+`csp find-related`로 기존 위치와 비슷한 코드를 찾을 수 있습니다 (이전 검색 결과의 `file_path`와 `start_line`을 사용).
 
 ```bash
 csp find-related src/auth.ts 42 ./my-project
 ```
-
-`search`와 마찬가지로 `find-related`도 `--index` 인자를 받습니다.
 
 `path`를 생략하면 현재 디렉터리를 사용합니다. git URL도 받습니다.
 
@@ -150,12 +136,11 @@ csp find-related src/auth.ts 42 ./my-project
 
 ### Workflow
 
-1. `csp index -o cached_index`로 리포지토리를 인덱싱.
-2. `csp search`로 관련 청크를 찾기. 인덱스를 넘기면 더 빠릅니다.
-3. 문서는 `--content docs`, 설정 파일은 `--content config`, 전부는 `--content all`.
-4. 반환된 청크로 컨텍스트가 부족할 때만 파일을 전체 읽기.
-5. 유망한 결과에서 `csp find-related`로 비슷한 구현을 추가 탐색.
-6. 정확한 리터럴 매칭이나 문자열 확인이 필요할 때만 grep 사용.
+1. `csp search`로 관련 청크를 찾기. 인덱스는 자동으로 빌드되고 캐시됩니다.
+2. 문서는 `--content docs`, 설정 파일은 `--content config`, 전부는 `--content all`.
+3. 반환된 `file_path`의 `start_line`으로 바로 이동하세요. `file_path`는 검색한 경로 기준의 상대 경로입니다(예: `./my-project/<file_path>`). git URL 결과는 로컬 체크아웃이 남지 않으므로 직접 클론하거나 원격에서 여세요. 같은 내용을 다시 검색하거나 grep 하지 마세요.
+4. 유망한 결과의 `file_path`와 `start_line`으로 `csp find-related`를 사용해 비슷한 구현을 추가 탐색(선택).
+5. 리포지토리 전체에서 리터럴 문자열의 모든 출현 위치가 필요할 때만 grep 사용 (예: 이름이 바뀐 함수의 모든 호출처).
 ````
 
 </details>

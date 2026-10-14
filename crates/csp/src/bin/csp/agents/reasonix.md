@@ -8,24 +8,12 @@ allowed-tools: bash, read_file
 Use `csp search` to find code by describing what it does or naming a symbol/identifier, instead of grep:
 
 ```bash
-csp search "authentication flow" ./my-project
-csp search "save_pretrained" ./my-project
-csp search "save model to disk" ./my-project --top-k 10
+csp search "authentication flow" ./my-project --max-snippet-lines 10  # first 10 lines only, concise
+csp search "save_pretrained" ./my-project                          # full chunk content
+csp search "save model to disk" ./my-project --top-k 10           # more results
 ```
 
-If you anticipate doing more than one search, use `csp index` to create an index.
-
-```bash
-csp index ./my-project -o my_index
-```
-
-You can then reuse this index later on:
-
-```bash
-csp search "save_pretrained" --index my_index
-```
-
-An index is not automatically updated, so if the code changes significantly, reindex. If you notice stale results while resolving searches to files, reindex.
+Results are cached automatically on first run. Local paths are re-indexed when files change; git URL indexes are keyed by URL and `--ref` and are not refreshed, so run `csp clear index` to pick up new remote commits.
 
 Use `--content docs` to search documentation and prose, `--content config` for config files (yaml, toml, etc.), or `--content all` to search code, docs, and config:
 
@@ -35,13 +23,11 @@ csp search "database host port" ./my-project --content config
 csp search "authentication" ./my-project --content all
 ```
 
-Use `csp find-related` to discover code similar to a known location (pass `filePath` and `line` from a prior search result):
+Use `csp find-related` to discover code similar to a known location (pass `file_path` and `start_line` from a prior search result):
 
 ```bash
 csp find-related src/auth.ts 42 ./my-project
 ```
-
-Like search, `find-related` also accepts an `--index` argument.
 
 `path` defaults to the current directory when omitted; git URLs are accepted.
 
@@ -49,9 +35,8 @@ If `csp` is not on `$PATH`, use `bunx @pleaseai/csp` in its place.
 
 ### Workflow
 
-1. Index the repo using `csp index -o cached_index`.
-2. Start with `csp search` to find relevant chunks. Pass the index to achieve results faster.
-3. Use `--content docs` for documentation, `--content config` for config files, or `--content all` for everything.
-4. Inspect full files only when the returned chunk does not give enough context.
-5. Optionally use `csp find-related` with a promising result's `filePath` and `line` to discover related implementations.
-6. Use grep only when you need exhaustive literal matches or quick confirmation of an exact string.
+1. Start with `csp search` to find relevant chunks. The index is built and cached automatically.
+2. Use `--content docs` for documentation, `--content config` for config files, or `--content all` for everything.
+3. Navigate directly to the returned `file_path` at `start_line`. `file_path` is relative to the searched path (e.g. `./my-project/<file_path>`); git URL results have no local checkout, so open them in your own clone or on the remote. Do not re-search or grep for the same content.
+4. Optionally use `csp find-related` with a promising result's `file_path` and `start_line` to discover related implementations.
+5. Use grep only when you need every occurrence of a literal string across the whole repo (e.g., all callers of a renamed function).
