@@ -1,0 +1,16 @@
+{
+  "name": "csp-mcp",
+  "displayName": "Code Search (csp) MCP server",
+  "version": "0.0.0",
+  "description": "Registers the csp MCP server (search, find_related) for fast, local, token-efficient hybrid code search. Pair it with the csp plugin for the csp-search sub-agent and skill.",
+  "author": {
+    "name": "Minsu Lee",
+    "email": "minsu.lee@dietfriends.kr",
+    "url": "https://github.com/amondnet"
+  },
+  "homepage": "https://github.com/pleaseai/code-search",
+  "repository": "https://github.com/pleaseai/code-search",
+  "license": "MIT",
+  "keywords": ["code-search", "hybrid-search", "semantic-search", "bm25", "embeddings", "mcp", "rag"],
+  "mcpServers": "./.mcp.json"
+}

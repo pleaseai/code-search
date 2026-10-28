@@ -25,7 +25,8 @@ cargo run -p code-search-please -- search "query" .
 | `crates/csp` | The Rust library and the `csp` binary (CLI + MCP server). |
 | `crates/csp-node` | napi-rs bindings, shipped as `@pleaseai/csp-sdk`. |
 | `npm/` | The `@pleaseai/csp` npm launcher that execs the platform binary. |
-| `plugins/csp` | The Claude Code / Codex plugin. |
+| `plugins/csp` | The Claude Code / Codex plugin (`csp-search` sub-agent and skill; MCP server on Codex). |
+| `plugins/csp-mcp` | The Claude Code plugin that registers the MCP server. |
 | `docs/` | This documentation site (Cloudflare Nimbus). |
 
 ## Contributing

@@ -2,7 +2,7 @@
   "name": "csp",
   "displayName": "Code Search (csp)",
   "version": "0.0.0",
-  "description": "Fast, local, token-efficient hybrid code search for agents. Registers the csp MCP server (search, find_related) and a dedicated csp-search sub-agent.",
+  "description": "Fast, local, token-efficient hybrid code search for agents. Adds a csp-search sub-agent and skill that call the csp CLI. Install csp-mcp for the MCP server.",
   "author": {
     "name": "Minsu Lee",
     "email": "minsu.lee@dietfriends.kr",
@@ -11,7 +11,6 @@
   "homepage": "https://github.com/pleaseai/code-search",
   "repository": "https://github.com/pleaseai/code-search",
   "license": "MIT",
-  "keywords": ["code-search", "hybrid-search", "semantic-search", "bm25", "embeddings", "mcp", "agent", "rag"],
-  "mcpServers": "./.mcp.json",
+  "keywords": ["code-search", "hybrid-search", "semantic-search", "bm25", "embeddings", "agent", "rag"],
   "agents": ["./agents/csp-search.md"]
 }
