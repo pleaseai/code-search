@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.11](https://github.com/pleaseai/code-search/compare/v0.1.10...v0.1.11) (2026-10-28)
+
+
+### Bug Fixes
+
+* **index:** restrict find_related to the seed chunk's language ([#123](https://github.com/pleaseai/code-search/issues/123)) ([35e8bf1](https://github.com/pleaseai/code-search/commit/35e8bf17e1c16ac660daad1d95d361587db1f7fe))
+* **init:** align agent templates with csp output and auto-cache ([#122](https://github.com/pleaseai/code-search/issues/122)) ([dfa7193](https://github.com/pleaseai/code-search/commit/dfa7193177a01bdebe063fc7bd9386539acbf4a0))
+* **mcp:** exit promptly on stdin EOF while a tool call is in flight ([#125](https://github.com/pleaseai/code-search/issues/125)) ([339349b](https://github.com/pleaseai/code-search/commit/339349bb2ec4a04d2f1b4059a4e3893cea601ec0))
+
+
+### Performance Improvements
+
+* **index:** parallelize per-file read, hash, chunk, and tokenize ([#115](https://github.com/pleaseai/code-search/issues/115)) ([#126](https://github.com/pleaseai/code-search/issues/126)) ([a086036](https://github.com/pleaseai/code-search/commit/a086036aef1a676a058a46eac7cf1bfde2c5e264))
+
+
+### Documentation
+
+* add Cloudflare Nimbus documentation site ([#106](https://github.com/pleaseai/code-search/issues/106)) ([e3f5d8c](https://github.com/pleaseai/code-search/commit/e3f5d8c55e63b65f3f723210482a19c50790f74b))
+
 ## [0.1.10](https://github.com/pleaseai/code-search/compare/v0.1.9...v0.1.10) (2026-09-04)
 
 
