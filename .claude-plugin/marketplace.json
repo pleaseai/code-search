@@ -10,11 +10,20 @@
     {
       "name": "csp",
       "source": "./plugins/csp",
-      "description": "Hybrid (dense + BM25) code search for agents. Bundles the csp MCP server (search, find_related) and a csp-search sub-agent.",
+      "description": "Hybrid (dense + BM25) code search for agents. Adds a csp-search sub-agent and skill that call the csp CLI.",
       "homepage": "https://github.com/pleaseai/code-search",
       "repository": "https://github.com/pleaseai/code-search",
       "license": "MIT",
-      "keywords": ["code-search", "hybrid-search", "semantic-search", "bm25", "mcp", "agent"]
+      "keywords": ["code-search", "hybrid-search", "semantic-search", "bm25", "agent"]
+    },
+    {
+      "name": "csp-mcp",
+      "source": "./plugins/csp-mcp",
+      "description": "Hybrid (dense + BM25) code search for agents. Registers the csp MCP server (search, find_related).",
+      "homepage": "https://github.com/pleaseai/code-search",
+      "repository": "https://github.com/pleaseai/code-search",
+      "license": "MIT",
+      "keywords": ["code-search", "hybrid-search", "semantic-search", "bm25", "mcp"]
     }
   ]
 }

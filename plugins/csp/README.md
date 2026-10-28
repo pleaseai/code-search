@@ -4,8 +4,10 @@ Fast, local, token-efficient hybrid code search for agents, packaged as both a [
 
 ## What this plugin installs
 
-- **MCP server `csp`** — exposes the `search` and `find_related` tools, launched via `bunx @pleaseai/csp mcp`. Repos are cloned and indexed on demand; local paths are watched and re-indexed automatically.
-- **`csp-search` helper** — a dedicated Claude Code sub-agent (`agents/csp-search.md`) / Codex skill (`skills/csp-search/SKILL.md`) that runs `csp` searches with the right flags.
+- **`csp-search` helper** — a dedicated sub-agent (`agents/csp-search.md`, Claude Code) and skill (`skills/csp-search/SKILL.md`, Claude Code and Codex) that run `csp search` / `csp find-related` through the CLI with the right flags.
+- **MCP server `csp`** (Codex only) — exposes the `search` and `find_related` tools, launched via `bunx @pleaseai/csp mcp`.
+
+On Claude Code the MCP server ships as a separate plugin, [`csp-mcp`](../csp-mcp/README.md), so you can choose whether to run it. Install both for the full setup.
 
 ## Install
 
@@ -14,9 +16,8 @@ Fast, local, token-efficient hybrid code search for agents, packaged as both a [
 ```text
 /plugin marketplace add pleaseai/claude-code-plugins
 /plugin install csp@pleaseai
+/plugin install csp-mcp@pleaseai   # optional: the MCP server
 ```
-
-Then restart Claude Code (or run `/mcp` to confirm the `csp` server is connected).
 
 **Codex:**
 
@@ -27,11 +28,7 @@ codex plugin add csp@pleaseai
 
 ## Requirements
 
-[Bun](https://bun.sh) 1.3.10+ must be on your `PATH` so `bunx` can launch the MCP server. Node.js 22+ also works via `npx @pleaseai/csp mcp` (edit the MCP config if you prefer npm).
-
-## Customization
-
-By default the MCP server indexes only code files. To also index documentation or config, append `--content` to the server args, e.g. `["@pleaseai/csp", "mcp", "--content", "all"]`. A single tool call can also override this with its `content` argument (`code`, `docs`, `config`, or `all`).
+The helper calls the `csp` CLI. Install it with Homebrew (`brew install pleaseai/tap/csp`), or keep [Bun](https://bun.sh) 1.3.10+ on your `PATH` so the helper can fall back to `bunx @pleaseai/csp`.
 
 ## Layout
 
@@ -40,7 +37,7 @@ This one directory carries both manifests; each harness reads its own and ignore
 | | Claude Code | Codex |
 |---|---|---|
 | Manifest | `.claude-plugin/plugin.json` | `.codex-plugin/plugin.json` |
-| MCP config | `.mcp.json` (`mcpServers`) | `.mcp.codex.json` (`mcp_servers`) |
-| Helper | `agents/csp-search.md` (sub-agent) | `skills/csp-search/SKILL.md` (skill) |
+| MCP config | none (see [`csp-mcp`](../csp-mcp/README.md)) | `.mcp.codex.json` (`mcp_servers`) |
+| Helper | `agents/csp-search.md` (sub-agent) and `skills/csp-search/SKILL.md` (skill) | `skills/csp-search/SKILL.md` (skill) |
 
 Marketplaces are defined at the repo root: `.claude-plugin/marketplace.json` (Claude Code) and `.agents/plugins/marketplace.json` (Codex).

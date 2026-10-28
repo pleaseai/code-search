@@ -54,13 +54,14 @@ See [MCP Server](#mcp-server) below for other harnesses (Cursor, Codex, OpenCode
 
 ### Plugin (Claude Code & Codex)
 
-The fastest way to set up `csp` is the plugin, which registers the MCP server **and** the `csp-search` helper in one step. It ships for both Claude Code and Codex from the same directory.
+The fastest way to set up `csp` is the plugin, which registers the `csp-search` helper and, optionally, the MCP server. It ships for both Claude Code and Codex.
 
-Claude Code:
+Claude Code installs the two halves as separate plugins, so you can skip the MCP server:
 
 ```text
 /plugin marketplace add pleaseai/claude-code-plugins
-/plugin install csp@pleaseai
+/plugin install csp@pleaseai       # csp-search sub-agent + skill (CLI)
+/plugin install csp-mcp@pleaseai   # optional: the csp MCP server
 ```
 
 Codex:
@@ -70,7 +71,7 @@ codex plugin marketplace add pleaseai/claude-code-plugins
 codex plugin add csp@pleaseai
 ```
 
-It bundles the `csp` MCP server (`search`, `find_related`) plus a `csp-search` sub-agent (Claude Code) / skill (Codex). Requires [Bun](https://bun.sh) on your `PATH` so `bunx` can launch the server. See [plugins/csp](plugins/csp/README.md) for details.
+On Claude Code, `csp` adds a `csp-search` sub-agent and skill that call the `csp` CLI, and `csp-mcp` registers the `csp` MCP server (`search`, `find_related`). The Codex plugin bundles both the MCP server and the `csp-search` skill. Requires [Bun](https://bun.sh) on your `PATH` so `bunx` can launch the server (the helper also works with a Homebrew-installed `csp`). See [plugins/csp](plugins/csp/README.md) and [plugins/csp-mcp](plugins/csp-mcp/README.md) for details.
 
 ### AGENTS.md
 
