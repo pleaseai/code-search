@@ -40,8 +40,8 @@ cache, via `jdx/mr-boxington-action`. `mise install` also installs `mbx` locally
 `mise.toml`), so a build in one worktree warms every other worktree. Run Cargo through it:
 
 ```bash
-mise exec -- mbx build           # or: mbx test --all-features --locked --workspace
-mbx explain --last               # why a build did or did not hit the cache
+mise exec -- mbx build           # or: mise exec -- mbx test --all-features --locked --workspace
+mise exec -- mbx explain --last  # why a build did or did not hit the cache
 ```
 
 mise's `mr_boxington` Rust option is deliberately not used: a `rust` entry in `mise.toml`

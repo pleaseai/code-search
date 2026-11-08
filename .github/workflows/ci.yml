@@ -19,7 +19,7 @@ jobs:
     env:
       # CI runs no git hooks, so skip the cargo:hk source build (~3 min on every run).
       # node/bun are still provisioned from mise.toml for parity with local dev.
-      MISE_DISABLE_TOOLS: cargo:hk
+      MISE_DISABLE_TOOLS: cargo:hk,mr-boxington
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1

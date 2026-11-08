@@ -28,6 +28,9 @@ jobs:
           fetch-depth: 0
 
       # --- Rust coverage (coverage/rust-lcov.info) ---
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
       # rust-toolchain.toml uses `profile = "minimal"`, so the llvm-tools-preview
       # component (required by cargo-llvm-cov) is not present by default.
       - name: Add llvm-tools-preview component
