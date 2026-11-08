@@ -23,10 +23,18 @@ bun = "1.3.14" # matches package.json packageManager
 # Pinned to match the v1.48.0 hk.pkl amends — keep the two in sync on upgrades.
 # Details: dev-tooling → references/git-hooks.md
 "cargo:hk" = "1.48.0"
+
 # mr-boxington ships no darwin/x86_64 release archive, so Intel macOS builds the same mbx
 # from crates.io.
-mr-boxington = { version = "{{vars.mbx}}", os = ["linux", "macos/arm64", "windows"] }
-"cargo:mbx" = { version = "{{vars.mbx}}", os = ["macos/x64"] }
+mr-boxington.version = "{{vars.mbx}}"
+mr-boxington.os = [
+  "linux",
+  "macos/arm64",
+  "windows",
+]
+
+"cargo:mbx".version = "{{vars.mbx}}"
+"cargo:mbx".os = [ "macos/x64" ]
 
 [env]
 # Wrap hooks in `mise x` so the mise-managed node/bun are on PATH
