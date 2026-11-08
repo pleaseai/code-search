@@ -35,6 +35,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # mbx wraps rustc itself and defers to a preset wrapper (caching nothing),
+    # so no RUSTC_WRAPPER may be set here.
+    env:
+      CARGO_INCREMENTAL: 0
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -42,16 +46,27 @@ jobs:
           persist-credentials: false
 
       # The toolchain (and rustfmt/clippy components) is selected by
-      # rust-toolchain.toml via the runner's preinstalled rustup — no
-      # third-party action needed.
+      # rust-toolchain.toml via the runner's preinstalled rustup. Install it
+      # explicitly so the mbx cache key below hashes the pinned `rustc`, not a
+      # lazily-downloaded one.
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      # After the toolchain step: the cache key hashes the `rustc` on PATH.
+      - name: Set up mbx cache
+        uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
+        with:
+          version: 1.29.2
+          cache-generation: test-v1
+
       - name: Format check
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: mbx clippy --all-targets --all-features -- -D warnings
 
       - name: Test
-        run: cargo test --all-features --locked --workspace
+        run: mbx test --all-features --locked --workspace
 
   ignored-tests:
     # Network-gated: these tests download tree-sitter grammars from GitHub
@@ -60,11 +75,22 @@ jobs:
     # grammar-fetch / parser-compat regressions.
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
+    env:
+      CARGO_INCREMENTAL: 0
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
 
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - name: Set up mbx cache
+        uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
+        with:
+          version: 1.29.2
+          cache-generation: ignored-v1
+
       - name: Test (ignored / network-gated)
-        run: cargo test --all-features --locked --workspace -- --ignored
+        run: mbx test --all-features --locked --workspace -- --ignored
