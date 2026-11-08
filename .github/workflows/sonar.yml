@@ -19,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      CARGO_INCREMENTAL: 0
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -27,10 +28,20 @@ jobs:
           fetch-depth: 0
 
       # --- Rust coverage (coverage/rust-lcov.info) ---
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
       # rust-toolchain.toml uses `profile = "minimal"`, so the llvm-tools-preview
       # component (required by cargo-llvm-cov) is not present by default.
       - name: Add llvm-tools-preview component
         run: rustup component add llvm-tools-preview
+
+      # After the toolchain and llvm-tools steps: the cache key hashes the `rustc` on PATH.
+      - name: Set up mbx cache
+        uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
+        with:
+          version: 1.29.2
+          cache-generation: coverage-v1
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@9e1e5806d4a4822de933115878265be9aaa786d9 # v2
@@ -42,7 +53,7 @@ jobs:
         # offline (see ADR-0004). --all-features mirrors the Rust CI gate.
         run: |
           mkdir -p coverage
-          cargo llvm-cov --workspace --locked --all-features --lcov --output-path coverage/rust-lcov.info
+          mbx llvm-cov --workspace --locked --all-features --lcov --output-path coverage/rust-lcov.info
 
       - name: Upload Rust coverage to Codecov
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
