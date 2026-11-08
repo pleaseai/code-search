@@ -1,1 +1,1 @@
-- [csp parity findings 2026-10](project_csp_parity_findings_2026-10.md) — which upstream semble #260-#295 behaviors csp already has vs real gaps (512-token truncation, serial chunking)
+- [csp parity findings 2026-10](project_csp_parity_findings_2026-10.md) — which upstream semble #260-#295 behaviors csp already has vs real gaps (512-token chunk-embedding truncation, lenient BM25 doc order)
