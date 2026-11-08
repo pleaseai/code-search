@@ -49,8 +49,8 @@ needs a version, which would override `rust-toolchain.toml` (the sole owner of t
 So plain `cargo` is not routed through `mbx`; call `mbx` explicitly. Set
 `CARGO_INCREMENTAL=0` for the best hit rate.
 
-There is no prebuilt `mbx` for Intel macOS, so `mise.macos-x64.toml` (loaded through `auto_env` in
-`.miserc.toml`) builds it from crates.io via the `cargo:mbx` backend (Rust 1.91 or newer). Without
+There is no prebuilt `mbx` for Intel macOS, so `mise.toml` limits `mr-boxington` to the other
+platforms and builds `mbx` there from crates.io via the `cargo:mbx` backend (Rust 1.91 or newer). Without
 mise, run `cargo install mbx --version 1.29.2 --locked`.
 
 `mbx` wraps `rustc` itself, so it **defers to any `RUSTC_WRAPPER` already set** (for example
