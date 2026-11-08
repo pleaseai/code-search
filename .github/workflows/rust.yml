@@ -35,8 +35,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # mbx wraps rustc itself and defers to a preset wrapper (caching nothing),
-    # so no RUSTC_WRAPPER may be set here.
     env:
       CARGO_INCREMENTAL: 0
     steps:
@@ -46,9 +44,7 @@ jobs:
           persist-credentials: false
 
       # The toolchain (and rustfmt/clippy components) is selected by
-      # rust-toolchain.toml via the runner's preinstalled rustup. Install it
-      # explicitly so the mbx cache key below hashes the pinned `rustc`, not a
-      # lazily-downloaded one.
+      # rust-toolchain.toml via the runner's preinstalled rustup.
       - name: Install pinned toolchain
         run: rustup show active-toolchain || rustup toolchain install
 

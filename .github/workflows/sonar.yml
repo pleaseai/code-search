@@ -19,8 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      # mbx wraps rustc itself and defers to a preset wrapper (caching nothing),
-      # so no RUSTC_WRAPPER may be set here.
       CARGO_INCREMENTAL: 0
     steps:
       - name: Checkout code

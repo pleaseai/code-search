@@ -6,8 +6,7 @@
 #   do not double-pin it here.
 # - Only node/bun (JS lint + typecheck), hk (the git hook manager) and mbx (the Cargo build
 #   cache CLI) are pinned via mise. mise's `mr_boxington` Rust option is not used: a `rust`
-#   entry requires a version, which would override rust-toolchain.toml. Run Cargo through
-#   mbx instead (see CONTRIBUTING.md).
+#   entry requires a version, which would override rust-toolchain.toml.
 
 [tools]
 node = "24"
@@ -18,9 +17,6 @@ bun = "1.3.14" # matches package.json packageManager
 # Pinned to match the v1.48.0 hk.pkl amends — keep the two in sync on upgrades.
 # Details: dev-tooling → references/git-hooks.md
 "cargo:hk" = "1.48.0"
-# mbx (mr-boxington): shared Cargo build cache. Pinned to the version the CI action uses.
-# No darwin/x86_64 release archive exists, so Intel macOS builds it from source via the
-# cargo backend (~2 min first build, cached afterwards).
 mr-boxington = "1.29.2"
 
 [env]
